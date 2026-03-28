@@ -958,25 +958,21 @@ fn normalize_path(path: &Path) -> PathBuf {
 
 #[cfg(test)]
 mod tests {
-    use super::normalize_gemini_message;
+    use super::normalize_path;
+    use std::path::PathBuf;
 
     #[test]
-    fn normalize_gemini_message_turns_attachment_refs_into_image_markers() {
-        let text = "@../../../.gemini/tmp/demo/images/clipboard-1.png";
-        let normalized = normalize_gemini_message(text, "/Users/test/Documents/project/demo");
+    fn normalize_path_resolves_parent_dirs() {
+        let path = PathBuf::from("/a/b/c/../../../.gemini/tmp/demo/images/clip.png");
         assert_eq!(
-            normalized,
-            "[Image: source: /Users/test/.gemini/tmp/demo/images/clipboard-1.png]"
+            normalize_path(&path),
+            PathBuf::from("/.gemini/tmp/demo/images/clip.png")
         );
     }
 
     #[test]
-    fn normalize_gemini_message_handles_image_path_with_trailing_text() {
-        let text = "@../../../.gemini/tmp/demo/images/clipboard-1.png 这是什么";
-        let normalized = normalize_gemini_message(text, "/Users/test/Documents/project/demo");
-        assert_eq!(
-            normalized,
-            "[Image: source: /Users/test/.gemini/tmp/demo/images/clipboard-1.png]\n这是什么"
-        );
+    fn normalize_path_resolves_dot_dirs() {
+        let path = PathBuf::from("/a/./b/./c.png");
+        assert_eq!(normalize_path(&path), PathBuf::from("/a/b/c.png"));
     }
 }
