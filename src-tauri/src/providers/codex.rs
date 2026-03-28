@@ -213,7 +213,7 @@ impl CodexProvider {
                                 content: String::new(),
                                 timestamp: entry.timestamp.clone(),
                                 tool_name: Some(display_name.to_string()),
-                                tool_input: tool_input,
+                                tool_input,
                                 token_usage: None,
                             });
                         }
@@ -307,31 +307,26 @@ impl CodexProvider {
                 }
                 "event_msg" => {
                     let event_type = payload.get("type").and_then(|v| v.as_str()).unwrap_or("");
-                    match event_type {
-                        // agent_message is a duplicate of response_item/message/assistant — skip
-                        "token_count" => {
-                            // Extract per-turn token usage and attach to last assistant message
-                            if let Some(info) = payload.get("info") {
-                                if let Some(last) = info.get("last_token_usage") {
-                                    let input = last.get("input_tokens").and_then(|v| v.as_u64()).unwrap_or(0) as u32;
-                                    let output = last.get("output_tokens").and_then(|v| v.as_u64()).unwrap_or(0) as u32;
-                                    let cached = last.get("cached_input_tokens").and_then(|v| v.as_u64()).unwrap_or(0) as u32;
-                                    let usage = TokenUsage {
-                                        input_tokens: input,
-                                        output_tokens: output,
-                                        cache_read_input_tokens: cached,
-                                        cache_creation_input_tokens: 0,
-                                    };
-                                    // Attach to the most recent assistant message
-                                    if let Some(last_msg) = messages.iter_mut().rev()
-                                        .find(|m| m.role == MessageRole::Assistant)
-                                    {
-                                        last_msg.token_usage = Some(usage);
-                                    }
+                    // agent_message is a duplicate of response_item/message/assistant — skip
+                    if event_type == "token_count" {
+                        if let Some(info) = payload.get("info") {
+                            if let Some(last) = info.get("last_token_usage") {
+                                let input = last.get("input_tokens").and_then(|v| v.as_u64()).unwrap_or(0) as u32;
+                                let output = last.get("output_tokens").and_then(|v| v.as_u64()).unwrap_or(0) as u32;
+                                let cached = last.get("cached_input_tokens").and_then(|v| v.as_u64()).unwrap_or(0) as u32;
+                                let usage = TokenUsage {
+                                    input_tokens: input,
+                                    output_tokens: output,
+                                    cache_read_input_tokens: cached,
+                                    cache_creation_input_tokens: 0,
+                                };
+                                if let Some(last_msg) = messages.iter_mut().rev()
+                                    .find(|m| m.role == MessageRole::Assistant)
+                                {
+                                    last_msg.token_usage = Some(usage);
                                 }
                             }
                         }
-                        _ => {}
                     }
                 }
                 _ => continue,

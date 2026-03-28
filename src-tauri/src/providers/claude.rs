@@ -117,10 +117,10 @@ impl ClaudeProvider {
             }
 
             // Detect sidechain sessions (subagent messages)
-            if !is_sidechain {
-                if entry.get("isSidechain").and_then(|v| v.as_bool()).unwrap_or(false) {
-                    is_sidechain = true;
-                }
+            if !is_sidechain
+                && entry.get("isSidechain").and_then(|v| v.as_bool()).unwrap_or(false)
+            {
+                is_sidechain = true;
             }
 
             // Extract timestamp
