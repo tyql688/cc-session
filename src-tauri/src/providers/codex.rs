@@ -11,7 +11,7 @@ use crate::models::{Message, MessageRole, Provider, SessionMeta, TokenUsage};
 use crate::provider::{ParsedSession, ProviderError, SessionProvider};
 use crate::provider_utils::{
     is_system_content, parse_rfc3339_timestamp, project_name_from_path, session_title,
-    truncate_to_bytes, NO_PROJECT,
+    truncate_to_bytes, FTS_CONTENT_LIMIT, NO_PROJECT,
 };
 
 pub struct CodexProvider {
@@ -353,7 +353,7 @@ impl CodexProvider {
         let updated_at = parse_rfc3339_timestamp(last_timestamp.as_deref());
 
         let full_content = content_parts.join("\n");
-        let content_text = truncate_to_bytes(&full_content, 2000);
+        let content_text = truncate_to_bytes(&full_content, FTS_CONTENT_LIMIT);
 
         let meta = SessionMeta {
             id: session_id,

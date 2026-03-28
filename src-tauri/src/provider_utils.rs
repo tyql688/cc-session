@@ -3,6 +3,7 @@ use std::path::Path;
 use chrono::DateTime;
 
 pub const NO_PROJECT: &str = "(No Project)";
+pub const FTS_CONTENT_LIMIT: usize = 2000;
 
 pub fn is_system_content(trimmed: &str) -> bool {
     trimmed.starts_with("<environment_context")

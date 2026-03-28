@@ -4,7 +4,7 @@ use rusqlite::{params, Connection};
 
 use crate::models::{Message, MessageRole, Provider, SessionMeta, TokenUsage};
 use crate::provider::{ParsedSession, ProviderError, SessionProvider};
-use crate::provider_utils::{session_title, truncate_to_bytes};
+use crate::provider_utils::{session_title, truncate_to_bytes, FTS_CONTENT_LIMIT};
 
 pub struct OpenCodeProvider {
     db_path: PathBuf,
@@ -177,7 +177,7 @@ impl SessionProvider for OpenCodeProvider {
                             is_sidechain,
                         },
                         messages: Vec::new(),
-                        content_text: truncate_to_bytes(&content_text, 2000),
+                        content_text: truncate_to_bytes(&content_text, FTS_CONTENT_LIMIT),
                     }
                 },
             )

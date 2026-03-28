@@ -7,7 +7,7 @@ use walkdir::WalkDir;
 
 use crate::models::{Message, MessageRole, Provider, SessionMeta};
 use crate::provider::{ParsedSession, ProviderError, SessionProvider};
-use crate::provider_utils::{is_system_content, session_title, truncate_to_bytes};
+use crate::provider_utils::{is_system_content, session_title, truncate_to_bytes, FTS_CONTENT_LIMIT};
 
 pub struct CursorProvider {
     home_dir: PathBuf,
@@ -149,7 +149,7 @@ impl CursorProvider {
                 is_sidechain: false,
             },
             messages: Vec::new(),
-            content_text: truncate_to_bytes(&content_parts.join("\n"), 2000),
+            content_text: truncate_to_bytes(&content_parts.join("\n"), FTS_CONTENT_LIMIT),
         })
     }
 }
