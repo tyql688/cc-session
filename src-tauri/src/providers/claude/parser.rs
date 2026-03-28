@@ -2,71 +2,24 @@ use std::fs::{self, File};
 use std::io::{BufRead, BufReader};
 use std::path::PathBuf;
 
-use rayon::prelude::*;
 use serde_json::Value;
 
-use crate::models::{Message, MessageRole, Provider, SessionMeta, TokenUsage};
-use crate::provider::{ParsedSession, ProviderError, SessionProvider};
+use crate::models::{Message, MessageRole, TokenUsage};
+use crate::provider::ParsedSession;
 use crate::provider_utils::{
     is_system_content, parse_rfc3339_timestamp, project_name_from_path, session_title,
     truncate_to_bytes, FTS_CONTENT_LIMIT,
 };
 
-pub struct ClaudeProvider {
-    home_dir: PathBuf,
-}
+use super::images::{
+    contains_image_placeholder_without_source, contains_image_source,
+    merge_image_placeholders_with_sources,
+};
+use super::ClaudeProvider;
+use crate::models::Provider;
 
 impl ClaudeProvider {
-    pub fn new() -> Self {
-        let home_dir = dirs::home_dir().expect("cannot resolve HOME directory — app cannot function without it");
-        Self { home_dir }
-    }
-
-    fn projects_dir(&self) -> PathBuf {
-        self.home_dir.join(".claude").join("projects")
-    }
-
-    fn collect_jsonl_files(&self) -> Vec<PathBuf> {
-        let projects_dir = self.projects_dir();
-        if !projects_dir.exists() {
-            return Vec::new();
-        }
-        let mut all_files: Vec<PathBuf> = Vec::new();
-        let project_dirs = match fs::read_dir(&projects_dir) {
-            Ok(d) => d,
-            Err(e) => {
-                eprintln!("warn: cannot read Claude projects dir '{}': {}", projects_dir.display(), e);
-                return Vec::new();
-            }
-        };
-        for entry in project_dirs {
-            let entry = match entry {
-                Ok(e) => e,
-                Err(_) => continue,
-            };
-            let project_dir = entry.path();
-            if !project_dir.is_dir() {
-                continue;
-            }
-            let files = match fs::read_dir(&project_dir) {
-                Ok(f) => f,
-                Err(_) => continue,
-            };
-            for file_entry in files {
-                let file_entry = match file_entry {
-                    Ok(e) => e,
-                    Err(_) => continue,
-                };
-                let file_path = file_entry.path();
-                if file_path.extension().and_then(|e| e.to_str()) == Some("jsonl") {
-                    all_files.push(file_path);
-                }
-            }
-        }
-        all_files
-    }
-
-    fn parse_session(&self, path: &PathBuf) -> Option<ParsedSession> {
+    pub(super) fn parse_session(&self, path: &PathBuf) -> Option<ParsedSession> {
         let file = File::open(path).ok()?;
         let metadata = fs::metadata(path).ok()?;
         let file_size = metadata.len();
@@ -81,7 +34,7 @@ impl ClaudeProvider {
         let mut cwd: Option<String> = None;
         let mut pending_user_message: Option<(String, Option<String>)> = None;
         let mut is_sidechain = false;
-        // Map tool_use_id → index in messages vec, for merging tool_result back
+        // Map tool_use_id -> index in messages vec, for merging tool_result back
         let mut tool_use_id_map: std::collections::HashMap<String, usize> =
             std::collections::HashMap::new();
 
@@ -97,7 +50,11 @@ impl ClaudeProvider {
             let entry: Value = match serde_json::from_str(&line) {
                 Ok(e) => e,
                 Err(e) => {
-                    eprintln!("warn: skipping malformed JSONL in '{}': {}", path.display(), e);
+                    eprintln!(
+                        "warn: skipping malformed JSONL in '{}': {}",
+                        path.display(),
+                        e
+                    );
                     continue;
                 }
             };
@@ -118,7 +75,10 @@ impl ClaudeProvider {
 
             // Detect sidechain sessions (subagent messages)
             if !is_sidechain
-                && entry.get("isSidechain").and_then(|v| v.as_bool()).unwrap_or(false)
+                && entry
+                    .get("isSidechain")
+                    .and_then(|v| v.as_bool())
+                    .unwrap_or(false)
             {
                 is_sidechain = true;
             }
@@ -155,7 +115,9 @@ impl ClaudeProvider {
                         // Merge each tool_result into its matching tool_use message
                         if let Some(Value::Array(arr)) = msg.get("content") {
                             for result_item in arr {
-                                if result_item.get("type").and_then(|t| t.as_str()) != Some("tool_result") {
+                                if result_item.get("type").and_then(|t| t.as_str())
+                                    != Some("tool_result")
+                                {
                                     continue;
                                 }
                                 let result_text = extract_tool_result_content(result_item);
@@ -163,17 +125,21 @@ impl ClaudeProvider {
                                     continue;
                                 }
                                 content_parts.push(result_text.clone());
-                                let use_id = result_item.get("tool_use_id").and_then(|i| i.as_str());
-                                if let Some(idx) = use_id.and_then(|id| tool_use_id_map.get(id)) {
+                                let use_id =
+                                    result_item.get("tool_use_id").and_then(|i| i.as_str());
+                                if let Some(idx) =
+                                    use_id.and_then(|id| tool_use_id_map.get(id))
+                                {
                                     // Merge result into the existing tool_use message
                                     messages[*idx].content = result_text;
                                 } else {
-                                    // No matching tool_use found — emit as standalone
+                                    // No matching tool_use found -- emit as standalone
                                     messages.push(Message {
                                         role: MessageRole::Tool,
                                         content: result_text,
                                         timestamp: timestamp.clone(),
-                                        tool_name: use_id.map(std::string::ToString::to_string),
+                                        tool_name: use_id
+                                            .map(std::string::ToString::to_string),
                                         tool_input: None,
                                         token_usage: None,
                                     });
@@ -192,7 +158,9 @@ impl ClaudeProvider {
                         .and_then(serde_json::Value::as_bool)
                         .unwrap_or(false);
 
-                    if let Some((pending_text, pending_timestamp)) = pending_user_message.take() {
+                    if let Some((pending_text, pending_timestamp)) =
+                        pending_user_message.take()
+                    {
                         if is_meta
                             && contains_image_placeholder_without_source(&pending_text)
                             && contains_image_source(&text)
@@ -201,7 +169,10 @@ impl ClaudeProvider {
                                 &mut messages,
                                 &mut content_parts,
                                 &mut first_user_message,
-                                merge_image_placeholders_with_sources(&pending_text, &text),
+                                merge_image_placeholders_with_sources(
+                                    &pending_text,
+                                    &text,
+                                ),
                                 pending_timestamp,
                             );
                             continue;
@@ -251,10 +222,13 @@ impl ClaudeProvider {
                     if let Some(Value::Array(arr)) = msg.get("content") {
                         let mut text_parts = Vec::new();
                         for item in arr {
-                            let item_type = item.get("type").and_then(|t| t.as_str()).unwrap_or("");
+                            let item_type =
+                                item.get("type").and_then(|t| t.as_str()).unwrap_or("");
                             match item_type {
                                 "thinking" => {
-                                    if let Some(t) = item.get("thinking").and_then(|t| t.as_str()) {
+                                    if let Some(t) =
+                                        item.get("thinking").and_then(|t| t.as_str())
+                                    {
                                         if !t.trim().is_empty() {
                                             // Emit thinking as a separate assistant message with marker
                                             messages.push(Message {
@@ -269,7 +243,9 @@ impl ClaudeProvider {
                                     }
                                 }
                                 "text" => {
-                                    if let Some(t) = item.get("text").and_then(|t| t.as_str()) {
+                                    if let Some(t) =
+                                        item.get("text").and_then(|t| t.as_str())
+                                    {
                                         if !t.trim().is_empty() {
                                             text_parts.push(t.to_string());
                                         }
@@ -291,8 +267,10 @@ impl ClaudeProvider {
                                         text_parts.clear();
                                     }
                                     // Emit tool_use as a Tool message
-                                    let name =
-                                        item.get("name").and_then(|n| n.as_str()).unwrap_or("tool");
+                                    let name = item
+                                        .get("name")
+                                        .and_then(|n| n.as_str())
+                                        .unwrap_or("tool");
                                     let input = item
                                         .get("input")
                                         .map(std::string::ToString::to_string);
@@ -306,8 +284,11 @@ impl ClaudeProvider {
                                         token_usage: None,
                                     });
                                     // Record tool_use_id for merging results later
-                                    if let Some(id) = item.get("id").and_then(|i| i.as_str()) {
-                                        tool_use_id_map.insert(id.to_string(), msg_idx);
+                                    if let Some(id) =
+                                        item.get("id").and_then(|i| i.as_str())
+                                    {
+                                        tool_use_id_map
+                                            .insert(id.to_string(), msg_idx);
                                     }
                                 }
                                 _ => {}
@@ -345,7 +326,8 @@ impl ClaudeProvider {
                     // Attach token usage to the last assistant/tool message of this turn
                     if let Some(usage) = turn_usage {
                         // Find the last non-thinking message in this turn
-                        if let Some(last_msg) = messages[turn_start..].iter_mut()
+                        if let Some(last_msg) = messages[turn_start..]
+                            .iter_mut()
                             .filter(|m| m.role != MessageRole::System)
                             .last()
                         {
@@ -405,9 +387,10 @@ impl ClaudeProvider {
         let full_content = content_parts.join("\n");
         let content_text = truncate_to_bytes(&full_content, FTS_CONTENT_LIMIT);
 
-        let title = session_title(first_user_message.as_deref().or(summary_text.as_deref()));
+        let title =
+            session_title(first_user_message.as_deref().or(summary_text.as_deref()));
 
-        let meta = SessionMeta {
+        let meta = crate::models::SessionMeta {
             id: session_id,
             provider: Provider::Claude,
             title,
@@ -474,8 +457,14 @@ fn flush_pending_user_message(
 /// Extract token usage from a message's `usage` field.
 fn extract_token_usage(message: &Value) -> Option<TokenUsage> {
     let usage = message.get("usage")?;
-    let input_tokens = usage.get("input_tokens").and_then(|v| v.as_u64()).unwrap_or(0) as u32;
-    let output_tokens = usage.get("output_tokens").and_then(|v| v.as_u64()).unwrap_or(0) as u32;
+    let input_tokens = usage
+        .get("input_tokens")
+        .and_then(|v| v.as_u64())
+        .unwrap_or(0) as u32;
+    let output_tokens = usage
+        .get("output_tokens")
+        .and_then(|v| v.as_u64())
+        .unwrap_or(0) as u32;
     let cache_creation_input_tokens = usage
         .get("cache_creation_input_tokens")
         .and_then(|v| v.as_u64())
@@ -513,8 +502,12 @@ fn extract_message_content(message: &Value) -> String {
                         }
                     }
                     "tool_use" => {
-                        let name = item.get("name").and_then(|n| n.as_str()).unwrap_or("tool");
-                        let input = item.get("input").map(std::string::ToString::to_string).unwrap_or_default();
+                        let name =
+                            item.get("name").and_then(|n| n.as_str()).unwrap_or("tool");
+                        let input = item
+                            .get("input")
+                            .map(std::string::ToString::to_string)
+                            .unwrap_or_default();
                         let end = if input.len() > 200 {
                             input.floor_char_boundary(200)
                         } else {
@@ -574,7 +567,8 @@ fn extract_tool_result_content(result: &Value) -> String {
                     Some("image") => {
                         // Inline base64 image as data URI for frontend rendering
                         let source = item.get("source");
-                        let data = source.and_then(|s| s.get("data")).and_then(|d| d.as_str());
+                        let data =
+                            source.and_then(|s| s.get("data")).and_then(|d| d.as_str());
                         let media = source
                             .and_then(|s| s.get("media_type"))
                             .and_then(|m| m.as_str())
@@ -594,120 +588,5 @@ fn extract_tool_result_content(result: &Value) -> String {
             parts.join("\n")
         }
         _ => String::new(),
-    }
-}
-
-fn contains_image_source(text: &str) -> bool {
-    text.contains("[Image: source:")
-}
-
-fn contains_image_placeholder_without_source(text: &str) -> bool {
-    text.contains("[Image") && !contains_image_source(text)
-}
-
-fn merge_image_placeholders_with_sources(placeholder_text: &str, meta_text: &str) -> String {
-    let sources = extract_image_source_segments(meta_text);
-    if sources.is_empty() {
-        return placeholder_text.to_string();
-    }
-
-    let mut merged = String::new();
-    let mut remaining = placeholder_text;
-    let mut source_index = 0usize;
-
-    while let Some(start) = remaining.find("[Image") {
-        merged.push_str(&remaining[..start]);
-        let image_slice = &remaining[start..];
-        let Some(end_offset) = image_slice.find(']') else {
-            merged.push_str(image_slice);
-            remaining = "";
-            break;
-        };
-
-        let candidate = &image_slice[..=end_offset];
-        if source_index < sources.len() && is_image_placeholder(candidate) {
-            merged.push_str(&sources[source_index]);
-            source_index += 1;
-        } else {
-            merged.push_str(candidate);
-        }
-
-        remaining = &image_slice[end_offset + 1..];
-    }
-
-    merged.push_str(remaining);
-
-    if source_index < sources.len() {
-        if !merged.is_empty() && !merged.ends_with('\n') {
-            merged.push('\n');
-        }
-        merged.push_str(&sources[source_index..].join("\n"));
-    }
-
-    merged
-}
-
-fn extract_image_source_segments(text: &str) -> Vec<String> {
-    let mut segments = Vec::new();
-    let mut remaining = text;
-
-    while let Some(start) = remaining.find("[Image") {
-        let image_slice = &remaining[start..];
-        let Some(end_offset) = image_slice.find(']') else {
-            break;
-        };
-
-        let candidate = &image_slice[..=end_offset];
-        if contains_image_source(candidate) {
-            segments.push(candidate.to_string());
-        }
-
-        remaining = &image_slice[end_offset + 1..];
-    }
-
-    segments
-}
-
-fn is_image_placeholder(segment: &str) -> bool {
-    segment.starts_with("[Image") && !segment.contains("source:")
-}
-
-impl SessionProvider for ClaudeProvider {
-    fn provider(&self) -> Provider {
-        Provider::Claude
-    }
-
-    fn watch_paths(&self) -> Vec<PathBuf> {
-        vec![self.projects_dir()]
-    }
-
-    fn scan_all(&self) -> Result<Vec<ParsedSession>, ProviderError> {
-        let all_files = self.collect_jsonl_files();
-
-        let sessions: Vec<ParsedSession> = all_files
-            .par_iter()
-            .filter_map(|path| self.parse_session(path))
-            .collect();
-
-        Ok(sessions)
-    }
-
-    fn scan_source(&self, source_path: &str) -> Result<Vec<ParsedSession>, ProviderError> {
-        let path = PathBuf::from(source_path);
-        Ok(self.parse_session(&path).into_iter().collect())
-    }
-
-    fn load_messages(
-        &self,
-        _session_id: &str,
-        source_path: &str,
-    ) -> Result<Vec<Message>, ProviderError> {
-        let path = PathBuf::from(source_path);
-
-        let parsed = self
-            .parse_session(&path)
-            .ok_or_else(|| ProviderError::Parse("failed to parse session file".to_string()))?;
-
-        Ok(parsed.messages)
     }
 }
