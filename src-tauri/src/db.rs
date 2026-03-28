@@ -255,7 +255,11 @@ impl Database {
                 "DELETE FROM favorites; DELETE FROM sessions; DELETE FROM meta;"
             )?;
             Ok(())
-        })
+        })?;
+        // Reclaim disk space after bulk delete
+        let conn = self.lock_conn()?;
+        conn.execute_batch("VACUUM")?;
+        Ok(())
     }
 
     pub fn delete_session(&self, id: &str) -> Result<(), rusqlite::Error> {

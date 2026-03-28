@@ -49,7 +49,7 @@ export { disabledProviders };
 
 // Time grouping toggle
 const [timeGrouping, setTimeGroupingSignal] = createSignal<boolean>(
-  localStorage.getItem("cc-session-time-grouping") === "true"
+  localStorage.getItem("cc-session-time-grouping") !== "false"
 );
 
 export function setTimeGrouping(v: boolean) {
@@ -58,3 +58,31 @@ export function setTimeGrouping(v: boolean) {
 }
 
 export { timeGrouping };
+
+// Blocked folders: sessions from these project paths are hidden
+const [blockedFolders, setBlockedFoldersSignal] = createSignal<string[]>(
+  JSON.parse(localStorage.getItem("cc-session-blocked-folders") || "[]") as string[]
+);
+
+export function addBlockedFolder(path: string) {
+  setBlockedFoldersSignal((prev) => {
+    if (prev.includes(path)) return prev;
+    const next = [...prev, path];
+    localStorage.setItem("cc-session-blocked-folders", JSON.stringify(next));
+    return next;
+  });
+}
+
+export function removeBlockedFolder(path: string) {
+  setBlockedFoldersSignal((prev) => {
+    const next = prev.filter((p) => p !== path);
+    localStorage.setItem("cc-session-blocked-folders", JSON.stringify(next));
+    return next;
+  });
+}
+
+export function isPathBlocked(path: string): boolean {
+  return blockedFolders().some((blocked) => path === blocked || path.startsWith(blocked + "/"));
+}
+
+export { blockedFolders };

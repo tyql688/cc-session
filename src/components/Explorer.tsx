@@ -3,7 +3,7 @@ import type { SessionMeta, TreeNode, Provider } from "../lib/types";
 import { getResumeCommand, resumeSession, trashSession, exportSessionsBatch, toggleFavorite, renameSession, openInFolder } from "../lib/tauri";
 import { save } from "@tauri-apps/plugin-dialog";
 import { useI18n } from "../i18n/index";
-import { terminalApp, timeGrouping } from "../stores/settings";
+import { terminalApp, timeGrouping, addBlockedFolder, isPathBlocked } from "../stores/settings";
 import { ContextMenu, type MenuItemDef } from "./ContextMenu";
 import { InputDialog } from "./InputDialog";
 import { TreeNodeComponent, collectSessionNodes } from "./TreeNode";
@@ -15,6 +15,18 @@ import {
 } from "../stores/selection";
 import { toast, toastError } from "../stores/toast";
 import { bumpFavoriteVersion } from "../stores/favorites";
+
+/** Filter out projects whose path matches a blocked folder. */
+function filterBlockedFolders(tree: TreeNode[]): TreeNode[] {
+  return tree.map((provider) => ({
+    ...provider,
+    children: provider.children.filter((project) => {
+      // project id format: "provider:/path/to/project"
+      const path = project.id.includes(":") ? project.id.slice(project.id.indexOf(":") + 1) : "";
+      return !path || !isPathBlocked(path);
+    }),
+  })).filter((provider) => provider.children.length > 0);
+}
 
 function applyTimeGrouping(tree: TreeNode[], t: (key: string) => string): TreeNode[] {
   const now = Date.now();
@@ -91,9 +103,10 @@ export function Explorer(props: {
   isLoading?: boolean;
 }) {
   const { t } = useI18n();
-  const displayTree = createMemo(() =>
-    timeGrouping() ? applyTimeGrouping(props.tree, t) : props.tree
-  );
+  const displayTree = createMemo(() => {
+    const filtered = filterBlockedFolders(props.tree);
+    return timeGrouping() ? applyTimeGrouping(filtered, t) : filtered;
+  });
   const [expandedIds, setExpandedIds] = createSignal<Set<string>>(new Set());
   const [initialized, setInitialized] = createSignal(false);
 
@@ -471,6 +484,17 @@ export function Explorer(props: {
           });
         },
       },
+      ...(hasPath
+        ? [
+            {
+              label: t("contextMenu.blockFolder"),
+              onClick: () => {
+                addBlockedFolder(projectPath);
+                props.onRefreshTree?.();
+              },
+            },
+          ]
+        : []),
       { label: "", separator: true, onClick: () => {} },
       {
         label: t("contextMenu.deleteAll"),

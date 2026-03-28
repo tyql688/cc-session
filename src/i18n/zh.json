@@ -51,6 +51,7 @@
     "expandAll": "全部展开",
     "refresh": "刷新",
     "deleteAll": "删除所有会话",
+    "blockFolder": "屏蔽此文件夹",
     "deleteSelected": "删除选中",
     "exportSelected": "导出选中",
     "toggleFavorite": "切换收藏",
@@ -94,7 +95,11 @@
     "updating": "更新中...",
     "updateReady": "可更新",
     "upToDate": "已是最新",
-    "updateFailed": "检查失败"
+    "updateFailed": "检查失败",
+    "blockedFolders": "屏蔽文件夹",
+    "blockedFoldersDesc": "这些路径下的会话将被隐藏",
+    "noBlockedFolders": "无屏蔽文件夹",
+    "unblock": "取消屏蔽"
   },
   "trash": {
     "title": "回收站",

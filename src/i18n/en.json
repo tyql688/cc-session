@@ -51,6 +51,7 @@
     "expandAll": "Expand All",
     "refresh": "Refresh",
     "deleteAll": "Delete All Sessions",
+    "blockFolder": "Block This Folder",
     "deleteSelected": "Delete Selected",
     "exportSelected": "Export Selected",
     "toggleFavorite": "Toggle Favorite",
@@ -94,7 +95,11 @@
     "updating": "Updating...",
     "updateReady": "available",
     "upToDate": "Up to date",
-    "updateFailed": "Check failed"
+    "updateFailed": "Check failed",
+    "blockedFolders": "Blocked Folders",
+    "blockedFoldersDesc": "Sessions from these paths are hidden",
+    "noBlockedFolders": "No blocked folders",
+    "unblock": "Unblock"
   },
   "trash": {
     "title": "Trash",
