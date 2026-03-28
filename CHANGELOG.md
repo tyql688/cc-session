@@ -5,6 +5,24 @@ All notable changes to this project will be documented in this file.
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 versioned with [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.1] - 2026-03-29
+
+### Added
+
+- Blocked folders: sidebar panel to exclude folders from session indexing
+- Auto-update support with Tauri updater plugin
+
+### Fixed
+
+- Blocked folders now correctly filter recent sessions
+- VACUUM on reindex for smaller database size
+- UI polish improvements
+
+### Changed
+
+- Upgraded CI actions to v5 (Node.js 24 support)
+- Removed Rust test modules (SQLite disk IO issues in CI runner)
+
 ## [0.1.0] - 2026-03-28
 
 ### Added
