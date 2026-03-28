@@ -6,7 +6,7 @@ import { getIndexStats, rebuildIndex, clearIndex, getProviderPaths } from "../li
 import { toast, toastError } from "../stores/toast";
 import { theme, setTheme } from "../stores/theme";
 import type { Theme } from "../stores/theme";
-import { terminalApp, setTerminalApp, disabledProviders, toggleProvider, timeGrouping, setTimeGrouping, blockedFolders, removeBlockedFolder } from "../stores/settings";
+import { terminalApp, setTerminalApp, disabledProviders, toggleProvider, timeGrouping, setTimeGrouping } from "../stores/settings";
 import type { TerminalApp } from "../stores/settings";
 import { check } from "@tauri-apps/plugin-updater";
 import { relaunch } from "@tauri-apps/plugin-process";
@@ -207,29 +207,6 @@ export function SettingsPanel() {
               />
             </div>
 
-            <div class="settings-section">
-              <div class="settings-section-title">{t("settings.blockedFolders")}</div>
-              <div class="settings-desc" style="margin-bottom:8px">{t("settings.blockedFoldersDesc")}</div>
-              <Show when={blockedFolders().length === 0}>
-                <div class="settings-row">
-                  <span class="settings-stat" style="opacity:0.5">{t("settings.noBlockedFolders")}</span>
-                </div>
-              </Show>
-              <For each={blockedFolders()}>
-                {(folder) => (
-                  <div class="settings-row">
-                    <span class="settings-stat" style="font-family:var(--font-mono);font-size:11px;opacity:0.8">{folder.split("/").slice(-2).join("/")}</span>
-                    <button
-                      class="settings-btn settings-btn-danger"
-                      onClick={() => removeBlockedFolder(folder)}
-                      title={folder}
-                    >
-                      {t("settings.unblock")}
-                    </button>
-                  </div>
-                )}
-              </For>
-            </div>
           </div>
         </Show>
 

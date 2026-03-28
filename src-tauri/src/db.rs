@@ -256,10 +256,7 @@ impl Database {
             )?;
             Ok(())
         })?;
-        // Reclaim disk space after bulk delete
-        let conn = self.lock_conn()?;
-        conn.execute_batch("VACUUM")?;
-        Ok(())
+        self.vacuum()
     }
 
     pub fn delete_session(&self, id: &str) -> Result<(), rusqlite::Error> {
@@ -327,6 +324,11 @@ impl Database {
             params![key, value],
         )?;
         Ok(())
+    }
+
+    pub fn vacuum(&self) -> Result<(), rusqlite::Error> {
+        let conn = self.lock_conn()?;
+        conn.execute_batch("VACUUM")
     }
 
     pub fn db_size_bytes(&self) -> u64 {

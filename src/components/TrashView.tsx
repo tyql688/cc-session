@@ -285,11 +285,13 @@ export function TrashView(props: { onRefreshTree: () => void }) {
   return (
     <div class="trash-view">
       <div class="trash-header">
-        <span class="trash-title">{t("trash.title")}</span>
+        <span class="trash-title">
+          {t("trash.title")}
+          <Show when={trashItems() && trashItems()!.length > 0}>
+            <span class="trash-count"> ({trashItems()!.length})</span>
+          </Show>
+        </span>
         <Show when={trashItems() && trashItems()!.length > 0}>
-          <span class="count-badge">
-            {trashItems()!.length}
-          </span>
           <button
             class="trash-empty-btn"
             onClick={() => setShowEmptyConfirm(true)}

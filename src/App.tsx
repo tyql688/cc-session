@@ -337,7 +337,7 @@ export default function App() {
   );
   const showExplorer = createMemo(() => {
     const v = activeView();
-    return v !== "settings" && v !== "trash" && v !== "blocked";
+    return v !== "settings" && v !== "trash";
   });
   const showExplorerTree = createMemo(() => {
     const v = activeView();

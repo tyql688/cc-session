@@ -3,6 +3,7 @@ import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import type { SessionMeta, TreeNode } from "../lib/types";
 import { listRecentSessions } from "../lib/tauri";
 import { useI18n } from "../i18n/index";
+import { isPathBlocked } from "../stores/settings";
 import { TabBar } from "./TabBar";
 import { SessionView } from "./SessionView";
 import { ProviderIcon } from "./MessageBubble";
@@ -25,7 +26,9 @@ export function EditorArea(props: {
 
   // Refresh trigger: bumped on mount and whenever sessions change
   const [recentVersion, setRecentVersion] = createSignal(0);
-  const [recentSessions] = createResource(recentVersion, () => listRecentSessions(10).catch(() => []));
+  const [recentSessions] = createResource(recentVersion, () =>
+    listRecentSessions(20).catch(() => []).then(list => list.filter(s => !isPathBlocked(s.project_path)).slice(0, 10))
+  );
 
   onMount(() => {
     let unlisten: UnlistenFn | undefined;

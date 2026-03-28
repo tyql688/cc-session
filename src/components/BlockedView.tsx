@@ -12,10 +12,6 @@ export function BlockedView(props: { onRefreshTree?: () => void }) {
         when={blockedFolders().length > 0}
         fallback={
           <div class="empty-state">
-            <svg width="32" height="32" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24" style="opacity:0.4">
-              <circle cx="12" cy="12" r="10" />
-              <line x1="4.93" y1="4.93" x2="19.07" y2="19.07" />
-            </svg>
             <p class="empty-state-text">{t("settings.noBlockedFolders")}</p>
             <p class="empty-state-hint">{t("blocked.hint")}</p>
           </div>
@@ -23,27 +19,30 @@ export function BlockedView(props: { onRefreshTree?: () => void }) {
       >
         <div class="blocked-list">
           <For each={blockedFolders()}>
-            {(folder) => (
-              <div class="blocked-item">
-                <div class="blocked-item-info">
-                  <span class="blocked-item-name">{folder.split("/").pop() || folder}</span>
-                  <span class="blocked-item-path" title={folder}>{folder}</span>
-                </div>
-                <button
-                  class="blocked-item-btn"
-                  title={t("settings.unblock")}
-                  onClick={() => {
-                    removeBlockedFolder(folder);
-                    props.onRefreshTree?.();
-                  }}
-                >
-                  <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24">
-                    <line x1="18" y1="6" x2="6" y2="18" />
-                    <line x1="6" y1="6" x2="18" y2="18" />
+            {(folder) => {
+              const short = () => folder.split("/").slice(-2).join("/");
+              return (
+                <div class="blocked-item" title={folder}>
+                  <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24" class="blocked-item-icon">
+                    <path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z" />
                   </svg>
-                </button>
-              </div>
-            )}
+                  <span class="blocked-item-label">{short()}</span>
+                  <button
+                    class="blocked-item-btn"
+                    title={t("settings.unblock")}
+                    onClick={() => {
+                      removeBlockedFolder(folder);
+                      props.onRefreshTree?.();
+                    }}
+                  >
+                    <svg width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24">
+                      <line x1="18" y1="6" x2="6" y2="18" />
+                      <line x1="6" y1="6" x2="18" y2="18" />
+                    </svg>
+                  </button>
+                </div>
+              );
+            }}
           </For>
         </div>
       </Show>
