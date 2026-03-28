@@ -10,6 +10,7 @@ npm run tauri build           # Production build
 npx tauri build --bundles dmg # DMG only
 cd src-tauri && cargo clippy  # Rust lint
 npx tsc --noEmit              # TS type check
+./scripts/release.sh 0.2.0   # Bump, commit, tag, push → triggers CI release
 ```
 
 ## Project Layout
