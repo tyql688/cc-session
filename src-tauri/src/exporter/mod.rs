@@ -1,6 +1,7 @@
 pub mod html;
 pub mod json;
 pub mod markdown;
+mod templates;
 
 use std::path::Path;
 
