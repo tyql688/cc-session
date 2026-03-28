@@ -52,5 +52,5 @@ jobs:
           releaseBody: 'See the [changelog](https://github.com/${{ github.repository }}/blob/master/CHANGELOG.md) for details.'
           releaseDraft: true
           prerelease: false
-          args: --target ${{ matrix.target }}
+          args: --target ${{ matrix.target }} --bundles dmg,updater
 
