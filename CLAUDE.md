@@ -9,6 +9,7 @@ npm run tauri dev             # Dev with hot reload
 npm run tauri build           # Production build
 npx tauri build --bundles dmg # DMG only
 cd src-tauri && cargo clippy  # Rust lint
+cd src-tauri && cargo test    # Rust tests (21 parser golden tests)
 npx tsc --noEmit              # TS type check
 npm run lint                  # ESLint
 npm run format:check          # Prettier check
@@ -40,7 +41,7 @@ src-tauri/src/
     opencode/              # mod.rs, parser.rs
   commands/                # sessions.rs, settings.rs, trash.rs, terminal.rs
   exporter/                # json.rs, markdown.rs, html.rs, templates.rs
-  db/                      # mod.rs (schema), queries.rs, sync.rs, row_mapper.rs
+  db/                      # mod.rs (schema, read/write conn separation), queries.rs, sync.rs, row_mapper.rs
   indexer.rs               # Parallel scan, batch upsert, tree building
   watcher.rs               # notify crate, FS events for JSONL/JSON providers
   models.rs                # Provider, SessionMeta, Message, TokenUsage, TreeNode
@@ -55,8 +56,13 @@ All providers implement `SessionProvider` trait:
 - `load_messages(session_id, source_path)` → `Vec<Message>` (on-demand)
 - `watch_paths()` → directories for file system watcher
 
+Provider constructors return `Option<Self>` (graceful skip if HOME unavailable).
+`Provider::parse(s)` maps string keys to enum variants (renamed from `from_str`).
+
 File-based (Claude, Codex, Gemini, Kimi CLI): FS event watching via `notify` crate.
 SQLite-based (Cursor CLI, OpenCode): 2s polling in frontend when live watch enabled. Opened with `SQLITE_OPEN_READ_WRITE` to read WAL data.
+
+Heavy commands (`reindex`, `sync_sources`, `delete_sessions_batch`, `export_sessions_batch`) are `async` with `tokio::task::spawn_blocking` to avoid blocking the main thread.
 
 Tool names are mapped to canonical names per provider (e.g. Codex `exec_command` → `Bash`, Cursor CLI `StrReplace` → `Edit`, Kimi CLI `WriteFile` → `Write`) so the frontend has one consistent display path.
 
@@ -70,6 +76,27 @@ Tool names are mapped to canonical names per provider (e.g. Codex `exec_command`
 | Kimi CLI    | `~/.kimi/sessions/**/*.jsonl`          | JSONL  |
 | Cursor CLI  | `~/.cursor/chats/**/store.db`          | SQLite |
 | OpenCode    | `~/.local/share/opencode/opencode.db`  | SQLite |
+
+## Database
+
+`Database` uses separate read/write connections (`read_conn` + `write_conn`, both `Mutex<Connection>`).
+Read queries go through `lock_read()`, writes through `lock_write()` / `with_transaction()`.
+WAL mode enables concurrent reads during writes.
+
+## Testing
+
+- **Rust**: 21 golden tests in `src-tauri/tests/parser_tests.rs` covering Claude, Codex, Kimi parsers
+  - Test fixtures in `src-tauri/tests/fixtures/`
+  - Run: `cd src-tauri && cargo test`
+- **Frontend**: vitest (`src/stores/search.test.ts`)
+  - Run: `npm test`
+
+## CI
+
+Three-platform matrix (macOS, Windows, Linux) with:
+- Frontend: tsc, eslint, prettier, vitest, vite build
+- Rust: fmt, check, clippy (with `Swatinem/rust-cache`)
+- Linux: installs webkit2gtk/gtk system deps
 
 ## Key Patterns
 

@@ -13,7 +13,7 @@
 <p align="center">
   <a href="https://github.com/tyql688/cc-session/releases/latest"><img alt="Latest Release" src="https://img.shields.io/github/v/release/tyql688/cc-session?style=flat-square&color=blue"></a>
 
-  <img alt="Platform" src="https://img.shields.io/badge/platform-macOS%20%7C%20Windows-lightgrey?style=flat-square">
+  <img alt="Platform" src="https://img.shields.io/badge/platform-macOS%20%7C%20Windows%20%7C%20Linux-lightgrey?style=flat-square">
   <a href="LICENSE"><img alt="License" src="https://img.shields.io/github/license/tyql688/cc-session?style=flat-square"></a>
 </p>
 
@@ -27,7 +27,7 @@ AI coding tools like Claude Code, Codex, and Gemini CLI store session data local
 
 - **Unified view** — All your AI coding sessions from multiple providers in one place
 - **Full-text search** — Search across all session content with SQLite FTS5 (`⌘K`)
-- **Resume sessions** — Jump back into any session in Terminal, iTerm2, Ghostty, Kitty, Warp, WezTerm, or Alacritty (`⇧⌘R`)
+- **Resume sessions** — Jump back into any session in Terminal, iTerm2, Ghostty, Kitty, Warp, WezTerm, Alacritty, Windows Terminal, or PowerShell (`⇧⌘R`)
 - **Live watch** — Auto-refreshes when active sessions update (`⌘L`)
 - **Rich rendering** — Markdown, syntax highlighting, Mermaid diagrams, KaTeX math, inline images, structured tool call diffs
 - **Token usage** — Per-message and session-level token counts with cache hit/write breakdown
@@ -40,14 +40,14 @@ AI coding tools like Claude Code, Codex, and Gemini CLI store session data local
 
 ## Supported Providers
 
-| Provider | Data Source | Format | Live Watch |
-|:---|:---|:---:|:---:|
-| Claude Code | `~/.claude/projects/**/*.jsonl` | JSONL | FS events |
-| Codex CLI | `~/.codex/sessions/**/*.jsonl` | JSONL | FS events |
-| Gemini CLI | `~/.gemini/tmp/*/chats/*.json` | JSON | FS events |
-| Kimi CLI | `~/.kimi/sessions/**/*.jsonl` | JSONL | FS events |
-| Cursor CLI | `~/.cursor/chats/**/store.db` | SQLite | Polling |
-| OpenCode | `~/.local/share/opencode/opencode.db` | SQLite | Polling |
+| Provider    | Data Source                           | Format | Live Watch |
+| :---------- | :------------------------------------ | :----: | :--------: |
+| Claude Code | `~/.claude/projects/**/*.jsonl`       | JSONL  | FS events  |
+| Codex CLI   | `~/.codex/sessions/**/*.jsonl`        | JSONL  | FS events  |
+| Gemini CLI  | `~/.gemini/tmp/*/chats/*.json`        |  JSON  | FS events  |
+| Kimi CLI    | `~/.kimi/sessions/**/*.jsonl`         | JSONL  | FS events  |
+| Cursor CLI  | `~/.cursor/chats/**/store.db`         | SQLite |  Polling   |
+| OpenCode    | `~/.local/share/opencode/opencode.db` | SQLite |  Polling   |
 
 Each provider parses: messages, tool calls (with input/output), thinking/reasoning blocks, token usage, and inline images.
 
@@ -57,27 +57,31 @@ Download the latest release from [Releases](https://github.com/tyql688/cc-sessio
 
 - **macOS** — `.dmg`
 - **Windows** — `.exe` (NSIS installer)
+- **Linux** — `.deb` / `.AppImage`
 
 > **macOS Gatekeeper:** The app is not code-signed. On first launch, macOS may block it. Fix with:
+>
 > ```bash
 > xattr -cr /Applications/CC Session.app
 > ```
 
 ## Keyboard Shortcuts
 
-| Key | Action |
-|:---|:---|
-| `⌘K` | Search |
-| `⌘1-9` | Switch tab |
+`⌘` = Cmd (macOS) / Ctrl (Windows & Linux)
+
+| Key          | Action                |
+| :----------- | :-------------------- |
+| `⌘K`         | Search                |
+| `⌘1-9`       | Switch tab            |
 | `⌘W` / `⇧⌘W` | Close tab / Close all |
-| `⌘]` / `⌘[` | Next / Prev tab |
-| `⇧⌘R` | Resume in terminal |
-| `⇧⌘E` | Export |
-| `⌘B` | Toggle favorite |
-| `⌘L` | Toggle live watch |
-| `⌘⌫` | Delete session |
-| `⌘F` | Find in session |
-| `?` | Show all shortcuts |
+| `⌘]` / `⌘[`  | Next / Prev tab       |
+| `⇧⌘R`        | Resume in terminal    |
+| `⇧⌘E`        | Export                |
+| `⌘B`         | Toggle favorite       |
+| `⌘L`         | Toggle live watch     |
+| `⌘⌫`         | Delete session        |
+| `⌘F`         | Find in session       |
+| `?`          | Show all shortcuts    |
 
 ## Build from Source
 
