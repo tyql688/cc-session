@@ -9,7 +9,7 @@ use super::Database;
 
 impl Database {
     pub fn get_session(&self, id: &str) -> Result<Option<SessionMeta>, rusqlite::Error> {
-        let conn = self.lock_conn()?;
+        let conn = self.lock_read()?;
         let mut stmt = conn.prepare(
             "SELECT id, provider, title, project_path, project_name,
                     created_at, updated_at, message_count, file_size_bytes, source_path, is_sidechain
@@ -24,7 +24,7 @@ impl Database {
     }
 
     pub fn list_sessions(&self) -> Result<Vec<SessionMeta>, rusqlite::Error> {
-        let conn = self.lock_conn()?;
+        let conn = self.lock_read()?;
         list_sessions_from_query(
             &conn,
             "SELECT id, provider, title, project_path, project_name,
@@ -38,7 +38,7 @@ impl Database {
         &self,
         filters: &SearchFilters,
     ) -> Result<Vec<SearchResult>, rusqlite::Error> {
-        let conn = self.lock_conn()?;
+        let conn = self.lock_read()?;
         let safe_query = build_fts_query(&filters.query);
         let has_query = safe_query.is_some();
         let has_filters = filters.provider.is_some()
@@ -58,12 +58,12 @@ impl Database {
     }
 
     pub fn session_count(&self) -> Result<u64, rusqlite::Error> {
-        let conn = self.lock_conn()?;
+        let conn = self.lock_read()?;
         conn.query_row("SELECT COUNT(*) FROM sessions", [], |row| row.get(0))
     }
 
     pub fn count_sessions_for_provider(&self, provider_key: &str) -> Result<u64, rusqlite::Error> {
-        let conn = self.lock_conn()?;
+        let conn = self.lock_read()?;
         conn.query_row(
             "SELECT COUNT(*) FROM sessions WHERE provider = ?1",
             params![provider_key],
@@ -76,7 +76,7 @@ impl Database {
         provider_key: &str,
         source_path: &str,
     ) -> Result<u64, rusqlite::Error> {
-        let conn = self.lock_conn()?;
+        let conn = self.lock_read()?;
         conn.query_row(
             "SELECT COUNT(*) FROM sessions WHERE provider = ?1 AND source_path = ?2",
             params![provider_key, source_path],
@@ -85,7 +85,7 @@ impl Database {
     }
 
     pub fn get_meta(&self, key: &str) -> Result<Option<String>, rusqlite::Error> {
-        let conn = self.lock_conn()?;
+        let conn = self.lock_read()?;
         let mut stmt = conn.prepare("SELECT value FROM meta WHERE key = ?1")?;
         let mut rows = stmt.query_map(params![key], |row| row.get::<_, String>(0))?;
         match rows.next() {
@@ -96,7 +96,7 @@ impl Database {
     }
 
     pub fn set_meta(&self, key: &str, value: &str) -> Result<(), rusqlite::Error> {
-        let conn = self.lock_conn()?;
+        let conn = self.lock_write()?;
         conn.execute(
             "INSERT INTO meta (key, value) VALUES (?1, ?2)
              ON CONFLICT(key) DO UPDATE SET value = excluded.value",
@@ -106,7 +106,7 @@ impl Database {
     }
 
     pub fn vacuum(&self) -> Result<(), rusqlite::Error> {
-        let conn = self.lock_conn()?;
+        let conn = self.lock_write()?;
         conn.execute_batch("VACUUM")
     }
 
@@ -117,7 +117,7 @@ impl Database {
     }
 
     pub fn provider_session_counts(&self) -> Result<HashMap<String, u64>, rusqlite::Error> {
-        let conn = self.lock_conn()?;
+        let conn = self.lock_read()?;
         let mut stmt = conn.prepare("SELECT provider, COUNT(*) FROM sessions GROUP BY provider")?;
         let rows = stmt.query_map([], |row| {
             Ok((row.get::<_, String>(0)?, row.get::<_, u64>(1)?))
@@ -132,7 +132,7 @@ impl Database {
     }
 
     pub fn list_recent_sessions(&self, limit: usize) -> Result<Vec<SessionMeta>, rusqlite::Error> {
-        let conn = self.lock_conn()?;
+        let conn = self.lock_read()?;
         list_sessions_from_query(
             &conn,
             "SELECT id, provider, title, project_path, project_name,
@@ -145,7 +145,7 @@ impl Database {
     }
 
     pub fn add_favorite(&self, session_id: &str) -> Result<(), rusqlite::Error> {
-        let conn = self.lock_conn()?;
+        let conn = self.lock_write()?;
         let now = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap_or_default()
@@ -158,7 +158,7 @@ impl Database {
     }
 
     pub fn remove_favorite(&self, session_id: &str) -> Result<(), rusqlite::Error> {
-        let conn = self.lock_conn()?;
+        let conn = self.lock_write()?;
         conn.execute(
             "DELETE FROM favorites WHERE session_id = ?1",
             params![session_id],
@@ -167,7 +167,7 @@ impl Database {
     }
 
     pub fn is_favorite(&self, session_id: &str) -> Result<bool, rusqlite::Error> {
-        let conn = self.lock_conn()?;
+        let conn = self.lock_read()?;
         let exists: bool = conn.query_row(
             "SELECT EXISTS(SELECT 1 FROM favorites WHERE session_id = ?1)",
             params![session_id],
@@ -177,7 +177,7 @@ impl Database {
     }
 
     pub fn list_favorites(&self) -> Result<Vec<SessionMeta>, rusqlite::Error> {
-        let conn = self.lock_conn()?;
+        let conn = self.lock_read()?;
         let mut stmt = conn.prepare(
             "SELECT s.id, s.provider, s.title, s.project_path, s.project_name,
                     s.created_at, s.updated_at, s.message_count, s.file_size_bytes, s.source_path, s.is_sidechain

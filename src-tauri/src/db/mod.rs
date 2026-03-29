@@ -10,17 +10,28 @@ use std::sync::Mutex;
 use rusqlite::Connection;
 
 pub struct Database {
-    conn: Mutex<Connection>,
+    write_conn: Mutex<Connection>,
+    read_conn: Mutex<Connection>,
     db_path: std::path::PathBuf,
 }
 
 impl Database {
-    /// Acquire the database connection lock, recovering from mutex poisoning.
-    fn lock_conn(&self) -> Result<std::sync::MutexGuard<'_, Connection>, rusqlite::Error> {
-        self.conn.lock().map_err(|_| {
+    /// Acquire the write connection lock, recovering from mutex poisoning.
+    fn lock_write(&self) -> Result<std::sync::MutexGuard<'_, Connection>, rusqlite::Error> {
+        self.write_conn.lock().map_err(|_| {
             rusqlite::Error::SqliteFailure(
                 rusqlite::ffi::Error::new(rusqlite::ffi::SQLITE_LOCKED),
-                Some("database mutex poisoned".to_string()),
+                Some("write mutex poisoned".to_string()),
+            )
+        })
+    }
+
+    /// Acquire the read connection lock, recovering from mutex poisoning.
+    fn lock_read(&self) -> Result<std::sync::MutexGuard<'_, Connection>, rusqlite::Error> {
+        self.read_conn.lock().map_err(|_| {
+            rusqlite::Error::SqliteFailure(
+                rusqlite::ffi::Error::new(rusqlite::ffi::SQLITE_LOCKED),
+                Some("read mutex poisoned".to_string()),
             )
         })
     }
@@ -31,7 +42,7 @@ impl Database {
     where
         F: FnOnce(&Connection) -> Result<T, rusqlite::Error>,
     {
-        let conn = self.lock_conn()?;
+        let conn = self.lock_write()?;
         conn.execute_batch("BEGIN IMMEDIATE TRANSACTION")?;
         match f(&conn) {
             Ok(value) => {
@@ -48,15 +59,16 @@ impl Database {
     pub fn open(data_dir: &Path) -> Result<Self, rusqlite::Error> {
         std::fs::create_dir_all(data_dir).ok();
         let db_path = data_dir.join("sessions.db");
-        let conn = Connection::open(&db_path)?;
 
-        conn.execute_batch(
+        let write_conn = Connection::open(&db_path)?;
+
+        write_conn.execute_batch(
             "PRAGMA journal_mode = WAL;
              PRAGMA synchronous = NORMAL;
              PRAGMA cache_size = -2000;",
         )?;
 
-        conn.execute_batch(
+        write_conn.execute_batch(
             "CREATE TABLE IF NOT EXISTS sessions (
                 id              TEXT PRIMARY KEY,
                 provider        TEXT NOT NULL,
@@ -115,34 +127,39 @@ impl Database {
 
         // Migration: add title_custom column if not exists
         let has_title_custom: bool = {
-            let mut stmt = conn.prepare(
+            let mut stmt = write_conn.prepare(
                 "SELECT COUNT(*) FROM pragma_table_info('sessions') WHERE name = 'title_custom'",
             )?;
             let count: i64 = stmt.query_row([], |row| row.get(0))?;
             count > 0
         };
         if !has_title_custom {
-            conn.execute_batch(
+            write_conn.execute_batch(
                 "ALTER TABLE sessions ADD COLUMN title_custom INTEGER NOT NULL DEFAULT 0;",
             )?;
         }
 
         // Migration: add is_sidechain column if not exists
         let has_is_sidechain: bool = {
-            let mut stmt = conn.prepare(
+            let mut stmt = write_conn.prepare(
                 "SELECT COUNT(*) FROM pragma_table_info('sessions') WHERE name = 'is_sidechain'",
             )?;
             let count: i64 = stmt.query_row([], |row| row.get(0))?;
             count > 0
         };
         if !has_is_sidechain {
-            conn.execute_batch(
+            write_conn.execute_batch(
                 "ALTER TABLE sessions ADD COLUMN is_sidechain INTEGER NOT NULL DEFAULT 0;",
             )?;
         }
 
+        let read_conn = Connection::open(&db_path)?;
+        read_conn.pragma_update(None, "journal_mode", "WAL")?;
+        read_conn.pragma_update(None, "query_only", "ON")?;
+
         Ok(Self {
-            conn: Mutex::new(conn),
+            write_conn: Mutex::new(write_conn),
+            read_conn: Mutex::new(read_conn),
             db_path,
         })
     }

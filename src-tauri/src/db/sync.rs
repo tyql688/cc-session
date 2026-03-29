@@ -105,7 +105,7 @@ impl Database {
     }
 
     pub fn rename_session(&self, id: &str, new_title: &str) -> Result<(), rusqlite::Error> {
-        let conn = self.lock_conn()?;
+        let conn = self.lock_write()?;
         conn.execute(
             "UPDATE sessions SET title = ?1, title_custom = 1 WHERE id = ?2",
             params![new_title, id],
@@ -122,7 +122,7 @@ impl Database {
     }
 
     pub fn delete_session(&self, id: &str) -> Result<(), rusqlite::Error> {
-        let conn = self.lock_conn()?;
+        let conn = self.lock_write()?;
         conn.execute("DELETE FROM favorites WHERE session_id = ?1", params![id])?;
         conn.execute("DELETE FROM sessions WHERE id = ?1", params![id])?;
         Ok(())
