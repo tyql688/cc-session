@@ -19,7 +19,8 @@ export function applyTimeGrouping(tree: TreeNode[], t: (key: string) => string):
   const todayStart = new Date();
   todayStart.setHours(0, 0, 0, 0);
   const weekStart = new Date(todayStart);
-  weekStart.setDate(weekStart.getDate() - weekStart.getDay());
+  const dayOfWeek = weekStart.getDay();
+  weekStart.setDate(weekStart.getDate() - (dayOfWeek === 0 ? 6 : dayOfWeek - 1));
   const monthStart = new Date(todayStart);
   monthStart.setDate(1);
 
