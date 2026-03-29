@@ -86,7 +86,11 @@ export function TrashView(props: { onRefreshTree: () => void }) {
     const ids = collectSessionIds(node);
     let failed = 0;
     for (const id of ids) {
-      try { await restoreSession(id); } catch { failed++; }
+      try {
+        await restoreSession(id);
+      } catch {
+        failed++;
+      }
     }
     await Promise.all([refetch(), props.onRefreshTree()]);
     if (failed > 0) toastError(`${failed}/${ids.length} ${t("trash.restore")}`);
@@ -96,7 +100,11 @@ export function TrashView(props: { onRefreshTree: () => void }) {
   async function handleDeleteAll(node: TreeNode) {
     const ids = collectSessionIds(node);
     for (const id of ids) {
-      try { await permanentDeleteTrash(id); } catch { /* skip */ }
+      try {
+        await permanentDeleteTrash(id);
+      } catch {
+        /* skip */
+      }
     }
     refetch();
   }
@@ -124,8 +132,15 @@ export function TrashView(props: { onRefreshTree: () => void }) {
           onClick={() => !isLeaf() && toggleExpanded(nodeProps.node.id)}
         >
           <Show when={!isLeaf()}>
-            <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"
-              class={`chevron${expanded() ? " expanded" : ""}`}>
+            <svg
+              width="14"
+              height="14"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.5"
+              viewBox="0 0 24 24"
+              class={`chevron${expanded() ? " expanded" : ""}`}
+            >
               <polyline points="9 18 15 12 9 6" />
             </svg>
           </Show>
@@ -155,7 +170,11 @@ export function TrashView(props: { onRefreshTree: () => void }) {
             class={`trash-tree-label${nodeProps.node.node_type === "provider" ? " bold" : ""}`}
             title={isLeaf() ? nodeProps.node.label : undefined}
           >
-            {isLeaf() ? (nodeProps.node.label.length > 50 ? nodeProps.node.label.slice(0, 47) + "..." : nodeProps.node.label) : nodeProps.node.label}
+            {isLeaf()
+              ? nodeProps.node.label.length > 50
+                ? nodeProps.node.label.slice(0, 47) + "..."
+                : nodeProps.node.label
+              : nodeProps.node.label}
           </span>
 
           <Show when={!isLeaf() && nodeProps.node.count > 0}>
@@ -163,7 +182,10 @@ export function TrashView(props: { onRefreshTree: () => void }) {
             <div class="trash-tree-actions">
               <button
                 class="trash-action-btn trash-action-btn-restore"
-                onClick={(e) => { e.stopPropagation(); handleRestoreAll(nodeProps.node); }}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleRestoreAll(nodeProps.node);
+                }}
                 title={t("trash.restore")}
               >
                 <svg width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
@@ -173,7 +195,10 @@ export function TrashView(props: { onRefreshTree: () => void }) {
               </button>
               <button
                 class="trash-action-btn trash-action-btn-danger"
-                onClick={(e) => { e.stopPropagation(); handleDeleteAll(nodeProps.node); }}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleDeleteAll(nodeProps.node);
+                }}
                 title={t("trash.permanentDelete")}
               >
                 <svg width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
@@ -189,7 +214,10 @@ export function TrashView(props: { onRefreshTree: () => void }) {
             <div class="trash-tree-actions">
               <button
                 class="trash-action-btn trash-action-btn-restore"
-                onClick={(e) => { e.stopPropagation(); handleRestore(nodeProps.node.id); }}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleRestore(nodeProps.node.id);
+                }}
                 title={t("trash.restore")}
               >
                 <svg width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
@@ -199,7 +227,10 @@ export function TrashView(props: { onRefreshTree: () => void }) {
               </button>
               <button
                 class="trash-action-btn trash-action-btn-danger"
-                onClick={(e) => { e.stopPropagation(); handlePermanentDelete(nodeProps.node.id); }}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handlePermanentDelete(nodeProps.node.id);
+                }}
                 title={t("trash.permanentDelete")}
               >
                 <svg width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
@@ -230,10 +261,7 @@ export function TrashView(props: { onRefreshTree: () => void }) {
           </Show>
         </span>
         <Show when={trashItems() && trashItems()!.length > 0}>
-          <button
-            class="trash-empty-btn"
-            onClick={() => setShowEmptyConfirm(true)}
-          >
+          <button class="trash-empty-btn" onClick={() => setShowEmptyConfirm(true)}>
             {t("trash.emptyTrash")}
           </button>
         </Show>
@@ -242,7 +270,15 @@ export function TrashView(props: { onRefreshTree: () => void }) {
       <div class="trash-list">
         <Show when={!trashItems.loading && trashItems() && trashItems()!.length === 0}>
           <div class="trash-empty-state">
-            <svg class="icon-faded" width="32" height="32" fill="none" stroke="currentColor" stroke-width="1" viewBox="0 0 24 24">
+            <svg
+              class="icon-faded"
+              width="32"
+              height="32"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1"
+              viewBox="0 0 24 24"
+            >
               <polyline points="3 6 5 6 21 6" />
               <path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2" />
             </svg>
@@ -256,9 +292,7 @@ export function TrashView(props: { onRefreshTree: () => void }) {
           </div>
         </Show>
 
-        <For each={tree()}>
-          {(node) => <TrashTreeNode node={node} depth={0} />}
-        </For>
+        <For each={tree()}>{(node) => <TrashTreeNode node={node} depth={0} />}</For>
       </div>
 
       <ConfirmDialog

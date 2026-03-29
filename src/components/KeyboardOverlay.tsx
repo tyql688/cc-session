@@ -60,7 +60,13 @@ export function KeyboardOverlay(props: { show: boolean; onClose: () => void }) {
   return (
     <Show when={props.show}>
       <div class="keyboard-overlay-backdrop" onClick={() => props.onClose()}>
-        <div class="keyboard-overlay" role="dialog" aria-modal="true" aria-label={t("keyboard.title")} onClick={(e) => e.stopPropagation()}>
+        <div
+          class="keyboard-overlay"
+          role="dialog"
+          aria-modal="true"
+          aria-label={t("keyboard.title")}
+          onClick={(e) => e.stopPropagation()}
+        >
           <div class="keyboard-overlay-header">
             <span class="keyboard-overlay-title">{t("keyboard.title")}</span>
             <button class="keyboard-overlay-close" onClick={() => props.onClose()}>

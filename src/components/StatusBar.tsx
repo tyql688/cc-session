@@ -20,17 +20,23 @@ export function StatusBar(props: { sessionCount: number; providerCount: number; 
 
   const themeIcon = () => {
     switch (theme()) {
-      case "light": return "☀️";
-      case "dark": return "🌙";
-      case "system": return "💻";
+      case "light":
+        return "☀️";
+      case "dark":
+        return "🌙";
+      case "system":
+        return "💻";
     }
   };
 
   const themeLabel = () => {
     switch (theme()) {
-      case "light": return t("status.themeLight");
-      case "dark": return t("status.themeDark");
-      case "system": return t("status.themeSystem");
+      case "light":
+        return t("status.themeLight");
+      case "dark":
+        return t("status.themeDark");
+      case "system":
+        return t("status.themeSystem");
     }
   };
 
@@ -39,10 +45,13 @@ export function StatusBar(props: { sessionCount: number; providerCount: number; 
       <div class="statusbar-left">
         <span class={props.isIndexing ? "status-dot-indexing" : "status-dot"} />
         <span>
-          {props.isIndexing
-            ? t("status.indexing")
-            : <>{t("status.indexed")} — {props.sessionCount.toLocaleString()} {t("status.sessions")}</>
-          }
+          {props.isIndexing ? (
+            t("status.indexing")
+          ) : (
+            <>
+              {t("status.indexed")} — {props.sessionCount.toLocaleString()} {t("status.sessions")}
+            </>
+          )}
         </span>
         <span class="status-separator">·</span>
         <span>
@@ -54,17 +63,11 @@ export function StatusBar(props: { sessionCount: number; providerCount: number; 
           {themeIcon()}
         </button>
         <span class="locale-toggle">
-          <button
-            class={`locale-btn${locale() === "en" ? " active" : ""}`}
-            onClick={() => setLocale("en" as Locale)}
-          >
+          <button class={`locale-btn${locale() === "en" ? " active" : ""}`} onClick={() => setLocale("en" as Locale)}>
             EN
           </button>
           <span class="locale-divider">|</span>
-          <button
-            class={`locale-btn${locale() === "zh" ? " active" : ""}`}
-            onClick={() => setLocale("zh" as Locale)}
-          >
+          <button class={`locale-btn${locale() === "zh" ? " active" : ""}`} onClick={() => setLocale("zh" as Locale)}>
             中
           </button>
         </span>

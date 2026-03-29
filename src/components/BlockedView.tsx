@@ -23,7 +23,15 @@ export function BlockedView(props: { onRefreshTree?: () => void }) {
               const short = () => folder.split("/").slice(-2).join("/");
               return (
                 <div class="blocked-item" title={folder}>
-                  <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24" class="blocked-item-icon">
+                  <svg
+                    width="14"
+                    height="14"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="1.5"
+                    viewBox="0 0 24 24"
+                    class="blocked-item-icon"
+                  >
                     <path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z" />
                   </svg>
                   <span class="blocked-item-label">{short()}</span>
@@ -35,7 +43,14 @@ export function BlockedView(props: { onRefreshTree?: () => void }) {
                       props.onRefreshTree?.();
                     }}
                   >
-                    <svg width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24">
+                    <svg
+                      width="12"
+                      height="12"
+                      fill="none"
+                      stroke="currentColor"
+                      stroke-width="1.5"
+                      viewBox="0 0 24 24"
+                    >
                       <line x1="18" y1="6" x2="6" y2="18" />
                       <line x1="6" y1="6" x2="18" y2="18" />
                     </svg>

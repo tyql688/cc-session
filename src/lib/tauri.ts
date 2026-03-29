@@ -1,5 +1,14 @@
 import { invoke } from "@tauri-apps/api/core";
-import type { SessionDetail, SearchResult, SearchFilters, TreeNode, IndexStats, ProviderInfo, TrashMeta, SessionMeta } from "./types";
+import type {
+  SessionDetail,
+  SearchResult,
+  SearchFilters,
+  TreeNode,
+  IndexStats,
+  ProviderInfo,
+  TrashMeta,
+  SessionMeta,
+} from "./types";
 
 export async function reindex(): Promise<number> {
   return invoke<number>("reindex");
@@ -25,29 +34,19 @@ export async function getSessionDetail(
   });
 }
 
-export async function searchSessions(
-  filters: SearchFilters,
-): Promise<SearchResult[]> {
+export async function searchSessions(filters: SearchFilters): Promise<SearchResult[]> {
   return invoke<SearchResult[]>("search_sessions", { filters });
 }
 
-export async function renameSession(
-  sessionId: string,
-  newTitle: string,
-): Promise<void> {
+export async function renameSession(sessionId: string, newTitle: string): Promise<void> {
   return invoke<void>("rename_session", { sessionId, newTitle });
 }
 
-export async function deleteSession(
-  sessionId: string,
-  sourcePath: string,
-): Promise<void> {
+export async function deleteSession(sessionId: string, sourcePath: string): Promise<void> {
   return invoke<void>("delete_session", { sessionId, sourcePath });
 }
 
-export async function deleteSessionsBatch(
-  items: [string, string][],
-): Promise<number> {
+export async function deleteSessionsBatch(items: [string, string][]): Promise<number> {
   return invoke<number>("delete_sessions_batch", { items });
 }
 
@@ -91,26 +90,15 @@ export async function getProviderPaths(): Promise<ProviderInfo[]> {
   return invoke<ProviderInfo[]>("get_provider_paths");
 }
 
-export async function getResumeCommand(
-  sessionId: string,
-  provider: string,
-): Promise<string> {
+export async function getResumeCommand(sessionId: string, provider: string): Promise<string> {
   return invoke<string>("get_resume_command", { sessionId, provider });
 }
 
-export async function openInTerminal(
-  command: string,
-  cwd: string | null,
-  terminalApp: string,
-): Promise<void> {
+export async function openInTerminal(command: string, cwd: string | null, terminalApp: string): Promise<void> {
   return invoke<void>("open_in_terminal", { command, cwd, terminalApp });
 }
 
-export async function resumeSession(
-  sessionId: string,
-  provider: string,
-  terminalApp: string,
-): Promise<void> {
+export async function resumeSession(sessionId: string, provider: string, terminalApp: string): Promise<void> {
   return invoke<void>("resume_session", { sessionId, provider, terminalApp });
 }
 
@@ -138,7 +126,6 @@ export async function emptyTrash(): Promise<void> {
 export async function permanentDeleteTrash(trashId: string): Promise<void> {
   return invoke<void>("permanent_delete_trash", { trashId });
 }
-
 
 export async function listRecentSessions(limit: number): Promise<SessionMeta[]> {
   return invoke<SessionMeta[]>("list_recent_sessions", { limit });

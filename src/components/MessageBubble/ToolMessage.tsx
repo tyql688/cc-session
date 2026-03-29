@@ -12,13 +12,20 @@ function toolSummary(name: string, inputJson: string): string {
   try {
     const obj = JSON.parse(inputJson);
     switch (name) {
-      case "Read": return shortPath(obj.file_path);
-      case "Edit": return shortPath(obj.file_path);
-      case "Write": return shortPath(obj.file_path);
-      case "Bash": return obj.description || obj.command?.slice(0, 60) || "";
-      case "Glob": return obj.pattern || "";
-      case "Grep": return `/${obj.pattern}/` + (obj.path ? ` ${shortPath(obj.path)}` : "");
-      case "Agent": return obj.description || "";
+      case "Read":
+        return shortPath(obj.file_path);
+      case "Edit":
+        return shortPath(obj.file_path);
+      case "Write":
+        return shortPath(obj.file_path);
+      case "Bash":
+        return obj.description || obj.command?.slice(0, 60) || "";
+      case "Glob":
+        return obj.pattern || "";
+      case "Grep":
+        return `/${obj.pattern}/` + (obj.path ? ` ${shortPath(obj.path)}` : "");
+      case "Agent":
+        return obj.description || "";
       default: {
         const first = Object.values(obj).find((v) => typeof v === "string" && (v as string).length > 0);
         return first ? String(first).slice(0, 60) : "";
@@ -30,7 +37,10 @@ function toolSummary(name: string, inputJson: string): string {
 }
 
 /** Format tool input for expanded view — structured, not raw JSON. */
-function formatToolInput(name: string, inputJson: string): { lines: { label: string; value: string }[]; diff?: { old: string; new: string } } {
+function formatToolInput(
+  name: string,
+  inputJson: string,
+): { lines: { label: string; value: string }[]; diff?: { old: string; new: string } } {
   try {
     const obj = JSON.parse(inputJson);
     switch (name) {
@@ -60,10 +70,12 @@ function formatToolInput(name: string, inputJson: string): { lines: { label: str
         const lines: { label: string; value: string }[] = [];
         if (obj.explanation) lines.push({ label: "explanation", value: obj.explanation });
         if (Array.isArray(obj.plan)) {
-          const planText = obj.plan.map((s: { step: string; status: string }) => {
-            const icon = s.status === "completed" ? "✓" : s.status === "in_progress" ? "▸" : "○";
-            return `${icon} ${s.step}`;
-          }).join("\n");
+          const planText = obj.plan
+            .map((s: { step: string; status: string }) => {
+              const icon = s.status === "completed" ? "✓" : s.status === "in_progress" ? "▸" : "○";
+              return `${icon} ${s.step}`;
+            })
+            .join("\n");
           lines.push({ label: "plan", value: planText });
         }
         return { lines };
@@ -77,26 +89,42 @@ function formatToolInput(name: string, inputJson: string): { lines: { label: str
           ],
         };
       default:
-        return { lines: Object.entries(obj).filter(([, v]) => typeof v === "string" || typeof v === "number").map(([k, v]) => ({ label: k, value: String(v) })).slice(0, 5) };
+        return {
+          lines: Object.entries(obj)
+            .filter(([, v]) => typeof v === "string" || typeof v === "number")
+            .map(([k, v]) => ({ label: k, value: String(v) }))
+            .slice(0, 5),
+        };
     }
   } catch {
     // apply_patch: raw patch text, extract file path from header
     if (name === "Apply_patch" && inputJson.includes("*** Begin Patch")) {
       const fileMatch = inputJson.match(/\*\*\* (?:Add|Update|Delete) File:\s*(.+)/);
       const filePath = fileMatch ? fileMatch[1].trim() : "";
-      return { lines: [
-        ...(filePath ? [{ label: "file", value: filePath }] : []),
-        { label: "patch", value: inputJson },
-      ] };
+      return {
+        lines: [...(filePath ? [{ label: "file", value: filePath }] : []), { label: "patch", value: inputJson }],
+      };
     }
     return { lines: [{ label: "raw", value: inputJson }] };
   }
 }
 
 const TOOL_ICONS: Record<string, string> = {
-  Read: "📄", Edit: "✏️", Apply_patch: "✏️", Plan: "📋", Write: "📝", Bash: "⬛", Glob: "🔍",
-  Grep: "🔎", Agent: "🤖", WebSearch: "🌐", WebFetch: "🌐",
-  TaskCreate: "📋", TaskUpdate: "📋", Skill: "⚡", mcp: "🔌",
+  Read: "📄",
+  Edit: "✏️",
+  Apply_patch: "✏️",
+  Plan: "📋",
+  Write: "📝",
+  Bash: "⬛",
+  Glob: "🔍",
+  Grep: "🔎",
+  Agent: "🤖",
+  WebSearch: "🌐",
+  WebFetch: "🌐",
+  TaskCreate: "📋",
+  TaskUpdate: "📋",
+  Skill: "⚡",
+  mcp: "🔌",
 };
 
 /** Parse MCP tool name: mcp__server__tool → { server, tool, display } */
@@ -139,12 +167,8 @@ export function ToolMessage(props: { message: Message }) {
   const mcp = () => parseMcpToolName(name());
   const icon = () => toolIcon(name());
   const displayName = () => toolDisplayName(name());
-  const summary = createMemo(() =>
-    hasInput() ? toolSummary(name(), props.message.tool_input!) : ""
-  );
-  const formatted = createMemo(() =>
-    hasInput() ? formatToolInput(name(), props.message.tool_input!) : null
-  );
+  const summary = createMemo(() => (hasInput() ? toolSummary(name(), props.message.tool_input!) : ""));
+  const formatted = createMemo(() => (hasInput() ? formatToolInput(name(), props.message.tool_input!) : null));
 
   return (
     <div class={`msg-tool${expanded() ? " expanded" : ""}`}>
@@ -158,9 +182,7 @@ export function ToolMessage(props: { message: Message }) {
           <span class="msg-tool-summary">{summary()}</span>
         </Show>
         <Show when={hasInput() || hasOutput()}>
-          <span class="tool-expand-indicator">
-            {expanded() ? "▾" : "▸"}
-          </span>
+          <span class="tool-expand-indicator">{expanded() ? "▾" : "▸"}</span>
         </Show>
       </div>
       <Show when={expanded()}>

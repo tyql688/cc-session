@@ -3,9 +3,12 @@ import { toasts, type Toast } from "../stores/toast";
 
 function toastIcon(type: Toast["type"]): string {
   switch (type) {
-    case "success": return "✓";
-    case "error": return "✕";
-    case "info": return "ℹ";
+    case "success":
+      return "✓";
+    case "error":
+      return "✕";
+    case "info":
+      return "ℹ";
   }
 }
 

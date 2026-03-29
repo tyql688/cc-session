@@ -5,7 +5,7 @@ import { MessageBubble, formatMcpLabel } from "./MessageBubble";
 export function MergedToolRow(props: { tools: string[]; messages: Message[]; highlightTerm?: string }) {
   const [expanded, setExpanded] = createSignal(false);
 
-  const label = () => props.tools.length > 0 ? props.tools.map(formatMcpLabel).join(", ") : "tools";
+  const label = () => (props.tools.length > 0 ? props.tools.map(formatMcpLabel).join(", ") : "tools");
 
   return (
     <div class="merged-tools">

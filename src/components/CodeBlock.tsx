@@ -1,4 +1,4 @@
-import { createSignal, onMount, onCleanup, Show } from "solid-js";
+import { createSignal, onMount, onCleanup } from "solid-js";
 import { useI18n } from "../i18n/index";
 import hljs from "highlight.js/lib/core";
 
@@ -78,7 +78,7 @@ export function CodeBlock(props: { code: string; language?: string }) {
   const { t } = useI18n();
   const [copied, setCopied] = createSignal(false);
   let copyTimer: ReturnType<typeof setTimeout> | undefined;
-  let codeRef: HTMLElement | undefined;
+  let codeRef: HTMLElement | undefined; // eslint-disable-line no-unassigned-vars -- assigned via JSX ref
 
   onCleanup(() => clearTimeout(copyTimer));
 
@@ -114,27 +114,39 @@ export function CodeBlock(props: { code: string; language?: string }) {
   return (
     <div class="code-block">
       <div class="code-block-header">
-        {props.language && (
-          <span class="code-block-lang">{props.language}</span>
-        )}
-        <button
-          class="code-block-copy"
-          onClick={handleCopy}
-          title={t("common.copyCode")}
-        >
+        {props.language && <span class="code-block-lang">{props.language}</span>}
+        <button class="code-block-copy" onClick={handleCopy} title={t("common.copyCode")}>
           {copied() ? (
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+            <svg
+              width="14"
+              height="14"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+            >
               <polyline points="20 6 9 17 4 12" />
             </svg>
           ) : (
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+            <svg
+              width="14"
+              height="14"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+            >
               <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
               <path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1" />
             </svg>
           )}
         </button>
       </div>
-      <pre class="code-block-pre"><code ref={codeRef}>{props.code}</code></pre>
+      <pre class="code-block-pre">
+        <code ref={codeRef}>{props.code}</code>
+      </pre>
     </div>
   );
 }

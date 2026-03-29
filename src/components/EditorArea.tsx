@@ -22,19 +22,21 @@ export function EditorArea(props: {
   onOpenSession: (session: SessionMeta) => void;
 }) {
   const { t } = useI18n();
-  const activeSession = () =>
-    props.tabs.find((tab) => tab.id === props.activeTabId) ?? null;
+  const activeSession = () => props.tabs.find((tab) => tab.id === props.activeTabId) ?? null;
 
   // Refresh trigger: bumped on mount and whenever sessions change
   const [recentVersion, setRecentVersion] = createSignal(0);
   const [recentSessions] = createResource(recentVersion, () =>
-    listRecentSessions(20).catch(() => []).then(list => list.filter(s => !isPathBlocked(s.project_path)).slice(0, 10))
+    listRecentSessions(20)
+      .catch(() => [])
+      .then((list) => list.filter((s) => !isPathBlocked(s.project_path)).slice(0, 10)),
   );
 
   onMount(() => {
     let unlisten: UnlistenFn | undefined;
-    listen<void>("sessions-changed", () => setRecentVersion((v) => v + 1))
-      .then((fn) => { unlisten = fn; });
+    listen<void>("sessions-changed", () => setRecentVersion((v) => v + 1)).then((fn) => {
+      unlisten = fn;
+    });
     onCleanup(() => unlisten?.());
   });
 
@@ -56,14 +58,8 @@ export function EditorArea(props: {
                 <p class="editor-empty-label">{t("editor.recentSessions")}</p>
                 <For each={recentSessions()}>
                   {(session) => (
-                    <button
-                      class="editor-empty-session"
-                      onClick={() => props.onOpenSession(session)}
-                    >
-                      <span
-                        class="provider-dot provider-logo"
-                        style={{ color: `var(--${session.provider})` }}
-                      >
+                    <button class="editor-empty-session" onClick={() => props.onOpenSession(session)}>
+                      <span class="provider-dot provider-logo" style={{ color: `var(--${session.provider})` }}>
                         <ProviderIcon provider={session.provider} />
                       </span>
                       <div class="editor-empty-session-info">
@@ -73,7 +69,9 @@ export function EditorArea(props: {
                             <span class="session-sidechain-badge">⤷</span>
                           </Show>
                         </span>
-                        <span class="editor-empty-session-path">{session.project_path ? session.project_path.split("/").slice(-2).join("/") : ""}</span>
+                        <span class="editor-empty-session-path">
+                          {session.project_path ? session.project_path.split("/").slice(-2).join("/") : ""}
+                        </span>
                       </div>
                     </button>
                   )}
@@ -84,8 +82,12 @@ export function EditorArea(props: {
               <p class="editor-empty-text">{t("editor.emptyHint")}</p>
             </Show>
             <div class="editor-empty-shortcuts">
-              <span class="editor-shortcut-hint"><kbd>⇧{modKey}F</kbd> {t("keyboard.search")}</span>
-              <span class="editor-shortcut-hint"><kbd>{modKey}1-9</kbd> {t("keyboard.switchTab")}</span>
+              <span class="editor-shortcut-hint">
+                <kbd>⇧{modKey}F</kbd> {t("keyboard.search")}
+              </span>
+              <span class="editor-shortcut-hint">
+                <kbd>{modKey}1-9</kbd> {t("keyboard.switchTab")}
+              </span>
             </div>
           </div>
         }
@@ -102,11 +104,7 @@ export function EditorArea(props: {
         <div class="editor-content">
           <Show when={activeSession()}>
             {(session) => (
-              <SessionView
-                session={session()}
-                onRefreshTree={props.onRefreshTree}
-                onCloseTab={props.onTabClose}
-              />
+              <SessionView session={session()} onRefreshTree={props.onRefreshTree} onCloseTab={props.onTabClose} />
             )}
           </Show>
         </div>

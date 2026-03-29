@@ -41,7 +41,7 @@ export function SessionView(props: {
   });
 
   // Search matches
-  const searchMatches = createMemo(() => {
+  const _searchMatches = createMemo(() => {
     const term = sessionSearch().toLowerCase().trim();
     if (!term) return [] as number[];
     const indices: number[] = [];
@@ -90,11 +90,7 @@ export function SessionView(props: {
         setMessages([]);
         setVisibleCount(BATCH_SIZE);
         try {
-          const detail = await getSessionDetail(
-            sessionId,
-            props.session.source_path,
-            props.session.provider,
-          );
+          const detail = await getSessionDetail(sessionId, props.session.source_path, props.session.provider);
           // Discard result if a newer load was triggered
           if (version !== loadVersion) return;
           setMeta(detail.meta);
@@ -118,7 +114,7 @@ export function SessionView(props: {
     });
   }
 
-  let messagesRef: HTMLDivElement | undefined;
+  let messagesRef: HTMLDivElement | undefined; // eslint-disable-line no-unassigned-vars -- assigned via JSX ref
   let loadOlderDebounce: ReturnType<typeof setTimeout> | undefined;
 
   function loadOlderEntries() {
@@ -135,15 +131,13 @@ export function SessionView(props: {
     // column-reverse: scrollTop=0 is bottom (newest). User scrolls up -> scrollTop
     // goes negative. We want to load more when user reaches the visual top.
     // Visual top = max negative scrollTop = -(scrollHeight - clientHeight).
-    const atVisualTop =
-      target.scrollHeight + target.scrollTop - target.clientHeight <= LOAD_MORE_THRESHOLD;
+    const atVisualTop = target.scrollHeight + target.scrollTop - target.clientHeight <= LOAD_MORE_THRESHOLD;
 
     if (atVisualTop) {
       loadOlderDebounce = setTimeout(() => {
         if (!messagesRef) return;
         const stillAtTop =
-          messagesRef.scrollHeight + messagesRef.scrollTop - messagesRef.clientHeight <=
-          LOAD_MORE_THRESHOLD;
+          messagesRef.scrollHeight + messagesRef.scrollTop - messagesRef.clientHeight <= LOAD_MORE_THRESHOLD;
         if (stillAtTop) {
           loadOlderEntries();
         }
@@ -212,11 +206,7 @@ export function SessionView(props: {
 
   async function reloadSession() {
     try {
-      const detail = await getSessionDetail(
-        props.session.id,
-        props.session.source_path,
-        props.session.provider,
-      );
+      const detail = await getSessionDetail(props.session.id, props.session.source_path, props.session.provider);
       const oldCount = messages().length;
       setMeta(detail.meta);
       setMessages(detail.messages);
@@ -233,43 +223,45 @@ export function SessionView(props: {
 
   let pollTimer: ReturnType<typeof setInterval> | undefined;
 
-  createEffect(on(watching, async (isWatching) => {
-    // Cleanup previous listener & polling
-    clearTimeout(watchDebounce);
-    clearInterval(pollTimer);
-    pollTimer = undefined;
-    unwatchFn?.();
-    unwatchFn = undefined;
+  createEffect(
+    on(watching, async (isWatching) => {
+      // Cleanup previous listener & polling
+      clearTimeout(watchDebounce);
+      clearInterval(pollTimer);
+      pollTimer = undefined;
+      unwatchFn?.();
+      unwatchFn = undefined;
 
-    if (isWatching) {
-      const activeSourcePath = meta().source_path || props.session.source_path;
-      const isDbSource = activeSourcePath?.endsWith(".db");
+      if (isWatching) {
+        const activeSourcePath = meta().source_path || props.session.source_path;
+        const isDbSource = activeSourcePath?.endsWith(".db");
 
-      if (isDbSource) {
-        // SQLite-based providers (Cursor, OpenCode): use polling
-        // FSEvents on macOS doesn't reliably detect SQLite WAL changes
-        pollTimer = setInterval(reloadSession, 2000);
-      } else {
-        // File-based providers (Claude, Codex, Gemini): use FS events
-        unwatchFn = await listen<string[]>("sessions-changed", (event) => {
-          const changedPaths = event.payload ?? [];
-          if (!activeSourcePath) return;
+        if (isDbSource) {
+          // SQLite-based providers (Cursor, OpenCode): use polling
+          // FSEvents on macOS doesn't reliably detect SQLite WAL changes
+          pollTimer = setInterval(reloadSession, 2000);
+        } else {
+          // File-based providers (Claude, Codex, Gemini): use FS events
+          unwatchFn = await listen<string[]>("sessions-changed", (event) => {
+            const changedPaths = event.payload ?? [];
+            if (!activeSourcePath) return;
 
-          const isGemini = meta().provider === "gemini";
-          let matched = changedPaths.includes(activeSourcePath);
-          if (!matched && isGemini) {
-            const projectDir = activeSourcePath.replace(/\/chats\/.*$/, "");
-            matched = changedPaths.some((p) => p.startsWith(projectDir));
-          }
-          if (!matched) return;
+            const isGemini = meta().provider === "gemini";
+            let matched = changedPaths.includes(activeSourcePath);
+            if (!matched && isGemini) {
+              const projectDir = activeSourcePath.replace(/\/chats\/.*$/, "");
+              matched = changedPaths.some((p) => p.startsWith(projectDir));
+            }
+            if (!matched) return;
 
-          clearTimeout(watchDebounce);
-          const delay = isGemini ? 800 : 300;
-          watchDebounce = setTimeout(reloadSession, delay);
-        });
+            clearTimeout(watchDebounce);
+            const delay = isGemini ? 800 : 300;
+            watchDebounce = setTimeout(reloadSession, delay);
+          });
+        }
       }
-    }
-  }));
+    }),
+  );
 
   onCleanup(() => {
     clearTimeout(watchDebounce);
@@ -309,7 +301,7 @@ export function SessionView(props: {
       setStarred(newState);
       bumpFavoriteVersion();
       toast(t(newState ? "toast.favoriteAdded" : "toast.favoriteRemoved"));
-    } catch (e) {
+    } catch (_e) {
       toastError(t("toast.favoriteFailed"));
     }
   };
@@ -328,17 +320,12 @@ export function SessionView(props: {
 
   const handleDelete = async () => {
     try {
-      await trashSession(
-        props.session.id,
-        props.session.source_path,
-        props.session.provider,
-        props.session.title,
-      );
+      await trashSession(props.session.id, props.session.source_path, props.session.provider, props.session.title);
       setShowDeleteConfirm(false);
       props.onCloseTab(props.session.id);
       props.onRefreshTree();
       toast(t("toast.trashed"));
-    } catch (e) {
+    } catch (_e) {
       setShowDeleteConfirm(false);
       toastError(t("toast.trashFailed"));
     }
@@ -348,7 +335,7 @@ export function SessionView(props: {
     try {
       await resumeSession(props.session.id, meta().provider, terminalApp());
       toast(t("toast.resumed"));
-    } catch (e) {
+    } catch (_e) {
       toastError(t("toast.resumeFailed"));
     }
   };
@@ -371,13 +358,19 @@ export function SessionView(props: {
 
       {/* Filter toolbar — only show roles that have messages */}
       <div class="filter-toolbar">
-        <For each={(["user", "assistant", "tool", "system"] as MessageRole[]).filter((r) => (roleCounts()[r] || 0) > 0)}>
+        <For
+          each={(["user", "assistant", "tool", "system"] as MessageRole[]).filter((r) => (roleCounts()[r] || 0) > 0)}
+        >
           {(role) => (
-            <button
-              class={`filter-btn${hiddenRoles().has(role) ? "" : " active"}`}
-              onClick={() => toggleRole(role)}
-            >
-              {role === "user" ? t("session.filterUser") : role === "assistant" ? t("session.filterAssistant") : role === "tool" ? t("session.filterTool") : t("session.filterSystem")} ({roleCounts()[role]})
+            <button class={`filter-btn${hiddenRoles().has(role) ? "" : " active"}`} onClick={() => toggleRole(role)}>
+              {role === "user"
+                ? t("session.filterUser")
+                : role === "assistant"
+                  ? t("session.filterAssistant")
+                  : role === "tool"
+                    ? t("session.filterTool")
+                    : t("session.filterSystem")}{" "}
+              ({roleCounts()[role]})
             </button>
           )}
         </For>
@@ -448,11 +441,7 @@ export function SessionView(props: {
         danger={true}
       />
 
-      <ExportDialog
-        open={showExportDialog()}
-        session={props.session}
-        onClose={() => setShowExportDialog(false)}
-      />
+      <ExportDialog open={showExportDialog()} session={props.session} onClose={() => setShowExportDialog(false)} />
     </div>
   );
 }

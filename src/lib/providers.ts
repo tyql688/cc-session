@@ -3,7 +3,7 @@ import type { Provider } from "./types";
 export interface ProviderConfig {
   key: Provider;
   label: string;
-  color: string;        // CSS variable name (without --)
+  color: string; // CSS variable name (without --)
   resumePrefix: string; // e.g. "claude --resume"
 }
 

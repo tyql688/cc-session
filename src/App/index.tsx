@@ -51,7 +51,7 @@ export default function App() {
           return { ...tab, title: newTitle };
         }
         return tab;
-      })
+      }),
     );
   }
 
@@ -141,7 +141,7 @@ export default function App() {
   });
 
   const filteredTree = createMemo(() =>
-    tree().filter((node) => !disabledProviders().includes(node.id as "claude" | "codex" | "gemini"))
+    tree().filter((node) => !disabledProviders().includes(node.id as "claude" | "codex" | "gemini")),
   );
   const showExplorer = createMemo(() => {
     const v = activeView();
@@ -168,7 +168,9 @@ export default function App() {
         }}
       >
         <div class="titlebar-center">
-          <span class="app-name"><span class="app-name-bracket">&lt;</span>cc-session<span class="app-name-bracket">/&gt;</span></span>
+          <span class="app-name">
+            <span class="app-name-bracket">&lt;</span>cc-session<span class="app-name-bracket">/&gt;</span>
+          </span>
         </div>
         <div class="titlebar-right">
           <SearchPanel onOpenSession={openSession} />

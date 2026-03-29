@@ -12,7 +12,7 @@ export function InputDialog(props: {
 }) {
   const { t } = useI18n();
   const [value, setValue] = createSignal(props.defaultValue);
-  let inputRef: HTMLInputElement | undefined;
+  let inputRef: HTMLInputElement | undefined; // eslint-disable-line no-unassigned-vars -- assigned via JSX ref
 
   createEffect(() => {
     if (props.open) {

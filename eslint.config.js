@@ -8,8 +8,23 @@ export default tseslint.config(
   js.configs.recommended,
   ...tseslint.configs.recommended,
   {
+    rules: {
+      "@typescript-eslint/no-unused-vars": [
+        "error",
+        { argsIgnorePattern: "^_", varsIgnorePattern: "^_", caughtErrorsIgnorePattern: "^_" },
+      ],
+    },
+  },
+  {
     files: ["src/**/*.{ts,tsx}"],
     ...solidPlugin.configs["flat/typescript"],
+    rules: {
+      ...solidPlugin.configs["flat/typescript"].rules,
+      // Most hits are false positives (event handler props on native elements, async effects)
+      "solid/reactivity": "off",
+      // Switch/case icon components and conditional rendering patterns are clearer with early returns
+      "solid/components-return-once": "off",
+    },
   },
   prettier,
 );

@@ -1,7 +1,5 @@
-import { JSX } from "solid-js";
+import { JSX, For } from "solid-js";
 import katex from "katex";
-import { CodeBlock } from "../CodeBlock";
-import { MermaidBlock } from "../MermaidBlock";
 
 export interface ContentSegment {
   type: "text" | "code" | "image";
@@ -65,11 +63,13 @@ function wrapHighlight(text: string, term: string): JSX.Element {
   const escaped = term.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
   const parts = text.split(new RegExp(`(${escaped})`, "gi"));
   const lowerTerm = term.toLowerCase();
-  return <>{parts.map(part =>
-    part.toLowerCase() === lowerTerm
-      ? <mark class="search-highlight">{part}</mark>
-      : <>{part}</>
-  )}</>;
+  return (
+    <>
+      <For each={parts}>
+        {(part) => (part.toLowerCase() === lowerTerm ? <mark class="search-highlight">{part}</mark> : <>{part}</>)}
+      </For>
+    </>
+  );
 }
 
 /** Check whether a URL uses a safe scheme before opening it. */
@@ -96,7 +96,8 @@ function renderInlineMarkdown(text: string, highlightTerm?: string): JSX.Element
   // 4. links: [text](url)
   // 5. inline math: $...$
   // Inline formatting: code, bold, italic (word-boundary for _ to avoid snake_case), links, math
-  const inlineRegex = /(\$\$(.+?)\$\$)|(`([^`]+)`)|(\*\*(.+?)\*\*|__(.+?)__)|(\*(.+?)\*|(?<!\w)_(.+?)_(?!\w))|(\[([^\]]+)\]\(([^)]+)\))|(\$(.+?)\$)/g;
+  const inlineRegex =
+    /(\$\$(.+?)\$\$)|(`([^`]+)`)|(\*\*(.+?)\*\*|__(.+?)__)|(\*(.+?)\*|(?<!\w)_(.+?)_(?!\w))|(\[([^\]]+)\]\(([^)]+)\))|(\$(.+?)\$)/g;
 
   let lastIdx = 0;
   let m: RegExpExecArray | null;
@@ -112,6 +113,7 @@ function renderInlineMarkdown(text: string, highlightTerm?: string): JSX.Element
       // display math $$...$$
       const html = renderKatex(m[2], true);
       if (html) {
+        // eslint-disable-next-line solid/no-innerhtml
         elements.push(<span class="katex-display-inline" innerHTML={html} />);
       } else {
         elements.push(<code>{m[0]}</code>);
@@ -133,23 +135,27 @@ function renderInlineMarkdown(text: string, highlightTerm?: string): JSX.Element
       const linkUrl = m[13];
       if (isSafeUrl(linkUrl)) {
         elements.push(
-          <a href={linkUrl} target="_blank" rel="noopener noreferrer" onClick={(e) => {
-            e.preventDefault();
-            window.open(linkUrl, "_blank");
-          }}>
+          <a
+            href={linkUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            onClick={(e) => {
+              e.preventDefault();
+              window.open(linkUrl, "_blank");
+            }}
+          >
             {highlightTerm ? wrapHighlight(linkText, highlightTerm) : linkText}
-          </a>
+          </a>,
         );
       } else {
         // Unsafe scheme (e.g. javascript:, data:) — render as plain text
-        elements.push(
-          <span>{highlightTerm ? wrapHighlight(linkText, highlightTerm) : linkText}</span>
-        );
+        elements.push(<span>{highlightTerm ? wrapHighlight(linkText, highlightTerm) : linkText}</span>);
       }
     } else if (m[14]) {
       // inline math $...$
       const html = renderKatex(m[15], false);
       if (html) {
+        // eslint-disable-next-line solid/no-innerhtml
         elements.push(<span class="katex-inline" innerHTML={html} />);
       } else {
         elements.push(<code>{m[0]}</code>);
@@ -194,9 +200,14 @@ export function renderMarkdownText(text: string, highlightTerm?: string): JSX.El
       const tex = mathLines.join("\n");
       const html = renderKatex(tex, true);
       if (html) {
+        // eslint-disable-next-line solid/no-innerhtml
         elements.push(<div class="katex-display-block" innerHTML={html} />);
       } else {
-        elements.push(<pre class="code-block-pre"><code>{`$$\n${tex}\n$$`}</code></pre>);
+        elements.push(
+          <pre class="code-block-pre">
+            <code>{`$$\n${tex}\n$$`}</code>
+          </pre>,
+        );
       }
       continue;
     }
@@ -242,8 +253,10 @@ export function renderMarkdownText(text: string, highlightTerm?: string): JSX.El
       }
       elements.push(
         <blockquote class="msg-blockquote">
-          {quoteLines.map((ql) => ql ? <p class="msg-text-line">{renderInlineMarkdown(ql, highlightTerm)}</p> : <br />)}
-        </blockquote>
+          <For each={quoteLines}>
+            {(ql) => (ql ? <p class="msg-text-line">{renderInlineMarkdown(ql, highlightTerm)}</p> : <br />)}
+          </For>
+        </blockquote>,
       );
       continue;
     }
@@ -255,7 +268,10 @@ export function renderMarkdownText(text: string, highlightTerm?: string): JSX.El
       while (i < lines.length) {
         const tl = lines[i].trim();
         if (tl.startsWith("|") && tl.endsWith("|")) {
-          const cells = tl.slice(1, -1).split("|").map((c) => c.trim());
+          const cells = tl
+            .slice(1, -1)
+            .split("|")
+            .map((c) => c.trim());
           // Skip separator row (| --- | --- |)
           if (cells.every((c) => /^[-:]+$/.test(c))) {
             hasHeader = true;
@@ -275,15 +291,21 @@ export function renderMarkdownText(text: string, highlightTerm?: string): JSX.El
           <table class="msg-table">
             {headerRow && (
               <thead>
-                <tr>{headerRow.map((c) => <th>{renderInlineMarkdown(c, highlightTerm)}</th>)}</tr>
+                <tr>
+                  <For each={headerRow}>{(c) => <th>{renderInlineMarkdown(c, highlightTerm)}</th>}</For>
+                </tr>
               </thead>
             )}
             <tbody>
-              {bodyRows.map((row) => (
-                <tr>{row.map((c) => <td>{renderInlineMarkdown(c, highlightTerm)}</td>)}</tr>
-              ))}
+              <For each={bodyRows}>
+                {(row) => (
+                  <tr>
+                    <For each={row}>{(c) => <td>{renderInlineMarkdown(c, highlightTerm)}</td>}</For>
+                  </tr>
+                )}
+              </For>
             </tbody>
-          </table>
+          </table>,
         );
       }
       continue;

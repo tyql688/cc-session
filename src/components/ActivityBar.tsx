@@ -25,7 +25,6 @@ function StarIcon() {
   );
 }
 
-
 function BlockedIcon() {
   return (
     <svg width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24">

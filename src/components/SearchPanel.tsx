@@ -7,21 +7,15 @@ import { isMac } from "../lib/platform";
 
 function sanitizeSnippet(html: string): string {
   // Escape all HTML first, then restore only <mark> and </mark> from FTS5 snippet
-  const escaped = html
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;");
-  return escaped
-    .replace(/&lt;mark&gt;/gi, "<mark>")
-    .replace(/&lt;\/mark&gt;/gi, "</mark>");
+  const escaped = html.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+  return escaped.replace(/&lt;mark&gt;/gi, "<mark>").replace(/&lt;\/mark&gt;/gi, "</mark>");
 }
 
 export function SearchPanel(props: { onOpenSession: (session: SessionMeta) => void }) {
   const { t } = useI18n();
   const [focused, setFocused] = createSignal(false);
   const [selectedIndex, setSelectedIndex] = createSignal(-1);
-  let inputRef: HTMLInputElement | undefined;
+  let inputRef: HTMLInputElement | undefined; // eslint-disable-line no-unassigned-vars -- assigned via JSX ref
 
   let blurTimer: ReturnType<typeof setTimeout> | undefined;
 
@@ -92,9 +86,23 @@ export function SearchPanel(props: { onOpenSession: (session: SessionMeta) => vo
   });
 
   return (
-    <div class="search-panel" data-focus-search ref={(el) => { (el as HTMLElement & { __focusInput?: () => void }).__focusInput = focusInput; }}>
+    <div
+      class="search-panel"
+      data-focus-search
+      ref={(el) => {
+        (el as HTMLElement & { __focusInput?: () => void }).__focusInput = focusInput;
+      }}
+    >
       <div class="search-input-wrapper">
-        <svg class="search-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <svg
+          class="search-icon"
+          width="14"
+          height="14"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2"
+        >
           <circle cx="11" cy="11" r="8" />
           <path d="M21 21l-4.35-4.35" />
         </svg>
@@ -112,7 +120,7 @@ export function SearchPanel(props: { onOpenSession: (session: SessionMeta) => vo
         />
         <kbd class="search-shortcut">{isMac ? "\u21E7\u2318" : "Ctrl+Shift+"}F</kbd>
       </div>
-      <Show when={focused() && (query().trim().length > 0)}>
+      <Show when={focused() && query().trim().length > 0}>
         <div class="search-dropdown">
           <Show when={isSearching()}>
             <div class="search-loading">
@@ -130,14 +138,12 @@ export function SearchPanel(props: { onOpenSession: (session: SessionMeta) => vo
                 onMouseDown={() => handleResultClick(result.session)}
                 onMouseEnter={() => setSelectedIndex(i())}
               >
-                <span
-                  class="provider-dot provider-logo"
-                  style={{ color: `var(--${result.session.provider})` }}
-                >
+                <span class="provider-dot provider-logo" style={{ color: `var(--${result.session.provider})` }}>
                   <ProviderIcon provider={result.session.provider} />
                 </span>
                 <div class="search-result-text">
                   <span class="search-result-title">{result.session.title}</span>
+                  {/* eslint-disable-next-line solid/no-innerhtml */}
                   <span class="search-result-snippet" innerHTML={sanitizeSnippet(result.snippet)} />
                 </div>
               </button>

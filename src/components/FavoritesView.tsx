@@ -48,7 +48,7 @@ export function FavoritesView(props: { onOpenSession: (s: SessionMeta) => void }
   createEffect(
     on(favoriteVersion, () => {
       if (initialized()) refresh();
-    })
+    }),
   );
 
   function toggleExpanded(nodeId: string) {
@@ -83,9 +83,7 @@ export function FavoritesView(props: { onOpenSession: (s: SessionMeta) => void }
       <div class="explorer-header">
         <span>{t("favorites.title")}</span>
         <Show when={favorites().length > 0}>
-          <span class="count-badge">
-            {favorites().length}
-          </span>
+          <span class="count-badge">{favorites().length}</span>
         </Show>
       </div>
       <Show when={loading()}>

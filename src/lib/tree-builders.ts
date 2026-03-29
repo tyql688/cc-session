@@ -73,7 +73,6 @@ export function buildTrashTree(items: TrashMeta[]): TreeNode[] {
     projectMap.get(project)!.push(item);
   }
 
-
   const tree: TreeNode[] = [];
   for (const [provider, projectMap] of providerMap) {
     const projectNodes: TreeNode[] = [];

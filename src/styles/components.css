@@ -353,7 +353,9 @@
   font-weight: 500;
   padding: 6px 14px;
   cursor: pointer;
-  transition: background 0.15s, opacity 0.15s;
+  transition:
+    background 0.15s,
+    opacity 0.15s;
   font-family: inherit;
 }
 
@@ -410,7 +412,7 @@
 .search-input-wrapper:focus-within {
   border-color: var(--accent);
   background: var(--bg-editor);
-  box-shadow: 0 0 0 3px rgba(0,122,255,0.1);
+  box-shadow: 0 0 0 3px rgba(0, 122, 255, 0.1);
   width: 300px;
 }
 
@@ -553,7 +555,9 @@
   border-radius: 8px;
   background: transparent;
   cursor: pointer;
-  transition: border-color 0.15s, background 0.15s;
+  transition:
+    border-color 0.15s,
+    background 0.15s;
   font-family: inherit;
 }
 
@@ -579,20 +583,68 @@
 }
 
 /* Utility classes extracted from inline styles */
-.spinner-sm { width: 14px; height: 14px; }
-.count-badge { margin-left: auto; font-size: 10px; color: var(--text-tertiary); }
-.count-badge-accent { margin-left: auto; font-size: 10px; color: var(--accent); }
-.flex-center-gap-sm { display: flex; align-items: center; gap: 4px; }
-.flex-center-gap-md { display: flex; align-items: center; gap: 12px; }
-.session-action-btn-icon { font-size: 14px; padding: 4px 8px; }
-.loading-center { padding: 40px 20px; text-align: center; color: var(--text-tertiary); font-size: 13px; }
-.text-danger { color: var(--danger); }
-.link-accent { color: var(--accent); text-decoration: none; }
-.tool-expand-indicator { margin-left: auto; font-size: 10px; color: var(--text-tertiary); flex-shrink: 0; }
-.icon-faded { opacity: 0.4; }
-.skeleton-wrapper { padding: 8px 0; }
-.skeleton-tree-text-sm { max-width: 100px; }
-.skeleton-tree-item-indent { padding-left: 32px; }
-.settings-row-spaced { padding-top: 16px; gap: 8px; }
+.spinner-sm {
+  width: 14px;
+  height: 14px;
+}
+.count-badge {
+  margin-left: auto;
+  font-size: 10px;
+  color: var(--text-tertiary);
+}
+.count-badge-accent {
+  margin-left: auto;
+  font-size: 10px;
+  color: var(--accent);
+}
+.flex-center-gap-sm {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.flex-center-gap-md {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.session-action-btn-icon {
+  font-size: 14px;
+  padding: 4px 8px;
+}
+.loading-center {
+  padding: 40px 20px;
+  text-align: center;
+  color: var(--text-tertiary);
+  font-size: 13px;
+}
+.text-danger {
+  color: var(--danger);
+}
+.link-accent {
+  color: var(--accent);
+  text-decoration: none;
+}
+.tool-expand-indicator {
+  margin-left: auto;
+  font-size: 10px;
+  color: var(--text-tertiary);
+  flex-shrink: 0;
+}
+.icon-faded {
+  opacity: 0.4;
+}
+.skeleton-wrapper {
+  padding: 8px 0;
+}
+.skeleton-tree-text-sm {
+  max-width: 100px;
+}
+.skeleton-tree-item-indent {
+  padding-left: 32px;
+}
+.settings-row-spaced {
+  padding-top: 16px;
+  gap: 8px;
+}
 
 /* Tree: no animation to prevent flickering on data updates */

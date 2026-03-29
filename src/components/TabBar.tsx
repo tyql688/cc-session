@@ -63,14 +63,18 @@ export function TabBar(props: {
           return (
             <div
               class={`tab${isActive() ? " active" : ""}`}
-              onClick={(e) => { if (e.button === 0) props.onTabSelect(tab.id); }}
-              onMouseDown={(e) => { if (e.button === 1) { e.preventDefault(); props.onTabClose(tab.id); } }}
+              onClick={(e) => {
+                if (e.button === 0) props.onTabSelect(tab.id);
+              }}
+              onMouseDown={(e) => {
+                if (e.button === 1) {
+                  e.preventDefault();
+                  props.onTabClose(tab.id);
+                }
+              }}
               onContextMenu={(e) => handleContextMenu(e, tab.id)}
             >
-              <span
-                class="tab-dot"
-                style={{ background: providerColor(tab.provider) }}
-              />
+              <span class="tab-dot" style={{ background: providerColor(tab.provider) }} />
               <span class="tab-title">{tab.title}</span>
               <button
                 class={`tab-close${isActive() ? " visible" : ""}`}
@@ -87,11 +91,7 @@ export function TabBar(props: {
         }}
       </For>
 
-      <ContextMenu
-        items={menuItems()}
-        position={menuState()?.pos ?? null}
-        onClose={() => setMenuState(null)}
-      />
+      <ContextMenu items={menuItems()} position={menuState()?.pos ?? null} onClose={() => setMenuState(null)} />
     </div>
   );
 }

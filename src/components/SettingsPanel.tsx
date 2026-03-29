@@ -6,7 +6,14 @@ import { getIndexStats, rebuildIndex, clearIndex, getProviderPaths } from "../li
 import { toast, toastError } from "../stores/toast";
 import { theme, setTheme } from "../stores/theme";
 import type { Theme } from "../stores/theme";
-import { terminalApp, setTerminalApp, disabledProviders, toggleProvider, timeGrouping, setTimeGrouping } from "../stores/settings";
+import {
+  terminalApp,
+  setTerminalApp,
+  disabledProviders,
+  toggleProvider,
+  timeGrouping,
+  setTimeGrouping,
+} from "../stores/settings";
 import type { TerminalApp } from "../stores/settings";
 import { check } from "@tauri-apps/plugin-updater";
 import { relaunch } from "@tauri-apps/plugin-process";
@@ -54,7 +61,9 @@ export function SettingsPanel() {
     try {
       const { getVersion } = await import("@tauri-apps/api/app");
       setVersion(await getVersion());
-    } catch { /* fallback */ }
+    } catch {
+      /* fallback */
+    }
   });
 
   const [indexStats, { refetch: refetchStats }] = createResource<IndexStats>(async () => {
@@ -105,7 +114,7 @@ export function SettingsPanel() {
       refetchStats();
       refetchProviderPaths();
       toast(t("toast.rebuildOk"));
-    } catch (e) {
+    } catch (_e) {
       toastError(t("toast.rebuildFailed"));
     } finally {
       setIsRebuilding(false);
@@ -171,19 +180,23 @@ export function SettingsPanel() {
                 value={terminalApp()}
                 onChange={(e) => handleTerminalChange(e.currentTarget.value)}
               >
-                {isMac ? (<>
-                  <option value="terminal">Terminal.app</option>
-                  <option value="iterm2">iTerm2</option>
-                  <option value="ghostty">Ghostty</option>
-                  <option value="kitty">Kitty</option>
-                  <option value="warp">Warp</option>
-                  <option value="wezterm">WezTerm</option>
-                  <option value="alacritty">Alacritty</option>
-                </>) : (<>
-                  <option value="windows-terminal">Windows Terminal</option>
-                  <option value="powershell">PowerShell</option>
-                  <option value="cmd">Command Prompt</option>
-                </>)}
+                {isMac ? (
+                  <>
+                    <option value="terminal">Terminal.app</option>
+                    <option value="iterm2">iTerm2</option>
+                    <option value="ghostty">Ghostty</option>
+                    <option value="kitty">Kitty</option>
+                    <option value="warp">Warp</option>
+                    <option value="wezterm">WezTerm</option>
+                    <option value="alacritty">Alacritty</option>
+                  </>
+                ) : (
+                  <>
+                    <option value="windows-terminal">Windows Terminal</option>
+                    <option value="powershell">PowerShell</option>
+                    <option value="cmd">Command Prompt</option>
+                  </>
+                )}
               </select>
             </div>
 
@@ -199,7 +212,6 @@ export function SettingsPanel() {
                 onChange={(e) => setTimeGrouping(e.currentTarget.checked)}
               />
             </div>
-
           </div>
         </Show>
 
@@ -227,7 +239,14 @@ export function SettingsPanel() {
                               }
                             }}
                           >
-                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <svg
+                              width="12"
+                              height="12"
+                              viewBox="0 0 24 24"
+                              fill="none"
+                              stroke="currentColor"
+                              stroke-width="2"
+                            >
                               <path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6" />
                               <polyline points="15 3 21 3 21 9" />
                               <line x1="10" y1="14" x2="21" y2="3" />
@@ -245,15 +264,11 @@ export function SettingsPanel() {
                           class={`settings-btn${disabledProviders().includes(info.key) ? " settings-btn-danger" : ""}`}
                           onClick={() => toggleProvider(info.key)}
                         >
-                          {disabledProviders().includes(info.key)
-                            ? t("settings.disabled")
-                            : t("settings.enabled")}
+                          {disabledProviders().includes(info.key) ? t("settings.disabled") : t("settings.enabled")}
                         </button>
                       </Show>
                       <Show when={!info.exists}>
-                        <span class="settings-stat text-danger">
-                          {t("settings.disabled")}
-                        </span>
+                        <span class="settings-stat text-danger">{t("settings.disabled")}</span>
                       </Show>
                     </div>
                   </div>
@@ -278,11 +293,7 @@ export function SettingsPanel() {
             </div>
 
             <div class="settings-row settings-row-spaced">
-              <button
-                class="settings-btn"
-                onClick={handleRebuildIndex}
-                disabled={isRebuilding()}
-              >
+              <button class="settings-btn" onClick={handleRebuildIndex} disabled={isRebuilding()}>
                 {isRebuilding() ? "..." : t("settings.rebuildIndex")}
               </button>
               <button
@@ -311,32 +322,77 @@ export function SettingsPanel() {
 
             <div class="settings-shortcuts-group">
               <div class="settings-shortcuts-label">{t("keyboard.navigation")}</div>
-              <div class="settings-shortcut-row"><span>{t("keyboard.search")}</span><kbd>{isMac ? "\u2318" : "Ctrl+"}K</kbd></div>
-              <div class="settings-shortcut-row"><span>{t("keyboard.switchTab")}</span><kbd>{isMac ? "\u2318" : "Ctrl+"}1-9</kbd></div>
-              <div class="settings-shortcut-row"><span>{t("keyboard.nextTab")}</span><kbd>{isMac ? "\u2318]" : "Ctrl+Tab"}</kbd></div>
-              <div class="settings-shortcut-row"><span>{t("keyboard.prevTab")}</span><kbd>{isMac ? "\u2318[" : "Shift+Ctrl+Tab"}</kbd></div>
+              <div class="settings-shortcut-row">
+                <span>{t("keyboard.search")}</span>
+                <kbd>{isMac ? "\u2318" : "Ctrl+"}K</kbd>
+              </div>
+              <div class="settings-shortcut-row">
+                <span>{t("keyboard.switchTab")}</span>
+                <kbd>{isMac ? "\u2318" : "Ctrl+"}1-9</kbd>
+              </div>
+              <div class="settings-shortcut-row">
+                <span>{t("keyboard.nextTab")}</span>
+                <kbd>{isMac ? "\u2318]" : "Ctrl+Tab"}</kbd>
+              </div>
+              <div class="settings-shortcut-row">
+                <span>{t("keyboard.prevTab")}</span>
+                <kbd>{isMac ? "\u2318[" : "Shift+Ctrl+Tab"}</kbd>
+              </div>
             </div>
 
             <div class="settings-shortcuts-group">
               <div class="settings-shortcuts-label">{t("keyboard.tabs")}</div>
-              <div class="settings-shortcut-row"><span>{t("keyboard.closeTab")}</span><kbd>{isMac ? "\u2318" : "Ctrl+"}W</kbd></div>
-              <div class="settings-shortcut-row"><span>{t("keyboard.closeAllTabs")}</span><kbd>{isMac ? "\u21E7\u2318" : "Shift+Ctrl+"}W</kbd></div>
+              <div class="settings-shortcut-row">
+                <span>{t("keyboard.closeTab")}</span>
+                <kbd>{isMac ? "\u2318" : "Ctrl+"}W</kbd>
+              </div>
+              <div class="settings-shortcut-row">
+                <span>{t("keyboard.closeAllTabs")}</span>
+                <kbd>{isMac ? "\u21E7\u2318" : "Shift+Ctrl+"}W</kbd>
+              </div>
             </div>
 
             <div class="settings-shortcuts-group">
               <div class="settings-shortcuts-label">{t("keyboard.session")}</div>
-              <div class="settings-shortcut-row"><span>{t("keyboard.resumeSession")}</span><kbd>{isMac ? "\u21E7\u2318" : "Shift+Ctrl+"}R</kbd></div>
-              <div class="settings-shortcut-row"><span>{t("keyboard.exportSession")}</span><kbd>{isMac ? "\u21E7\u2318" : "Shift+Ctrl+"}E</kbd></div>
-              <div class="settings-shortcut-row"><span>{t("keyboard.toggleFavorite")}</span><kbd>{isMac ? "\u2318" : "Ctrl+"}B</kbd></div>
-              <div class="settings-shortcut-row"><span>{t("keyboard.toggleWatch")}</span><kbd>{isMac ? "\u2318" : "Ctrl+"}L</kbd></div>
-              <div class="settings-shortcut-row"><span>{t("keyboard.deleteSession")}</span><kbd>{isMac ? "\u2318" : "Ctrl+"}{"\u232B"}</kbd></div>
+              <div class="settings-shortcut-row">
+                <span>{t("keyboard.resumeSession")}</span>
+                <kbd>{isMac ? "\u21E7\u2318" : "Shift+Ctrl+"}R</kbd>
+              </div>
+              <div class="settings-shortcut-row">
+                <span>{t("keyboard.exportSession")}</span>
+                <kbd>{isMac ? "\u21E7\u2318" : "Shift+Ctrl+"}E</kbd>
+              </div>
+              <div class="settings-shortcut-row">
+                <span>{t("keyboard.toggleFavorite")}</span>
+                <kbd>{isMac ? "\u2318" : "Ctrl+"}B</kbd>
+              </div>
+              <div class="settings-shortcut-row">
+                <span>{t("keyboard.toggleWatch")}</span>
+                <kbd>{isMac ? "\u2318" : "Ctrl+"}L</kbd>
+              </div>
+              <div class="settings-shortcut-row">
+                <span>{t("keyboard.deleteSession")}</span>
+                <kbd>
+                  {isMac ? "\u2318" : "Ctrl+"}
+                  {"\u232B"}
+                </kbd>
+              </div>
             </div>
 
             <div class="settings-shortcuts-group">
               <div class="settings-shortcuts-label">{t("keyboard.general")}</div>
-              <div class="settings-shortcut-row"><span>{t("keyboard.showShortcuts")}</span><kbd>{isMac ? "\u2318" : "Ctrl+"}/</kbd></div>
-              <div class="settings-shortcut-row"><span>{t("keyboard.showShortcuts")}</span><kbd>?</kbd></div>
-              <div class="settings-shortcut-row"><span>{t("keyboard.escape")}</span><kbd>Esc</kbd></div>
+              <div class="settings-shortcut-row">
+                <span>{t("keyboard.showShortcuts")}</span>
+                <kbd>{isMac ? "\u2318" : "Ctrl+"}/</kbd>
+              </div>
+              <div class="settings-shortcut-row">
+                <span>{t("keyboard.showShortcuts")}</span>
+                <kbd>?</kbd>
+              </div>
+              <div class="settings-shortcut-row">
+                <span>{t("keyboard.escape")}</span>
+                <kbd>Esc</kbd>
+              </div>
             </div>
           </div>
         </Show>
@@ -347,13 +403,9 @@ export function SettingsPanel() {
 
             <div class="settings-row">
               <div class="settings-label">{t("settings.version")}</div>
-              <div style="display:flex;align-items:center;gap:8px">
+              <div style={{ display: "flex", "align-items": "center", gap: "8px" }}>
                 <span class="settings-stat">{version()}</span>
-                <button
-                  class="settings-btn"
-                  disabled={updateChecking()}
-                  onClick={handleCheckUpdate}
-                >
+                <button class="settings-btn" disabled={updateChecking()} onClick={handleCheckUpdate}>
                   {updateChecking() ? "..." : updateStatus() || t("settings.checkUpdate")}
                 </button>
               </div>

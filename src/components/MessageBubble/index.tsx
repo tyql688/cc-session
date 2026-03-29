@@ -35,9 +35,14 @@ export function MessageBubble(props: { message: Message; provider?: Provider; hi
     const c = msg.content.trimStart();
     // Skip known system/template content markers
     const systemMarkers = [
-      "</observation>", "</command-message>", "<INSTRUCTIONS>",
-      "<environment_context>", "<permissions instructions>",
-      "</facts>", "</narrative>", "</concepts>",
+      "</observation>",
+      "</command-message>",
+      "<INSTRUCTIONS>",
+      "<environment_context>",
+      "<permissions instructions>",
+      "</facts>",
+      "</narrative>",
+      "</concepts>",
       "<system-reminder>",
     ];
     return systemMarkers.some((marker) => c.includes(marker));
@@ -47,74 +52,75 @@ export function MessageBubble(props: { message: Message; provider?: Provider; hi
 
   return (
     <>
-    <Show
-      when={props.message.role !== "tool"}
-      fallback={<ToolMessage message={props.message} />}
-    >
-      <Show
-        when={props.message.role !== "system"}
-        fallback={
-          props.message.content.startsWith("[thinking]\n")
-            ? <ThinkingBlock content={props.message.content.slice("[thinking]\n".length)} />
-            : <div class="msg-system">{props.message.content}</div>
-        }
-      >
-        <div class={`msg-row msg-row-${props.message.role}`}>
-          <div class={`msg-avatar msg-avatar-${props.message.role}${props.message.role === "assistant" ? ` ${props.provider ?? "claude"}` : ""}`}>
-            <Show
-              when={props.message.role === "user"}
-              fallback={<ProviderIcon provider={props.provider ?? "claude"} />}
+      <Show when={props.message.role !== "tool"} fallback={<ToolMessage message={props.message} />}>
+        <Show
+          when={props.message.role !== "system"}
+          fallback={
+            props.message.content.startsWith("[thinking]\n") ? (
+              <ThinkingBlock content={props.message.content.slice("[thinking]\n".length)} />
+            ) : (
+              <div class="msg-system">{props.message.content}</div>
+            )
+          }
+        >
+          <div class={`msg-row msg-row-${props.message.role}`}>
+            <div
+              class={`msg-avatar msg-avatar-${props.message.role}${props.message.role === "assistant" ? ` ${props.provider ?? "claude"}` : ""}`}
             >
-              <UserIcon />
-            </Show>
-          </div>
-          <div class={`msg-bubble msg-bubble-${props.message.role}`}>
-            <For each={segments()}>
-              {(seg) => {
-                if (seg.type === "code") {
-                  if (seg.language?.toLowerCase() === "mermaid") {
-                    return <MermaidBlock code={seg.content} />;
+              <Show
+                when={props.message.role === "user"}
+                fallback={<ProviderIcon provider={props.provider ?? "claude"} />}
+              >
+                <UserIcon />
+              </Show>
+            </div>
+            <div class={`msg-bubble msg-bubble-${props.message.role}`}>
+              <For each={segments()}>
+                {(seg) => {
+                  if (seg.type === "code") {
+                    if (seg.language?.toLowerCase() === "mermaid") {
+                      return <MermaidBlock code={seg.content} />;
+                    }
+                    return <CodeBlock code={seg.content} language={seg.language} />;
                   }
-                  return <CodeBlock code={seg.content} language={seg.language} />;
-                }
-                if (seg.type === "image") {
-                  if (isLocalPath(seg.content)) {
+                  if (seg.type === "image") {
+                    if (isLocalPath(seg.content)) {
+                      return <LocalImage path={seg.content} onPreview={(s) => setPreviewSrc(s)} />;
+                    }
                     return (
-                      <LocalImage path={seg.content} onPreview={(s) => setPreviewSrc(s)} />
+                      <div class="msg-image-wrap">
+                        <img
+                          src={seg.content}
+                          alt="Image"
+                          class="msg-image"
+                          loading="lazy"
+                          decoding="async"
+                          draggable={false}
+                          onClick={() => setPreviewSrc(seg.content)}
+                        />
+                      </div>
                     );
                   }
-                  return (
-                    <div class="msg-image-wrap">
-                      <img
-                        src={seg.content}
-                        alt="Image"
-                        class="msg-image"
-                        loading="lazy"
-                        decoding="async"
-                        draggable={false}
-                        onClick={() => setPreviewSrc(seg.content)}
-                      />
-                    </div>
-                  );
-                }
-                // createMemo makes this reactive: re-renders when highlightTerm signal changes.
-                // <For> callbacks only run once per item, so without memo the highlight would be static.
-                return createMemo(() => renderMarkdownText(seg.content, props.highlightTerm)) as unknown as JSX.Element;
-              }}
-            </For>
-            <CopyMessageButton content={props.message.content} />
+                  // createMemo makes this reactive: re-renders when highlightTerm signal changes.
+                  // <For> callbacks only run once per item, so without memo the highlight would be static.
+                  return createMemo(() =>
+                    renderMarkdownText(seg.content, props.highlightTerm),
+                  ) as unknown as JSX.Element;
+                }}
+              </For>
+              <CopyMessageButton content={props.message.content} />
+            </div>
           </div>
-        </div>
-        <Show when={props.message.role === "assistant" && props.message.token_usage}>
-          <div class="msg-token-row">
-            <TokenUsageDisplay usage={props.message.token_usage!} />
-          </div>
+          <Show when={props.message.role === "assistant" && props.message.token_usage}>
+            <div class="msg-token-row">
+              <TokenUsageDisplay usage={props.message.token_usage!} />
+            </div>
+          </Show>
         </Show>
       </Show>
-    </Show>
-    <Show when={previewSrc()}>
-      <ImagePreview src={previewSrc()!} onClose={() => setPreviewSrc(null)} />
-    </Show>
+      <Show when={previewSrc()}>
+        <ImagePreview src={previewSrc()!} onClose={() => setPreviewSrc(null)} />
+      </Show>
     </>
   );
 }

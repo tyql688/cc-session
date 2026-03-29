@@ -1,5 +1,6 @@
 /* Light theme (default) */
-:root, [data-theme="light"] {
+:root,
+[data-theme="light"] {
   --bg-window: rgba(246, 246, 248, 0.95);
   --bg-sidebar: rgba(242, 242, 245, 0.95);
   --bg-explorer: rgba(248, 248, 250, 0.95);
@@ -20,17 +21,17 @@
   --opencode: #06b6d4;
   --code-bg: #f6f8fa;
   --code-text: #1f2328;
-  --msg-user-bg: linear-gradient(135deg, rgba(0,122,255,0.08), rgba(88,86,214,0.06));
-  --msg-user-border: rgba(0,122,255,0.12);
-  --msg-assistant-bg: rgba(0,0,0,0.04);
-  --msg-assistant-border: rgba(0,0,0,0.04);
+  --msg-user-bg: linear-gradient(135deg, rgba(0, 122, 255, 0.08), rgba(88, 86, 214, 0.06));
+  --msg-user-border: rgba(0, 122, 255, 0.12);
+  --msg-assistant-bg: rgba(0, 0, 0, 0.04);
+  --msg-assistant-border: rgba(0, 0, 0, 0.04);
   --context-menu-bg: #ffffff;
-  --context-menu-shadow: 0 4px 16px rgba(0,0,0,0.12), 0 1px 4px rgba(0,0,0,0.08);
+  --context-menu-shadow: 0 4px 16px rgba(0, 0, 0, 0.12), 0 1px 4px rgba(0, 0, 0, 0.08);
   --modal-bg: #ffffff;
   --bg-primary: #ffffff;
   --sidebar-width: 260px;
-  --scrollbar-thumb: rgba(0,0,0,0.1);
-  --scrollbar-thumb-hover: rgba(0,0,0,0.2);
+  --scrollbar-thumb: rgba(0, 0, 0, 0.1);
+  --scrollbar-thumb-hover: rgba(0, 0, 0, 0.2);
   --status-dot: #34c759;
   --danger: #e53e3e;
   --danger-hover: #c53030;
@@ -64,16 +65,16 @@
   --opencode: #22d3ee;
   --code-bg: #161b22;
   --code-text: #cdd6f4;
-  --msg-user-bg: linear-gradient(135deg, rgba(10,132,255,0.12), rgba(88,86,214,0.08));
-  --msg-user-border: rgba(10,132,255,0.2);
-  --msg-assistant-bg: rgba(255,255,255,0.04);
-  --msg-assistant-border: rgba(255,255,255,0.06);
+  --msg-user-bg: linear-gradient(135deg, rgba(10, 132, 255, 0.12), rgba(88, 86, 214, 0.08));
+  --msg-user-border: rgba(10, 132, 255, 0.2);
+  --msg-assistant-bg: rgba(255, 255, 255, 0.04);
+  --msg-assistant-border: rgba(255, 255, 255, 0.06);
   --context-menu-bg: #2c2c2e;
-  --context-menu-shadow: 0 4px 16px rgba(0,0,0,0.4), 0 1px 4px rgba(0,0,0,0.3);
+  --context-menu-shadow: 0 4px 16px rgba(0, 0, 0, 0.4), 0 1px 4px rgba(0, 0, 0, 0.3);
   --modal-bg: #2c2c2e;
   --bg-primary: #1e1e1e;
-  --scrollbar-thumb: rgba(255,255,255,0.12);
-  --scrollbar-thumb-hover: rgba(255,255,255,0.2);
+  --scrollbar-thumb: rgba(255, 255, 255, 0.12);
+  --scrollbar-thumb-hover: rgba(255, 255, 255, 0.2);
   --status-dot: #30d158;
   --danger: #f56565;
   --danger-hover: #e53e3e;

@@ -21,8 +21,7 @@ export function useI18n() {
   const dict = () => i18n.flatten(dictionaries[locale()]);
   const translator = i18n.translator(dict);
   // Allow dynamic string keys without `as any` at call sites
-  const t = (key: TranslationKey | (string & {})): string =>
-    String(translator(key as TranslationKey) ?? key);
+  const t = (key: TranslationKey | (string & {})): string => String(translator(key as TranslationKey) ?? key);
   return { t, locale, setLocale };
 }
 

@@ -25,7 +25,9 @@ export function SessionToolbar(props: {
 
   // Total token usage across all messages
   const totalTokens = () => {
-    let input = 0, output = 0, cacheRead = 0;
+    let input = 0,
+      output = 0,
+      cacheRead = 0;
     for (const e of props.processedEntries()) {
       const msgs = e.type === "message" ? [e.msg] : e.type === "merged-tools" ? e.messages : [];
       for (const m of msgs) {
@@ -77,7 +79,11 @@ export function SessionToolbar(props: {
           <button class="session-action-btn" onClick={props.onCopy} title={t("session.copy")}>
             {t("session.copy")}
           </button>
-          <button class="session-action-btn session-action-btn-danger" onClick={props.onDelete} title={t("session.delete")}>
+          <button
+            class="session-action-btn session-action-btn-danger"
+            onClick={props.onDelete}
+            title={t("session.delete")}
+          >
             {t("session.delete")}
           </button>
         </div>
@@ -85,20 +91,31 @@ export function SessionToolbar(props: {
 
       {/* Info bar */}
       <div class="session-info">
-        <span>{t("session.created")}: {formatTimestamp(props.meta().created_at, locale())}</span>
+        <span>
+          {t("session.created")}: {formatTimestamp(props.meta().created_at, locale())}
+        </span>
         <span class="info-sep">&middot;</span>
-        <span>{props.meta().message_count || props.messages().length} {t("session.messages")}</span>
+        <span>
+          {props.meta().message_count || props.messages().length} {t("session.messages")}
+        </span>
         <span class="info-sep">&middot;</span>
         <span>{formatFileSize(props.meta().file_size_bytes)}</span>
         <Show when={totalTokens()}>
           <span class="info-sep">&middot;</span>
-          <span class="session-info-tokens" title={`Input: ${totalTokens()!.input.toLocaleString()}, Output: ${totalTokens()!.output.toLocaleString()}${totalTokens()!.cacheRead > 0 ? `, Cache hit: ${totalTokens()!.cacheRead.toLocaleString()}` : ""}`}>
-            {"\u2191"}{fmtK(totalTokens()!.input)} {"\u2193"}{fmtK(totalTokens()!.output)} tokens
+          <span
+            class="session-info-tokens"
+            title={`Input: ${totalTokens()!.input.toLocaleString()}, Output: ${totalTokens()!.output.toLocaleString()}${totalTokens()!.cacheRead > 0 ? `, Cache hit: ${totalTokens()!.cacheRead.toLocaleString()}` : ""}`}
+          >
+            {"\u2191"}
+            {fmtK(totalTokens()!.input)} {"\u2193"}
+            {fmtK(totalTokens()!.output)} tokens
           </span>
         </Show>
         <Show when={props.meta().is_sidechain}>
           <span class="info-sep">&middot;</span>
-          <span class="session-info-sidechain">{"\u2937"} {t("session.subagent")}</span>
+          <span class="session-info-sidechain">
+            {"\u2937"} {t("session.subagent")}
+          </span>
         </Show>
         <Show when={props.meta().project_path}>
           <span class="info-sep">&middot;</span>

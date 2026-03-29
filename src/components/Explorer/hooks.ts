@@ -3,21 +3,25 @@ import { isPathBlocked } from "../../stores/settings";
 
 /** Filter out projects whose path matches a blocked folder. */
 export function filterBlockedFolders(tree: TreeNode[]): TreeNode[] {
-  return tree.map((provider) => ({
-    ...provider,
-    children: provider.children.filter((project) => {
-      // project id format: "provider:/path/to/project"
-      const path = project.id.includes(":") ? project.id.slice(project.id.indexOf(":") + 1) : "";
-      return !path || !isPathBlocked(path);
-    }),
-  })).filter((provider) => provider.children.length > 0);
+  return tree
+    .map((provider) => ({
+      ...provider,
+      children: provider.children.filter((project) => {
+        // project id format: "provider:/path/to/project"
+        const path = project.id.includes(":") ? project.id.slice(project.id.indexOf(":") + 1) : "";
+        return !path || !isPathBlocked(path);
+      }),
+    }))
+    .filter((provider) => provider.children.length > 0);
 }
 
 export function applyTimeGrouping(tree: TreeNode[], t: (key: string) => string): TreeNode[] {
-  const now = Date.now();
-  const todayStart = new Date(); todayStart.setHours(0, 0, 0, 0);
-  const weekStart = new Date(todayStart); weekStart.setDate(weekStart.getDate() - weekStart.getDay());
-  const monthStart = new Date(todayStart); monthStart.setDate(1);
+  const todayStart = new Date();
+  todayStart.setHours(0, 0, 0, 0);
+  const weekStart = new Date(todayStart);
+  weekStart.setDate(weekStart.getDate() - weekStart.getDay());
+  const monthStart = new Date(todayStart);
+  monthStart.setDate(1);
 
   const todayMs = todayStart.getTime();
   const weekMs = weekStart.getTime();
@@ -58,10 +62,7 @@ export function applyTimeGrouping(tree: TreeNode[], t: (key: string) => string):
   }));
 }
 
-export function buildSessionMeta(
-  node: TreeNode,
-  parentProjectLabel: string
-): SessionMeta {
+export function buildSessionMeta(node: TreeNode, parentProjectLabel: string): SessionMeta {
   return {
     id: node.id,
     provider: (node.provider ?? "claude") as Provider,

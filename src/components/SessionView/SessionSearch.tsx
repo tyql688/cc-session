@@ -59,8 +59,13 @@ export function SessionSearch(props: {
           });
         }}
         onKeyDown={(e) => {
-          if (e.key === "Enter") { e.shiftKey ? navigateSearchMatch(-1) : navigateSearchMatch(1); }
-          if (e.key === "Escape") { props.setSearchBarOpen(false); props.setSessionSearch(""); }
+          if (e.key === "Enter") {
+            if (e.shiftKey) { navigateSearchMatch(-1); } else { navigateSearchMatch(1); }
+          }
+          if (e.key === "Escape") {
+            props.setSearchBarOpen(false);
+            props.setSessionSearch("");
+          }
         }}
       />
       <span class="session-search-count">
@@ -71,9 +76,22 @@ export function SessionSearch(props: {
           return "";
         })()}
       </span>
-      <button class="session-search-nav" onClick={() => navigateSearchMatch(-1)} aria-label="Previous match">&uarr;</button>
-      <button class="session-search-nav" onClick={() => navigateSearchMatch(1)} aria-label="Next match">&darr;</button>
-      <button class="session-search-nav" onClick={() => { props.setSearchBarOpen(false); props.setSessionSearch(""); }} aria-label="Close search">&times;</button>
+      <button class="session-search-nav" onClick={() => navigateSearchMatch(-1)} aria-label="Previous match">
+        &uarr;
+      </button>
+      <button class="session-search-nav" onClick={() => navigateSearchMatch(1)} aria-label="Next match">
+        &darr;
+      </button>
+      <button
+        class="session-search-nav"
+        onClick={() => {
+          props.setSearchBarOpen(false);
+          props.setSessionSearch("");
+        }}
+        aria-label="Close search"
+      >
+        &times;
+      </button>
     </div>
   );
 }

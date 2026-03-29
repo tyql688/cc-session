@@ -10,8 +10,6 @@ let debounceTimer: ReturnType<typeof setTimeout>;
 
 function parseSearchQuery(raw: string): SearchFilters {
   let remaining = raw;
-  let provider: string | undefined;
-  let project: string | undefined;
   let after: number | undefined;
   let before: number | undefined;
 
@@ -25,8 +23,8 @@ function parseSearchQuery(raw: string): SearchFilters {
     return undefined;
   };
 
-  provider = extract("provider");
-  project = extract("project");
+  const provider = extract("provider");
+  const project = extract("project");
 
   const afterStr = extract("after");
   if (afterStr) {

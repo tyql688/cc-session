@@ -15,10 +15,12 @@ export function LocalImage(props: { path: string; onPreview: (src: string) => vo
   const [src, setSrc] = createSignal<string | null>(null);
 
   createEffect(() => {
-    readImageBase64(props.path).then(setSrc).catch((e) => {
-      console.warn("failed to load image:", props.path, e);
-      setSrc(null);
-    });
+    readImageBase64(props.path)
+      .then(setSrc)
+      .catch((e) => {
+        console.warn("failed to load image:", props.path, e);
+        setSrc(null);
+      });
   });
 
   return (
@@ -44,7 +46,8 @@ export function ImagePreview(props: { src: string; onClose: () => void }) {
       <img src={props.src} class="image-preview-img" onClick={(e) => e.stopPropagation()} />
       <button class="image-preview-close" aria-label="Close preview" onClick={props.onClose}>
         <svg width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-          <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
+          <line x1="18" y1="6" x2="6" y2="18" />
+          <line x1="6" y1="6" x2="18" y2="18" />
         </svg>
       </button>
     </div>

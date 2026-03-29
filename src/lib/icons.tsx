@@ -40,11 +40,16 @@ export function ProviderIcon(props: { provider: Provider }) {
 export function ProviderDot(props: { provider: Provider }) {
   const color = () => {
     switch (props.provider) {
-      case "claude": return "var(--claude)";
-      case "codex": return "var(--codex)";
-      case "gemini": return "var(--gemini)";
-      case "cursor": return "var(--cursor)";
-      case "opencode": return "var(--opencode)";
+      case "claude":
+        return "var(--claude)";
+      case "codex":
+        return "var(--codex)";
+      case "gemini":
+        return "var(--gemini)";
+      case "cursor":
+        return "var(--cursor)";
+      case "opencode":
+        return "var(--opencode)";
     }
   };
   return (

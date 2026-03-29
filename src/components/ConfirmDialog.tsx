@@ -28,10 +28,7 @@ export function ConfirmDialog(props: {
             <button class="btn btn-secondary" onClick={props.onCancel}>
               {t("confirm.cancel")}
             </button>
-            <button
-              class={`btn ${props.danger ? "btn-danger" : "btn-primary"}`}
-              onClick={props.onConfirm}
-            >
+            <button class={`btn ${props.danger ? "btn-danger" : "btn-primary"}`} onClick={props.onConfirm}>
               {props.confirmLabel}
             </button>
           </div>
