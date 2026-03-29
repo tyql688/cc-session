@@ -4,6 +4,7 @@ mod tools;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
+use rayon::prelude::*;
 use rusqlite::Connection;
 use serde_json::Value;
 use walkdir::WalkDir;
@@ -88,7 +89,7 @@ impl SessionProvider for CursorProvider {
             .collect();
 
         let sessions: Vec<ParsedSession> = db_files
-            .iter()
+            .par_iter()
             .filter_map(|path| self.parse_session_db(path))
             .collect();
 

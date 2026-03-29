@@ -101,15 +101,18 @@ pub fn strip_think_tags(text: &str) -> String {
     if !text.contains("<think>") {
         return text.to_string();
     }
-    let mut result = text.to_string();
-    while let Some(start) = result.find("<think>") {
-        if let Some(end) = result.find("</think>") {
-            result = format!("{}{}", &result[..start], &result[end + "</think>".len()..]);
+    let mut result = String::with_capacity(text.len());
+    let mut remaining = text;
+    while let Some(start_idx) = remaining.find("<think>") {
+        result.push_str(&remaining[..start_idx]);
+        remaining = &remaining[start_idx + 7..]; // skip "<think>"
+        if let Some(end_idx) = remaining.find("</think>") {
+            remaining = &remaining[end_idx + 8..]; // skip "</think>"
         } else {
-            result = result[..start].to_string();
-            break;
+            break; // unclosed tag, stop
         }
     }
+    result.push_str(remaining);
     result.trim().to_string()
 }
 

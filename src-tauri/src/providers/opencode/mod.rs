@@ -66,6 +66,52 @@ impl SessionProvider for OpenCodeProvider {
             Err(_) => return Ok(Vec::new()),
         };
 
+        // Batch: message counts per session (avoids N+1)
+        let mut msg_count_map: std::collections::HashMap<String, u32> =
+            std::collections::HashMap::new();
+        {
+            let mut stmt = conn.prepare(
+                "SELECT session_id, COUNT(*) FROM message GROUP BY session_id",
+            )?;
+            let rows = stmt.query_map([], |row| {
+                Ok((row.get::<_, String>(0)?, row.get::<_, i64>(1)?))
+            })?;
+            for r in rows.flatten() {
+                msg_count_map.insert(r.0, r.1 as u32);
+            }
+        }
+
+        // Batch: content text per session from text parts (avoids N+1)
+        // We collect up to 50 text parts per session using a window function.
+        let mut content_map: std::collections::HashMap<String, String> =
+            std::collections::HashMap::new();
+        {
+            let mut stmt = conn.prepare(
+                "SELECT session_id, json_extract(data, '$.text') FROM part
+                 WHERE json_extract(data, '$.type') = 'text'
+                 ORDER BY session_id, time_created",
+            )?;
+            let rows = stmt.query_map([], |row| {
+                Ok((row.get::<_, String>(0)?, row.get::<_, Option<String>>(1)?))
+            })?;
+            let mut counts: std::collections::HashMap<String, usize> =
+                std::collections::HashMap::new();
+            for r in rows.flatten() {
+                let (sid, text) = r;
+                let count = counts.entry(sid.clone()).or_insert(0);
+                if *count >= 50 {
+                    continue;
+                }
+                *count += 1;
+                if let Some(t) = text {
+                    content_map
+                        .entry(sid)
+                        .or_default()
+                        .push_str(&format!("{}\n", t));
+                }
+            }
+        }
+
         let mut stmt = conn.prepare(
             "SELECT s.id, s.title, s.directory, s.time_created, s.time_updated,
                     s.parent_id, p.worktree, p.name
@@ -90,33 +136,8 @@ impl SessionProvider for OpenCodeProvider {
             .filter_map(|r| r.ok())
             .map(
                 |(id, title, directory, time_created, time_updated, parent_id, worktree, project_name)| {
-                    // Count messages
-                    let msg_count = conn
-                        .query_row(
-                            "SELECT COUNT(*) FROM message WHERE session_id = ?1",
-                            params![&id],
-                            |row| row.get::<_, i64>(0),
-                        )
-                        .unwrap_or(0) as u32;
-
-                    // Build content text from text parts for FTS
-                    let content_text = conn
-                        .prepare(
-                            "SELECT json_extract(data, '$.text') FROM part
-                             WHERE session_id = ?1 AND json_extract(data, '$.type') = 'text'
-                             ORDER BY time_created LIMIT 50",
-                        )
-                        .ok()
-                        .and_then(|mut s| {
-                            s.query_map(params![&id], |row| row.get::<_, Option<String>>(0))
-                                .ok()
-                                .map(|rows| {
-                                    rows.filter_map(|r| r.ok().flatten())
-                                        .collect::<Vec<_>>()
-                                        .join("\n")
-                                })
-                        })
-                        .unwrap_or_default();
+                    let msg_count = msg_count_map.get(&id).copied().unwrap_or(0);
+                    let content_text = content_map.get(&id).cloned().unwrap_or_default();
 
                     // Prefer session.directory (actual working dir);
                     // fall back to project.worktree only if directory is empty.

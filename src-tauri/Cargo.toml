@@ -27,12 +27,16 @@ memmap2 = "0.9"
 chrono = { version = "0.4", features = ["serde"] }
 dirs = "6"
 walkdir = "2"
-lru = "0.13"
 thiserror = "2"
 base64 = "0.22"
 zip = "2"
 tauri-plugin-updater = "2.10.0"
 tauri-plugin-process = "2.3.1"
+
+[profile.release]
+lto = true
+codegen-units = 1
+strip = true
 
 [build-dependencies]
 tauri-build = { version = "2", features = [] }

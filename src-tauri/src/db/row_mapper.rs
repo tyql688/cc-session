@@ -17,5 +17,11 @@ pub fn row_to_session_meta(row: &rusqlite::Row) -> rusqlite::Result<SessionMeta>
 }
 
 fn str_to_provider(s: &str) -> Provider {
-    Provider::from_str(s).unwrap_or(Provider::Claude)
+    match Provider::from_str(s) {
+        Some(p) => p,
+        None => {
+            eprintln!("warning: unknown provider '{}', defaulting to Claude", s);
+            Provider::Claude
+        }
+    }
 }
