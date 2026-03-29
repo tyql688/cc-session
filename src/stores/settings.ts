@@ -22,7 +22,18 @@ const [terminalApp, setTerminalAppSignal] = createSignal<TerminalApp>(storedTerm
 if (!storedTerminal) {
   detectTerminal()
     .then((detected) => {
-      const valid: TerminalApp[] = ["terminal", "iterm2", "ghostty", "kitty", "warp", "wezterm", "alacritty", "windows-terminal", "powershell", "cmd"];
+      const valid: TerminalApp[] = [
+        "terminal",
+        "iterm2",
+        "ghostty",
+        "kitty",
+        "warp",
+        "wezterm",
+        "alacritty",
+        "windows-terminal",
+        "powershell",
+        "cmd",
+      ];
       if (valid.includes(detected as TerminalApp)) {
         setTerminalAppSignal(detected as TerminalApp);
         localStorage.setItem("cc-session-terminal", detected);
