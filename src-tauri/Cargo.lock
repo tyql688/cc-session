@@ -321,6 +321,32 @@ dependencies = [
 ]
 
 [[package]]
+name = "cc-session"
+version = "0.1.2"
+dependencies = [
+ "base64 0.22.1",
+ "chrono",
+ "dirs",
+ "md5",
+ "memmap2",
+ "notify",
+ "rayon",
+ "rusqlite",
+ "serde",
+ "serde_json",
+ "tauri",
+ "tauri-build",
+ "tauri-plugin-dialog",
+ "tauri-plugin-process",
+ "tauri-plugin-shell",
+ "tauri-plugin-updater",
+ "tauri-plugin-window-state",
+ "thiserror 2.0.18",
+ "walkdir",
+ "zip 2.4.2",
+]
+
+[[package]]
 name = "cesu8"
 version = "1.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3674,32 +3700,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "170fb83ab34de17dc69aa7c67482b22218ddb85da56546f9bd6b929e32a05930"
 dependencies = [
  "stable_deref_trait",
-]
-
-[[package]]
-name = "cc-session"
-version = "0.1.2"
-dependencies = [
- "base64 0.22.1",
- "chrono",
- "dirs",
- "md5",
- "memmap2",
- "notify",
- "rayon",
- "rusqlite",
- "serde",
- "serde_json",
- "tauri",
- "tauri-build",
- "tauri-plugin-dialog",
- "tauri-plugin-process",
- "tauri-plugin-shell",
- "tauri-plugin-updater",
- "tauri-plugin-window-state",
- "thiserror 2.0.18",
- "walkdir",
- "zip 2.4.2",
 ]
 
 [[package]]
