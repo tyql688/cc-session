@@ -764,7 +764,7 @@
   right: 4px;
   opacity: 0;
   transition: opacity 0.15s;
-  background: var(--tab-hover);
+  background: var(--bg-tab-hover);
   border: 0.5px solid var(--border-subtle);
   border-radius: 4px;
   padding: 3px;
@@ -788,7 +788,7 @@
   color: var(--text-tertiary); cursor: pointer; transition: all 0.15s;
 }
 .filter-btn.active { background: var(--accent-light); color: var(--accent); border-color: var(--accent); }
-.filter-btn:hover { background: var(--tab-hover); }
+.filter-btn:hover { background: var(--bg-tab-hover); }
 
 /* In-session search bar */
 .session-search-bar {
@@ -807,7 +807,7 @@
   background: none; border: 0.5px solid var(--border); border-radius: 3px;
   padding: 2px 6px; cursor: pointer; color: var(--text-secondary); font-size: 12px;
 }
-.session-search-nav:hover { background: var(--tab-hover); }
+.session-search-nav:hover { background: var(--bg-tab-hover); }
 
 /* Search highlighting */
 mark.search-highlight {
@@ -830,7 +830,7 @@ mark.search-active {
 
 /* Mermaid diagram blocks */
 .mermaid-block { border-radius: 6px; overflow: hidden; }
-.mermaid-toolbar { display: flex; justify-content: flex-end; padding: 4px 8px; background: var(--tab-hover); }
+.mermaid-toolbar { display: flex; justify-content: flex-end; padding: 4px 8px; background: var(--bg-tab-hover); }
 .mermaid-toggle {
   font-size: 11px; color: var(--text-secondary); background: none; border: none;
   cursor: pointer; padding: 2px 6px; border-radius: 3px;

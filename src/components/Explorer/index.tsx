@@ -196,20 +196,27 @@ export function Explorer(props: {
   }
 
   function findSessionInTree(sessionId: string): { provider: string; projectPath: string } | null {
-    for (const providerNode of props.tree) {
-      for (const projectNode of providerNode.children) {
-        for (const sessionNode of projectNode.children) {
-          if (sessionNode.id === sessionId) {
-            const id = projectNode.id;
-            return {
-              provider: providerNode.id,
-              projectPath: id.includes(":") ? id.slice(id.indexOf(":") + 1) : "",
-            };
-          }
+    function search(nodes: TreeNode[], providerHint: string, projectHint: string): { provider: string; projectPath: string } | null {
+      for (const node of nodes) {
+        if (node.node_type === "session" && node.id === sessionId) {
+          return { provider: providerHint, projectPath: projectHint };
+        }
+        if (node.children && node.children.length > 0) {
+          const nextProvider = node.node_type === "provider" ? node.id : providerHint;
+          // Only capture projectPath from the first project level (direct child of provider),
+          // not from time group sub-nodes which also have node_type "project".
+          const nextProject = node.node_type === "project" && !providerHint
+            ? ""
+            : node.node_type === "project" && providerHint && !projectHint
+              ? (node.id.includes(":") ? node.id.slice(node.id.indexOf(":") + 1) : "")
+              : projectHint;
+          const result = search(node.children, nextProvider, nextProject);
+          if (result) return result;
         }
       }
+      return null;
     }
-    return null;
+    return search(props.tree, "", "");
   }
 
   async function trashSelected() {
