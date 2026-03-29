@@ -65,8 +65,28 @@ export function createSyncManager(callbacks: SyncCallbacks) {
     }
   }
 
+  /** Load cached tree immediately, then reindex in background. */
+  async function coldStart() {
+    // Show cached data instantly so the user doesn't stare at a spinner
+    try {
+      await refreshTree();
+    } catch {
+      // No cached index yet — will be populated by reindex below
+    }
+    callbacks.setIsLoading(false);
+
+    // Reindex in background (no spinner)
+    try {
+      await reindex();
+      await refreshTree();
+    } catch (e) {
+      console.warn("Background reindex failed:", e);
+    }
+  }
+
   return {
     syncFromDisk,
     refreshTree,
+    coldStart,
   };
 }

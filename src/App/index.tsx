@@ -114,7 +114,7 @@ export default function App() {
   });
 
   onMount(async () => {
-    void sync.syncFromDisk({ showSpinner: true });
+    void sync.coldStart();
 
     document.addEventListener("keydown", handleGlobalKeyDown);
 
