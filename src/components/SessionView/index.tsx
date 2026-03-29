@@ -1,97 +1,25 @@
 import { createSignal, createEffect, createMemo, For, Show, on, onMount, onCleanup } from "solid-js";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
-import type { SessionMeta, Message, MessageRole } from "../lib/types";
-import { getSessionDetail, trashSession, resumeSession, isFavorite, toggleFavorite } from "../lib/tauri";
-import { useI18n } from "../i18n/index";
-import { getProviderLabel } from "../lib/providers";
-import { MessageBubble } from "./MessageBubble";
-import { MergedToolRow } from "./MergedToolRow";
-import { ConfirmDialog } from "./ConfirmDialog";
-import { ExportDialog } from "./ExportDialog";
-import { terminalApp } from "../stores/settings";
-import { toast, toastError } from "../stores/toast";
-import { favoriteVersion, bumpFavoriteVersion } from "../stores/favorites";
-import { parseTimestamp, formatTimeOnly, formatTimestamp, fmtK, formatFileSize } from "../lib/formatters";
-
-type ProcessedEntry =
-  | { key: string; type: "message"; msg: Message }
-  | { key: string; type: "time-sep"; time: string }
-  | { key: string; type: "merged-tools"; tools: string[]; messages: Message[] };
-
-function processMessages(msgs: Message[]): ProcessedEntry[] {
-  const entries: ProcessedEntry[] = [];
-  let i = 0;
-
-  while (i < msgs.length) {
-    const msg = msgs[i];
-
-    // Try to merge consecutive tool messages
-    if (msg.role === "tool") {
-      const toolGroup: Message[] = [msg];
-      let j = i + 1;
-      while (j < msgs.length && msgs[j].role === "tool") {
-        toolGroup.push(msgs[j]);
-        j++;
-      }
-      if (toolGroup.length > 1) {
-        const toolNames = toolGroup
-          .map((m) => m.tool_name)
-          .filter((n): n is string => !!n && n.trim().length > 0);
-        entries.push({
-          key: `tools-${i}-${toolGroup[0].timestamp ?? "none"}`,
-          type: "merged-tools",
-          tools: toolNames,
-          messages: toolGroup,
-        });
-      } else {
-        entries.push({
-          key: `msg-${i}-${msg.role}-${msg.timestamp ?? "none"}`,
-          type: "message",
-          msg,
-        });
-      }
-      i = j;
-      continue;
-    }
-
-    // Check time gap with previous message
-    if (entries.length > 0) {
-      const prevEntry = entries[entries.length - 1];
-      let prevTs: number | null = null;
-      if (prevEntry.type === "message") {
-        prevTs = parseTimestamp(prevEntry.msg.timestamp);
-      } else if (prevEntry.type === "merged-tools") {
-        const lastTool = prevEntry.messages[prevEntry.messages.length - 1];
-        prevTs = parseTimestamp(lastTool.timestamp);
-      }
-      const curTs = parseTimestamp(msg.timestamp);
-      const TIME_GAP_THRESHOLD_MS = 5 * 60 * 1000; // 5 minutes
-      if (prevTs && curTs && curTs - prevTs > TIME_GAP_THRESHOLD_MS) {
-        entries.push({
-          key: `sep-${i}-${curTs}`,
-          type: "time-sep",
-          time: formatTimeOnly(curTs),
-        });
-      }
-    }
-
-    entries.push({
-      key: `msg-${i}-${msg.role}-${msg.timestamp ?? "none"}`,
-      type: "message",
-      msg,
-    });
-    i++;
-  }
-
-  return entries;
-}
+import type { SessionMeta, Message, MessageRole } from "../../lib/types";
+import { getSessionDetail, trashSession, resumeSession, isFavorite, toggleFavorite } from "../../lib/tauri";
+import { useI18n } from "../../i18n/index";
+import { MessageBubble } from "../MessageBubble";
+import { MergedToolRow } from "../MergedToolRow";
+import { ConfirmDialog } from "../ConfirmDialog";
+import { ExportDialog } from "../ExportDialog";
+import { terminalApp } from "../../stores/settings";
+import { toast, toastError } from "../../stores/toast";
+import { favoriteVersion, bumpFavoriteVersion } from "../../stores/favorites";
+import { processMessages } from "./hooks";
+import { SessionToolbar } from "./SessionToolbar";
+import { SessionSearch } from "./SessionSearch";
 
 export function SessionView(props: {
   session: SessionMeta;
   onRefreshTree: () => void;
   onCloseTab: (id: string) => void;
 }) {
-  const { t, locale } = useI18n();
+  const { t } = useI18n();
   const [messages, setMessages] = createSignal<Message[]>([]);
   const processedEntries = createMemo(() => processMessages(messages()));
   const BATCH_SIZE = 80;
@@ -125,22 +53,6 @@ export function SessionView(props: {
       }
     });
     return indices;
-  });
-
-  // Total token usage across all messages
-  const totalTokens = createMemo(() => {
-    let input = 0, output = 0, cacheRead = 0;
-    for (const e of processedEntries()) {
-      const msgs = e.type === "message" ? [e.msg] : e.type === "merged-tools" ? e.messages : [];
-      for (const m of msgs) {
-        if (m.token_usage) {
-          input += m.token_usage.input_tokens;
-          output += m.token_usage.output_tokens;
-          cacheRead += m.token_usage.cache_read_input_tokens;
-        }
-      }
-    }
-    return input + output > 0 ? { input, output, cacheRead } : null;
   });
 
   // Role counts for filter toolbar
@@ -197,10 +109,6 @@ export function SessionView(props: {
     ),
   );
 
-  const providerLabel = () => {
-    return getProviderLabel(meta().provider);
-  };
-
   function toggleRole(role: MessageRole) {
     setHiddenRoles((prev) => {
       const next = new Set(prev);
@@ -208,33 +116,6 @@ export function SessionView(props: {
       else next.add(role);
       return next;
     });
-  }
-
-  /** Get marks in visual order (top→bottom). Sort by position since column-reverse
-   *  flips message order but not text order within each message. */
-  function getMarksInVisualOrder(): Element[] {
-    if (!messagesRef) return [];
-    const marks = Array.from(messagesRef.querySelectorAll("mark.search-highlight"));
-    marks.sort((a, b) => {
-      const ra = a.getBoundingClientRect();
-      const rb = b.getBoundingClientRect();
-
-      return ra.top - rb.top || ra.left - rb.left;
-    });
-
-    return marks;
-  }
-
-  function navigateSearchMatch(delta: number) {
-    const marks = getMarksInVisualOrder();
-    if (marks.length === 0) return;
-    // Remove previous active highlight
-    messagesRef?.querySelector("mark.search-active")?.classList.remove("search-active");
-    const newIdx = (searchMatchIdx() + delta + marks.length) % marks.length;
-    setSearchMatchIdx(newIdx);
-    const target = marks[newIdx];
-    target.classList.add("search-active");
-    target.scrollIntoView({ behavior: "smooth", block: "center" });
   }
 
   let messagesRef: HTMLDivElement | undefined;
@@ -251,7 +132,7 @@ export function SessionView(props: {
     const target = e.currentTarget as HTMLDivElement;
     clearTimeout(loadOlderDebounce);
 
-    // column-reverse: scrollTop=0 is bottom (newest). User scrolls up → scrollTop
+    // column-reverse: scrollTop=0 is bottom (newest). User scrolls up -> scrollTop
     // goes negative. We want to load more when user reaches the visual top.
     // Visual top = max negative scrollTop = -(scrollHeight - clientHeight).
     const atVisualTop =
@@ -474,70 +355,19 @@ export function SessionView(props: {
 
   return (
     <div class="session-view">
-      {/* Header */}
-      <div class="session-header">
-        <div class="session-breadcrumb">
-          <div class="breadcrumb-nav">
-            <span class="breadcrumb-provider" style={{ color: `var(--${meta().provider})` }}>
-              {providerLabel()}
-            </span>
-            <span class="breadcrumb-sep">&rsaquo;</span>
-            <span class="breadcrumb-project">{meta().project_name || t("explorer.noProject")}</span>
-          </div>
-          <div class="breadcrumb-title">{meta().title}</div>
-        </div>
-        <div class="session-actions">
-          <button
-            class={`session-action-btn session-action-btn-icon${watching() ? " watching" : ""}`}
-            onClick={() => setWatching((v) => !v)}
-            title={watching() ? t("session.watchStop") : t("session.watchStart")}
-          >
-            {watching() ? "\u25C9" : "\u25CE"}
-          </button>
-          <button
-            class={`session-action-btn session-action-btn-icon${starred() ? " starred" : ""}`}
-            onClick={handleToggleFavorite}
-            title={starred() ? t("session.favoriteRemove") : t("session.favoriteAdd")}
-          >
-            {starred() ? "\u2605" : "\u2606"}
-          </button>
-          <button class="session-action-btn primary" onClick={handleResume} title={t("session.resume")}>
-            {t("session.resume")}
-          </button>
-          <button class="session-action-btn" onClick={() => setShowExportDialog(true)} title={t("session.export")}>
-            {t("session.export")}
-          </button>
-          <button class="session-action-btn" onClick={handleCopy} title={t("session.copy")}>
-            {t("session.copy")}
-          </button>
-          <button class="session-action-btn session-action-btn-danger" onClick={() => setShowDeleteConfirm(true)} title={t("session.delete")}>
-            {t("session.delete")}
-          </button>
-        </div>
-      </div>
-
-      {/* Info bar */}
-      <div class="session-info">
-        <span>{t("session.created")}: {formatTimestamp(meta().created_at, locale())}</span>
-        <span class="info-sep">&middot;</span>
-        <span>{meta().message_count || messages().length} {t("session.messages")}</span>
-        <span class="info-sep">&middot;</span>
-        <span>{formatFileSize(meta().file_size_bytes)}</span>
-        <Show when={totalTokens()}>
-          <span class="info-sep">&middot;</span>
-          <span class="session-info-tokens" title={`Input: ${totalTokens()!.input.toLocaleString()}, Output: ${totalTokens()!.output.toLocaleString()}${totalTokens()!.cacheRead > 0 ? `, Cache hit: ${totalTokens()!.cacheRead.toLocaleString()}` : ""}`}>
-            ↑{fmtK(totalTokens()!.input)} ↓{fmtK(totalTokens()!.output)} tokens
-          </span>
-        </Show>
-        <Show when={meta().is_sidechain}>
-          <span class="info-sep">&middot;</span>
-          <span class="session-info-sidechain">⤷ {t("session.subagent")}</span>
-        </Show>
-        <Show when={meta().project_path}>
-          <span class="info-sep">&middot;</span>
-          <span class="session-info-path">{meta().project_path}</span>
-        </Show>
-      </div>
+      <SessionToolbar
+        meta={meta}
+        messages={messages}
+        processedEntries={processedEntries}
+        watching={watching}
+        starred={starred}
+        onToggleWatch={() => setWatching((v) => !v)}
+        onToggleFavorite={handleToggleFavorite}
+        onResume={handleResume}
+        onExport={() => setShowExportDialog(true)}
+        onCopy={handleCopy}
+        onDelete={() => setShowDeleteConfirm(true)}
+      />
 
       {/* Filter toolbar — only show roles that have messages */}
       <div class="filter-toolbar">
@@ -555,42 +385,14 @@ export function SessionView(props: {
 
       {/* In-session search bar */}
       <Show when={searchBarOpen()}>
-        <div class="session-search-bar">
-          <input
-            class="session-search-input"
-            type="text"
-            placeholder={t("session.searchPlaceholder")}
-            value={sessionSearch()}
-            onInput={(e) => {
-              setSessionSearch(e.currentTarget.value);
-              setSearchMatchIdx(0);
-              // Auto-jump to first match after DOM re-renders
-              requestAnimationFrame(() => {
-                const marks = getMarksInVisualOrder();
-                if (marks.length > 0) {
-                  messagesRef?.querySelector("mark.search-active")?.classList.remove("search-active");
-                  marks[0].classList.add("search-active");
-                  marks[0].scrollIntoView({ behavior: "smooth", block: "center" });
-                }
-              });
-            }}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") { e.shiftKey ? navigateSearchMatch(-1) : navigateSearchMatch(1); }
-              if (e.key === "Escape") { setSearchBarOpen(false); setSessionSearch(""); }
-            }}
-          />
-          <span class="session-search-count">
-            {(() => {
-              const total = getMarksInVisualOrder().length;
-              if (total > 0) return `${searchMatchIdx() + 1}/${total}`;
-              if (sessionSearch().trim()) return t("session.searchNoMatch");
-              return "";
-            })()}
-          </span>
-          <button class="session-search-nav" onClick={() => navigateSearchMatch(-1)} aria-label="Previous match">&uarr;</button>
-          <button class="session-search-nav" onClick={() => navigateSearchMatch(1)} aria-label="Next match">&darr;</button>
-          <button class="session-search-nav" onClick={() => { setSearchBarOpen(false); setSessionSearch(""); }} aria-label="Close search">&times;</button>
-        </div>
+        <SessionSearch
+          sessionSearch={sessionSearch}
+          setSessionSearch={setSessionSearch}
+          searchMatchIdx={searchMatchIdx}
+          setSearchMatchIdx={setSearchMatchIdx}
+          setSearchBarOpen={setSearchBarOpen}
+          messagesRef={messagesRef}
+        />
       </Show>
 
       {/* Content */}
