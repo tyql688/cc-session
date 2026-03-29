@@ -216,11 +216,20 @@ export function SettingsPanel() {
                     <option value="wezterm">WezTerm</option>
                     <option value="alacritty">Alacritty</option>
                   </>
-                ) : (
+                ) : isWindows ? (
                   <>
                     <option value="windows-terminal">Windows Terminal</option>
                     <option value="powershell">PowerShell</option>
                     <option value="cmd">Command Prompt</option>
+                  </>
+                ) : (
+                  <>
+                    <option value="alacritty">Alacritty</option>
+                    <option value="kitty">Kitty</option>
+                    <option value="wezterm">WezTerm</option>
+                    <option value="gnome-terminal">GNOME Terminal</option>
+                    <option value="konsole">Konsole</option>
+                    <option value="xterm">xterm</option>
                   </>
                 )}
               </select>

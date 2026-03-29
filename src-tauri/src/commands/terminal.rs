@@ -113,14 +113,25 @@ pub fn detect_terminal() -> String {
         if std::env::var("KONSOLE_VERSION").is_ok() {
             return "konsole".to_string();
         }
-        // Fallback: check if common terminals are installed
-        if std::process::Command::new("which")
-            .arg("gnome-terminal")
-            .output()
-            .map(|o| o.status.success())
-            .unwrap_or(false)
-        {
-            return "gnome-terminal".to_string();
+        // Fallback: probe common terminals in order
+        let candidates = [
+            "gnome-terminal",
+            "konsole",
+            "alacritty",
+            "kitty",
+            "wezterm",
+            "xfce4-terminal",
+            "xterm",
+        ];
+        for term in &candidates {
+            if std::process::Command::new("which")
+                .arg(term)
+                .output()
+                .map(|o| o.status.success())
+                .unwrap_or(false)
+            {
+                return term.to_string();
+            }
         }
         "xterm".to_string()
     }
