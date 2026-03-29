@@ -221,6 +221,10 @@ fn provider_from_source_path(source_path: &str) -> Option<Provider> {
         return Some(Provider::Gemini);
     }
 
+    if normalized.contains("/.kimi/sessions/") {
+        return Some(Provider::Kimi);
+    }
+
     if normalized.contains("/.cursor/chats/") {
         return Some(Provider::Cursor);
     }
