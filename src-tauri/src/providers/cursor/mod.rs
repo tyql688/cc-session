@@ -20,8 +20,8 @@ pub struct CursorProvider {
 
 impl CursorProvider {
     pub fn new() -> Self {
-        let home_dir =
-            dirs::home_dir().expect("cannot resolve HOME directory — app cannot function without it");
+        let home_dir = dirs::home_dir()
+            .expect("cannot resolve HOME directory — app cannot function without it");
         Self { home_dir }
     }
 
@@ -34,8 +34,7 @@ impl CursorProvider {
         // SQLITE_OPEN_READ_ONLY cannot reliably read WAL in shared-cache mode.
         let conn = Connection::open_with_flags(
             db_path,
-            rusqlite::OpenFlags::SQLITE_OPEN_READ_WRITE
-                | rusqlite::OpenFlags::SQLITE_OPEN_NO_MUTEX,
+            rusqlite::OpenFlags::SQLITE_OPEN_READ_WRITE | rusqlite::OpenFlags::SQLITE_OPEN_NO_MUTEX,
         )
         .ok()?;
         // Ensure WAL reads see latest committed data
@@ -102,9 +101,8 @@ impl SessionProvider for CursorProvider {
         source_path: &str,
     ) -> Result<Vec<Message>, ProviderError> {
         let db_path = Path::new(source_path);
-        let conn = Self::open_db(db_path).ok_or_else(|| {
-            ProviderError::Parse("failed to open Cursor DB".to_string())
-        })?;
+        let conn = Self::open_db(db_path)
+            .ok_or_else(|| ProviderError::Parse("failed to open Cursor DB".to_string()))?;
 
         let rows = Self::read_blobs(&conn);
         let mut messages = Vec::new();
@@ -171,7 +169,10 @@ impl SessionProvider for CursorProvider {
                         if part.get("type").and_then(|t| t.as_str()) != Some("tool-call") {
                             continue;
                         }
-                        let raw_name = part.get("toolName").and_then(|n| n.as_str()).unwrap_or("tool");
+                        let raw_name = part
+                            .get("toolName")
+                            .and_then(|n| n.as_str())
+                            .unwrap_or("tool");
                         let display_name = map_cursor_tool_name(raw_name);
                         let args = part.get("args");
                         let tool_input = args.and_then(|a| remap_tool_args(display_name, a));
@@ -198,7 +199,11 @@ impl SessionProvider for CursorProvider {
                         if part.get("type").and_then(|t| t.as_str()) != Some("tool-result") {
                             continue;
                         }
-                        let result = part.get("result").and_then(|r| r.as_str()).unwrap_or("").to_string();
+                        let result = part
+                            .get("result")
+                            .and_then(|r| r.as_str())
+                            .unwrap_or("")
+                            .to_string();
                         let call_id = part.get("toolCallId").and_then(|id| id.as_str());
 
                         // Merge into matching tool-call by callId
@@ -211,7 +216,10 @@ impl SessionProvider for CursorProvider {
 
                         // Fallback: standalone tool result
                         if !result.is_empty() {
-                            let tool_name = part.get("toolName").and_then(|n| n.as_str()).unwrap_or("tool");
+                            let tool_name = part
+                                .get("toolName")
+                                .and_then(|n| n.as_str())
+                                .unwrap_or("tool");
                             messages.push(Message {
                                 role: MessageRole::Tool,
                                 content: result,

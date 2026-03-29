@@ -329,8 +329,10 @@ fn query_search_results(
     param_values: &[Box<dyn rusqlite::types::ToSql>],
 ) -> Result<Vec<SearchResult>, rusqlite::Error> {
     let mut stmt = conn.prepare(sql)?;
-    let params_refs: Vec<&dyn rusqlite::types::ToSql> =
-        param_values.iter().map(std::convert::AsRef::as_ref).collect();
+    let params_refs: Vec<&dyn rusqlite::types::ToSql> = param_values
+        .iter()
+        .map(std::convert::AsRef::as_ref)
+        .collect();
     let rows = stmt.query_map(params_refs.as_slice(), |row| {
         Ok(SearchResult {
             session: row_to_session_meta(row)?,

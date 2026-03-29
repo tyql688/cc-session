@@ -16,7 +16,11 @@ pub fn strip_at_image_refs(text: &str) -> String {
                     let path_part = &after_at[..space_idx];
                     if looks_like_image_path(path_part) {
                         let rest = after_at[space_idx..].trim();
-                        return if rest.is_empty() { None } else { Some(rest.to_string()) };
+                        return if rest.is_empty() {
+                            None
+                        } else {
+                            Some(rest.to_string())
+                        };
                     }
                 }
                 // Entire line is just @path

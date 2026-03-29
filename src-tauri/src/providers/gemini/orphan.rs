@@ -76,9 +76,7 @@ pub fn merge_orphan_sessions(sessions: &mut Vec<ParsedSession>, real_prefixes: &
 
     sessions.sort_by_key(|s| s.meta.created_at);
 
-    let is_real = |sid: &str| -> bool {
-        real_prefixes.iter().any(|p| sid.starts_with(p))
-    };
+    let is_real = |sid: &str| -> bool { real_prefixes.iter().any(|p| sid.starts_with(p)) };
 
     // Identify orphan vs real indices
     let orphan_indices: Vec<usize> = sessions

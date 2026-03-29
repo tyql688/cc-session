@@ -65,7 +65,13 @@ impl Provider {
 
     /// All known providers in display order.
     pub fn all() -> &'static [Provider] {
-        &[Provider::Claude, Provider::Codex, Provider::Gemini, Provider::Cursor, Provider::OpenCode]
+        &[
+            Provider::Claude,
+            Provider::Codex,
+            Provider::Gemini,
+            Provider::Cursor,
+            Provider::OpenCode,
+        ]
     }
 }
 

@@ -127,9 +127,7 @@ impl ClaudeProvider {
                                 content_parts.push(result_text.clone());
                                 let use_id =
                                     result_item.get("tool_use_id").and_then(|i| i.as_str());
-                                if let Some(idx) =
-                                    use_id.and_then(|id| tool_use_id_map.get(id))
-                                {
+                                if let Some(idx) = use_id.and_then(|id| tool_use_id_map.get(id)) {
                                     // Merge result into the existing tool_use message
                                     messages[*idx].content = result_text;
                                 } else {
@@ -138,8 +136,7 @@ impl ClaudeProvider {
                                         role: MessageRole::Tool,
                                         content: result_text,
                                         timestamp: timestamp.clone(),
-                                        tool_name: use_id
-                                            .map(std::string::ToString::to_string),
+                                        tool_name: use_id.map(std::string::ToString::to_string),
                                         tool_input: None,
                                         token_usage: None,
                                     });
@@ -158,9 +155,7 @@ impl ClaudeProvider {
                         .and_then(serde_json::Value::as_bool)
                         .unwrap_or(false);
 
-                    if let Some((pending_text, pending_timestamp)) =
-                        pending_user_message.take()
-                    {
+                    if let Some((pending_text, pending_timestamp)) = pending_user_message.take() {
                         if is_meta
                             && contains_image_placeholder_without_source(&pending_text)
                             && contains_image_source(&text)
@@ -169,10 +164,7 @@ impl ClaudeProvider {
                                 &mut messages,
                                 &mut content_parts,
                                 &mut first_user_message,
-                                merge_image_placeholders_with_sources(
-                                    &pending_text,
-                                    &text,
-                                ),
+                                merge_image_placeholders_with_sources(&pending_text, &text),
                                 pending_timestamp,
                             );
                             continue;
@@ -222,13 +214,10 @@ impl ClaudeProvider {
                     if let Some(Value::Array(arr)) = msg.get("content") {
                         let mut text_parts = Vec::new();
                         for item in arr {
-                            let item_type =
-                                item.get("type").and_then(|t| t.as_str()).unwrap_or("");
+                            let item_type = item.get("type").and_then(|t| t.as_str()).unwrap_or("");
                             match item_type {
                                 "thinking" => {
-                                    if let Some(t) =
-                                        item.get("thinking").and_then(|t| t.as_str())
-                                    {
+                                    if let Some(t) = item.get("thinking").and_then(|t| t.as_str()) {
                                         if !t.trim().is_empty() {
                                             // Emit thinking as a separate assistant message with marker
                                             messages.push(Message {
@@ -243,9 +232,7 @@ impl ClaudeProvider {
                                     }
                                 }
                                 "text" => {
-                                    if let Some(t) =
-                                        item.get("text").and_then(|t| t.as_str())
-                                    {
+                                    if let Some(t) = item.get("text").and_then(|t| t.as_str()) {
                                         if !t.trim().is_empty() {
                                             text_parts.push(t.to_string());
                                         }
@@ -267,13 +254,10 @@ impl ClaudeProvider {
                                         text_parts.clear();
                                     }
                                     // Emit tool_use as a Tool message
-                                    let name = item
-                                        .get("name")
-                                        .and_then(|n| n.as_str())
-                                        .unwrap_or("tool");
-                                    let input = item
-                                        .get("input")
-                                        .map(std::string::ToString::to_string);
+                                    let name =
+                                        item.get("name").and_then(|n| n.as_str()).unwrap_or("tool");
+                                    let input =
+                                        item.get("input").map(std::string::ToString::to_string);
                                     let msg_idx = messages.len();
                                     messages.push(Message {
                                         role: MessageRole::Tool,
@@ -284,11 +268,8 @@ impl ClaudeProvider {
                                         token_usage: None,
                                     });
                                     // Record tool_use_id for merging results later
-                                    if let Some(id) =
-                                        item.get("id").and_then(|i| i.as_str())
-                                    {
-                                        tool_use_id_map
-                                            .insert(id.to_string(), msg_idx);
+                                    if let Some(id) = item.get("id").and_then(|i| i.as_str()) {
+                                        tool_use_id_map.insert(id.to_string(), msg_idx);
                                     }
                                 }
                                 _ => {}
@@ -387,8 +368,7 @@ impl ClaudeProvider {
         let full_content = content_parts.join("\n");
         let content_text = truncate_to_bytes(&full_content, FTS_CONTENT_LIMIT);
 
-        let title =
-            session_title(first_user_message.as_deref().or(summary_text.as_deref()));
+        let title = session_title(first_user_message.as_deref().or(summary_text.as_deref()));
 
         let meta = crate::models::SessionMeta {
             id: session_id,
@@ -502,8 +482,7 @@ fn extract_message_content(message: &Value) -> String {
                         }
                     }
                     "tool_use" => {
-                        let name =
-                            item.get("name").and_then(|n| n.as_str()).unwrap_or("tool");
+                        let name = item.get("name").and_then(|n| n.as_str()).unwrap_or("tool");
                         let input = item
                             .get("input")
                             .map(std::string::ToString::to_string)
@@ -567,17 +546,13 @@ fn extract_tool_result_content(result: &Value) -> String {
                     Some("image") => {
                         // Inline base64 image as data URI for frontend rendering
                         let source = item.get("source");
-                        let data =
-                            source.and_then(|s| s.get("data")).and_then(|d| d.as_str());
+                        let data = source.and_then(|s| s.get("data")).and_then(|d| d.as_str());
                         let media = source
                             .and_then(|s| s.get("media_type"))
                             .and_then(|m| m.as_str())
                             .unwrap_or("image/png");
                         if let Some(b64) = data {
-                            parts.push(format!(
-                                "[Image: source: data:{};base64,{}]",
-                                media, b64
-                            ));
+                            parts.push(format!("[Image: source: data:{};base64,{}]", media, b64));
                         } else {
                             parts.push("[Image]".to_string());
                         }

@@ -78,10 +78,8 @@ impl CodexProvider {
                 }
                 "response_item" => {
                     // Skip developer role and reasoning type
-                    let role_str =
-                        payload.get("role").and_then(|v| v.as_str()).unwrap_or("");
-                    let item_type =
-                        payload.get("type").and_then(|v| v.as_str()).unwrap_or("");
+                    let role_str = payload.get("role").and_then(|v| v.as_str()).unwrap_or("");
+                    let item_type = payload.get("type").and_then(|v| v.as_str()).unwrap_or("");
 
                     if role_str == "developer" || item_type == "reasoning" {
                         continue;
@@ -128,8 +126,7 @@ impl CodexProvider {
                                 .get("name")
                                 .and_then(|v| v.as_str())
                                 .unwrap_or("unknown");
-                            let arguments_str =
-                                payload.get("arguments").and_then(|v| v.as_str());
+                            let arguments_str = payload.get("arguments").and_then(|v| v.as_str());
 
                             // Map Codex tool names to our display names
                             let display_name = map_codex_tool_name(raw_name);
@@ -140,17 +137,14 @@ impl CodexProvider {
                                     // Remap {"cmd": "..."} to {"command": "..."}
                                     arguments_str.and_then(|s| {
                                         let v: Value = serde_json::from_str(s).ok()?;
-                                        let cmd =
-                                            v.get("cmd").and_then(|c| c.as_str())?;
+                                        let cmd = v.get("cmd").and_then(|c| c.as_str())?;
                                         Some(json!({"command": cmd}).to_string())
                                     })
                                 }
                                 "view_image" => {
                                     // Emit as image message instead of tool
                                     if let Some(path) = arguments_str
-                                        .and_then(|s| {
-                                            serde_json::from_str::<Value>(s).ok()
-                                        })
+                                        .and_then(|s| serde_json::from_str::<Value>(s).ok())
                                         .and_then(|v| {
                                             v.get("path")
                                                 .and_then(|p| p.as_str())
@@ -159,9 +153,7 @@ impl CodexProvider {
                                     {
                                         messages.push(Message {
                                             role: MessageRole::Assistant,
-                                            content: format!(
-                                                "[Image: source: {path}]"
-                                            ),
+                                            content: format!("[Image: source: {path}]"),
                                             timestamp: entry.timestamp.clone(),
                                             tool_name: None,
                                             tool_input: None,
@@ -174,9 +166,7 @@ impl CodexProvider {
                                 "write_stdin" => {
                                     // Skip empty stdin writes (just polling)
                                     let is_empty = arguments_str
-                                        .and_then(|s| {
-                                            serde_json::from_str::<Value>(s).ok()
-                                        })
+                                        .and_then(|s| serde_json::from_str::<Value>(s).ok())
                                         .and_then(|v| {
                                             v.get("chars")
                                                 .and_then(|c| c.as_str())
@@ -192,9 +182,7 @@ impl CodexProvider {
                             };
 
                             let idx = messages.len();
-                            if let Some(cid) =
-                                payload.get("call_id").and_then(|v| v.as_str())
-                            {
+                            if let Some(cid) = payload.get("call_id").and_then(|v| v.as_str()) {
                                 call_id_map.insert(cid.to_string(), idx);
                             }
                             messages.push(Message {
@@ -209,9 +197,7 @@ impl CodexProvider {
                         "function_call_output" => {
                             let raw_output = match payload.get("output") {
                                 Some(Value::String(s)) => s.clone(),
-                                Some(other) => {
-                                    serde_json::to_string(other).unwrap_or_default()
-                                }
+                                Some(other) => serde_json::to_string(other).unwrap_or_default(),
                                 None => String::new(),
                             };
                             let output = extract_tool_output(&raw_output);
@@ -221,11 +207,8 @@ impl CodexProvider {
                             }
 
                             // Merge output into the matching function_call message
-                            let call_id =
-                                payload.get("call_id").and_then(|v| v.as_str());
-                            if let Some(idx) = call_id
-                                .and_then(|cid| call_id_map.get(cid))
-                                .copied()
+                            let call_id = payload.get("call_id").and_then(|v| v.as_str());
+                            if let Some(idx) = call_id.and_then(|cid| call_id_map.get(cid)).copied()
                             {
                                 if idx < messages.len() {
                                     messages[idx].content = output;
@@ -257,9 +240,7 @@ impl CodexProvider {
                             });
 
                             let idx = messages.len();
-                            if let Some(cid) =
-                                payload.get("call_id").and_then(|v| v.as_str())
-                            {
+                            if let Some(cid) = payload.get("call_id").and_then(|v| v.as_str()) {
                                 call_id_map.insert(cid.to_string(), idx);
                             }
                             messages.push(Message {
@@ -279,11 +260,8 @@ impl CodexProvider {
                                 .to_string();
                             let output = extract_tool_output(&raw_output);
 
-                            let call_id =
-                                payload.get("call_id").and_then(|v| v.as_str());
-                            if let Some(idx) = call_id
-                                .and_then(|cid| call_id_map.get(cid))
-                                .copied()
+                            let call_id = payload.get("call_id").and_then(|v| v.as_str());
+                            if let Some(idx) = call_id.and_then(|cid| call_id_map.get(cid)).copied()
                             {
                                 if idx < messages.len() {
                                     messages[idx].content = output;
@@ -305,29 +283,23 @@ impl CodexProvider {
                     }
                 }
                 "event_msg" => {
-                    let event_type = payload
-                        .get("type")
-                        .and_then(|v| v.as_str())
-                        .unwrap_or("");
+                    let event_type = payload.get("type").and_then(|v| v.as_str()).unwrap_or("");
                     // agent_message is a duplicate of response_item/message/assistant — skip
                     if event_type == "token_count" {
                         if let Some(info) = payload.get("info") {
                             if let Some(last) = info.get("last_token_usage") {
-                                let input = last
-                                    .get("input_tokens")
-                                    .and_then(|v| v.as_u64())
-                                    .unwrap_or(0)
-                                    as u32;
-                                let output = last
-                                    .get("output_tokens")
-                                    .and_then(|v| v.as_u64())
-                                    .unwrap_or(0)
-                                    as u32;
-                                let cached = last
-                                    .get("cached_input_tokens")
-                                    .and_then(|v| v.as_u64())
-                                    .unwrap_or(0)
-                                    as u32;
+                                let input =
+                                    last.get("input_tokens")
+                                        .and_then(|v| v.as_u64())
+                                        .unwrap_or(0) as u32;
+                                let output =
+                                    last.get("output_tokens")
+                                        .and_then(|v| v.as_u64())
+                                        .unwrap_or(0) as u32;
+                                let cached =
+                                    last.get("cached_input_tokens")
+                                        .and_then(|v| v.as_u64())
+                                        .unwrap_or(0) as u32;
                                 let usage = TokenUsage {
                                     input_tokens: input,
                                     output_tokens: output,

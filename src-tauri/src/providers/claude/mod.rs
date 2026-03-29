@@ -15,8 +15,8 @@ pub struct ClaudeProvider {
 
 impl ClaudeProvider {
     pub fn new() -> Self {
-        let home_dir =
-            dirs::home_dir().expect("cannot resolve HOME directory — app cannot function without it");
+        let home_dir = dirs::home_dir()
+            .expect("cannot resolve HOME directory — app cannot function without it");
         Self { home_dir }
     }
 

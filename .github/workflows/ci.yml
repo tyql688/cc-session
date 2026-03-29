@@ -32,6 +32,10 @@ jobs:
 
       - uses: dtolnay/rust-toolchain@stable
 
+      - name: Rust fmt check
+        working-directory: src-tauri
+        run: cargo fmt --check
+
       - name: Rust check
         working-directory: src-tauri
         run: cargo check

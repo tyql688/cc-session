@@ -43,8 +43,10 @@ pub fn trash_session(
     };
 
     let resolved_provider = if provider.is_empty() {
-        db_meta
-            .as_ref().map_or_else(|| "claude".to_string(), |s| crate::db::provider_to_str_pub(&s.provider).to_string())
+        db_meta.as_ref().map_or_else(
+            || "claude".to_string(),
+            |s| crate::db::provider_to_str_pub(&s.provider).to_string(),
+        )
     } else {
         provider
     };
@@ -111,8 +113,10 @@ pub fn trash_session(
         return Ok(());
     }
 
-    let base_name = src
-        .file_name().map_or_else(|| format!("{session_id}.jsonl"), |f| f.to_string_lossy().to_string());
+    let base_name = src.file_name().map_or_else(
+        || format!("{session_id}.jsonl"),
+        |f| f.to_string_lossy().to_string(),
+    );
     // Sanitize: strip path separators to prevent directory traversal
     let base_name = base_name.replace(['/', '\\'], "_");
     let file_name = if let Some(dot_pos) = base_name.rfind('.') {

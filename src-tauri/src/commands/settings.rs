@@ -104,7 +104,10 @@ pub fn export_sessions_batch(
     let total = items.len();
 
     for (idx, (session_id, source_path, provider)) in items.iter().enumerate() {
-        let _ = app.emit("export-progress", serde_json::json!({ "current": idx + 1, "total": total }));
+        let _ = app.emit(
+            "export-progress",
+            serde_json::json!({ "current": idx + 1, "total": total }),
+        );
         let detail = load_detail(session_id, source_path, provider, &state.db)?;
         let ext = match format.as_str() {
             "json" => "json",

@@ -285,7 +285,8 @@ fn launch_windows_terminal(command: &str, cwd: Option<&str>) -> Result<(), Strin
     cmd.args(["-NoExit", "-Command"]);
     let full = build_windows_command(command, cwd);
     cmd.arg(&full);
-    cmd.spawn().map_err(|e| format!("failed to launch Windows Terminal: {e}"))?;
+    cmd.spawn()
+        .map_err(|e| format!("failed to launch Windows Terminal: {e}"))?;
     Ok(())
 }
 
@@ -295,7 +296,8 @@ fn launch_windows_powershell(command: &str, cwd: Option<&str>) -> Result<(), Str
     cmd.args(["-NoExit", "-Command"]);
     let full = build_windows_command(command, cwd);
     cmd.arg(&full);
-    cmd.spawn().map_err(|e| format!("failed to launch PowerShell: {e}"))?;
+    cmd.spawn()
+        .map_err(|e| format!("failed to launch PowerShell: {e}"))?;
     Ok(())
 }
 
@@ -305,7 +307,8 @@ fn launch_windows_cmd(command: &str, cwd: Option<&str>) -> Result<(), String> {
     cmd.args(["/k"]);
     let full = build_windows_command(command, cwd);
     cmd.arg(&full);
-    cmd.spawn().map_err(|e| format!("failed to launch cmd: {e}"))?;
+    cmd.spawn()
+        .map_err(|e| format!("failed to launch cmd: {e}"))?;
     Ok(())
 }
 

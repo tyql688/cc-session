@@ -72,7 +72,9 @@ pub fn extract_text_from_parts(arr: &[Value]) -> String {
     arr.iter()
         .filter_map(|item| {
             if item.get("type").and_then(|t| t.as_str()) == Some("text") {
-                item.get("text").and_then(|t| t.as_str()).map(|s| s.to_string())
+                item.get("text")
+                    .and_then(|t| t.as_str())
+                    .map(|s| s.to_string())
             } else {
                 None
             }
@@ -149,22 +151,46 @@ pub fn remap_tool_args(tool_name: &str, args: &Value) -> Option<String> {
     let obj = args.as_object()?;
     match tool_name {
         "Bash" => {
-            let cmd = obj.get("command").or_else(|| obj.get("input")).and_then(|c| c.as_str())?;
+            let cmd = obj
+                .get("command")
+                .or_else(|| obj.get("input"))
+                .and_then(|c| c.as_str())?;
             Some(serde_json::json!({"command": cmd}).to_string())
         }
         "Write" => {
-            let path = obj.get("path").or_else(|| obj.get("file_path")).and_then(|p| p.as_str())?;
+            let path = obj
+                .get("path")
+                .or_else(|| obj.get("file_path"))
+                .and_then(|p| p.as_str())?;
             Some(serde_json::json!({"file_path": path}).to_string())
         }
         "Read" => {
-            let path = obj.get("path").or_else(|| obj.get("file_path")).and_then(|p| p.as_str())?;
+            let path = obj
+                .get("path")
+                .or_else(|| obj.get("file_path"))
+                .and_then(|p| p.as_str())?;
             Some(serde_json::json!({"file_path": path}).to_string())
         }
         "Edit" => {
-            let path = obj.get("path").or_else(|| obj.get("file_path")).and_then(|p| p.as_str()).unwrap_or("");
-            let old = obj.get("old_str").or_else(|| obj.get("old_string")).and_then(|s| s.as_str()).unwrap_or("");
-            let new = obj.get("new_str").or_else(|| obj.get("new_string")).and_then(|s| s.as_str()).unwrap_or("");
-            Some(serde_json::json!({"file_path": path, "old_string": old, "new_string": new}).to_string())
+            let path = obj
+                .get("path")
+                .or_else(|| obj.get("file_path"))
+                .and_then(|p| p.as_str())
+                .unwrap_or("");
+            let old = obj
+                .get("old_str")
+                .or_else(|| obj.get("old_string"))
+                .and_then(|s| s.as_str())
+                .unwrap_or("");
+            let new = obj
+                .get("new_str")
+                .or_else(|| obj.get("new_string"))
+                .and_then(|s| s.as_str())
+                .unwrap_or("");
+            Some(
+                serde_json::json!({"file_path": path, "old_string": old, "new_string": new})
+                    .to_string(),
+            )
         }
         "Glob" => {
             let pattern = obj.get("pattern").and_then(|p| p.as_str())?;

@@ -70,9 +70,8 @@ impl SessionProvider for OpenCodeProvider {
         let mut msg_count_map: std::collections::HashMap<String, u32> =
             std::collections::HashMap::new();
         {
-            let mut stmt = conn.prepare(
-                "SELECT session_id, COUNT(*) FROM message GROUP BY session_id",
-            )?;
+            let mut stmt =
+                conn.prepare("SELECT session_id, COUNT(*) FROM message GROUP BY session_id")?;
             let rows = stmt.query_map([], |row| {
                 Ok((row.get::<_, String>(0)?, row.get::<_, i64>(1)?))
             })?;
@@ -123,7 +122,7 @@ impl SessionProvider for OpenCodeProvider {
         let sessions: Vec<ParsedSession> = stmt
             .query_map([], |row| {
                 Ok((
-                    row.get::<_, String>(0)?,        // id
+                    row.get::<_, String>(0)?,         // id
                     row.get::<_, String>(1)?,         // title
                     row.get::<_, String>(2)?,         // directory
                     row.get::<_, i64>(3)?,            // time_created
@@ -135,7 +134,16 @@ impl SessionProvider for OpenCodeProvider {
             })?
             .filter_map(|r| r.ok())
             .map(
-                |(id, title, directory, time_created, time_updated, parent_id, worktree, project_name)| {
+                |(
+                    id,
+                    title,
+                    directory,
+                    time_created,
+                    time_updated,
+                    parent_id,
+                    worktree,
+                    project_name,
+                )| {
                     let msg_count = msg_count_map.get(&id).copied().unwrap_or(0);
                     let content_text = content_map.get(&id).cloned().unwrap_or_default();
 
@@ -164,7 +172,11 @@ impl SessionProvider for OpenCodeProvider {
                             title: display_title,
                             project_path: project_path.clone(),
                             project_name: project_name.unwrap_or_else(|| {
-                                project_path.split('/').next_back().unwrap_or("").to_string()
+                                project_path
+                                    .split('/')
+                                    .next_back()
+                                    .unwrap_or("")
+                                    .to_string()
                             }),
                             created_at: time_created / 1000,
                             updated_at: time_updated / 1000,
@@ -229,8 +241,7 @@ impl SessionProvider for OpenCodeProvider {
         let mut messages = Vec::new();
 
         for (msg_id, msg_data) in &msg_rows {
-            let msg_json: serde_json::Value =
-                serde_json::from_str(msg_data).unwrap_or_default();
+            let msg_json: serde_json::Value = serde_json::from_str(msg_data).unwrap_or_default();
             let role_str = msg_json
                 .get("role")
                 .and_then(|r| r.as_str())
@@ -335,9 +346,8 @@ impl SessionProvider for OpenCodeProvider {
                                     .unwrap_or("");
 
                                 // Tool input
-                                let tool_input = state
-                                    .and_then(|s| s.get("input"))
-                                    .map(|i| i.to_string());
+                                let tool_input =
+                                    state.and_then(|s| s.get("input")).map(|i| i.to_string());
 
                                 // Tool output
                                 let output = match status {
@@ -407,9 +417,9 @@ impl SessionProvider for OpenCodeProvider {
 
                     // If assistant message had no text and no tools (rare), still emit for token tracking
                     if text_parts.is_empty()
-                        && !parts.iter().any(|p| {
-                            p.get("type").and_then(|t| t.as_str()) == Some("tool")
-                        })
+                        && !parts
+                            .iter()
+                            .any(|p| p.get("type").and_then(|t| t.as_str()) == Some("tool"))
                         && token_usage.is_some()
                     {
                         messages.push(Message {

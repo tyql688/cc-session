@@ -115,9 +115,7 @@ impl Database {
 
     pub fn clear_all(&self) -> Result<(), rusqlite::Error> {
         self.with_transaction(|conn| {
-            conn.execute_batch(
-                "DELETE FROM favorites; DELETE FROM sessions; DELETE FROM meta;"
-            )?;
+            conn.execute_batch("DELETE FROM favorites; DELETE FROM sessions; DELETE FROM meta;")?;
             Ok(())
         })?;
         self.vacuum()

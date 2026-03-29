@@ -60,7 +60,8 @@ struct ChatMessage {
 
 impl GeminiProvider {
     pub fn new() -> Self {
-        let home_dir = dirs::home_dir().expect("cannot resolve HOME directory — app cannot function without it");
+        let home_dir = dirs::home_dir()
+            .expect("cannot resolve HOME directory — app cannot function without it");
         Self { home_dir }
     }
 
@@ -282,9 +283,7 @@ impl SessionProvider for GeminiProvider {
             let parsed = self
                 .parse_chat_file(&path, &project_id, &project_map)
                 .ok_or_else(|| {
-                    ProviderError::Parse(format!(
-                        "session {session_id} not found in {source_path}"
-                    ))
+                    ProviderError::Parse(format!("session {session_id} not found in {source_path}"))
                 })?;
 
             return Ok(parsed.messages);
@@ -303,9 +302,7 @@ impl SessionProvider for GeminiProvider {
             .into_iter()
             .find(|s| s.meta.id == session_id)
             .ok_or_else(|| {
-                ProviderError::Parse(format!(
-                    "session {session_id} not found in {source_path}"
-                ))
+                ProviderError::Parse(format!("session {session_id} not found in {source_path}"))
             })?;
 
         Ok(session.messages)

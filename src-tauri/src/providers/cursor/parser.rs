@@ -82,12 +82,20 @@ impl CursorProvider {
         let created_at = std::fs::metadata(db_path)
             .ok()
             .and_then(|m| m.created().ok())
-            .map(|t| t.duration_since(std::time::UNIX_EPOCH).unwrap_or_default().as_secs() as i64)
+            .map(|t| {
+                t.duration_since(std::time::UNIX_EPOCH)
+                    .unwrap_or_default()
+                    .as_secs() as i64
+            })
             .unwrap_or(0);
         let updated_at = std::fs::metadata(db_path)
             .ok()
             .and_then(|m| m.modified().ok())
-            .map(|t| t.duration_since(std::time::UNIX_EPOCH).unwrap_or_default().as_secs() as i64)
+            .map(|t| {
+                t.duration_since(std::time::UNIX_EPOCH)
+                    .unwrap_or_default()
+                    .as_secs() as i64
+            })
             .unwrap_or(created_at);
 
         Some(ParsedSession {

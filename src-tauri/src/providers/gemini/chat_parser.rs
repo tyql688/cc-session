@@ -75,9 +75,7 @@ impl GeminiProvider {
                                 .and_then(|m| m.as_str())
                                 .unwrap_or("image/png");
                             if let Some(data) = inline.get("data").and_then(|d| d.as_str()) {
-                                parts.push(format!(
-                                    "[Image: source: data:{mime};base64,{data}]"
-                                ));
+                                parts.push(format!("[Image: source: data:{mime};base64,{data}]"));
                             }
                         }
                     }
@@ -116,10 +114,20 @@ impl GeminiProvider {
             if role == MessageRole::Assistant {
                 if let Some(ref thoughts) = msg.thoughts {
                     for thought in thoughts {
-                        let subject = thought.get("subject").and_then(|s| s.as_str()).unwrap_or("");
-                        let description = thought.get("description").and_then(|d| d.as_str()).unwrap_or("");
+                        let subject = thought
+                            .get("subject")
+                            .and_then(|s| s.as_str())
+                            .unwrap_or("");
+                        let description = thought
+                            .get("description")
+                            .and_then(|d| d.as_str())
+                            .unwrap_or("");
                         if !description.is_empty() {
-                            let thinking_ts = thought.get("timestamp").and_then(|t| t.as_str()).map(|s| s.to_string()).or_else(|| msg.timestamp.clone());
+                            let thinking_ts = thought
+                                .get("timestamp")
+                                .and_then(|t| t.as_str())
+                                .map(|s| s.to_string())
+                                .or_else(|| msg.timestamp.clone());
                             let content = if subject.is_empty() {
                                 format!("[thinking]\n{description}")
                             } else {
@@ -153,7 +161,11 @@ impl GeminiProvider {
                     tool_name: None,
                     tool_input: None,
                     // Attach token usage to text msg only if no tool calls follow
-                    token_usage: if !has_tools { token_usage.clone() } else { None },
+                    token_usage: if !has_tools {
+                        token_usage.clone()
+                    } else {
+                        None
+                    },
                 });
             }
 
@@ -170,20 +182,25 @@ impl GeminiProvider {
 
                     // Remap args for Bash: shell_command {command} or run_shell_command {command}
                     let args = match name.as_str() {
-                        "Bash" => {
-                            tc.get("args").and_then(|a| {
+                        "Bash" => tc
+                            .get("args")
+                            .and_then(|a| {
                                 let obj = a.as_object()?;
-                                let cmd = obj.get("command").or_else(|| obj.get("cmd")).and_then(|c| c.as_str())?;
+                                let cmd = obj
+                                    .get("command")
+                                    .or_else(|| obj.get("cmd"))
+                                    .and_then(|c| c.as_str())?;
                                 Some(serde_json::json!({"command": cmd}).to_string())
-                            }).or_else(|| tc.get("args").map(std::string::ToString::to_string))
-                        }
-                        "Write" => {
-                            tc.get("args").and_then(|a| {
+                            })
+                            .or_else(|| tc.get("args").map(std::string::ToString::to_string)),
+                        "Write" => tc
+                            .get("args")
+                            .and_then(|a| {
                                 let obj = a.as_object()?;
                                 let fp = obj.get("file_path").and_then(|f| f.as_str())?;
                                 Some(serde_json::json!({"file_path": fp}).to_string())
-                            }).or_else(|| tc.get("args").map(std::string::ToString::to_string))
-                        }
+                            })
+                            .or_else(|| tc.get("args").map(std::string::ToString::to_string)),
                         _ => tc.get("args").map(std::string::ToString::to_string),
                     };
 
@@ -205,7 +222,11 @@ impl GeminiProvider {
                         tool_name: Some(name),
                         tool_input: args,
                         // Attach token usage to last tool message
-                        token_usage: if i == last_idx { token_usage.clone() } else { None },
+                        token_usage: if i == last_idx {
+                            token_usage.clone()
+                        } else {
+                            None
+                        },
                     });
                 }
             }
@@ -244,4 +265,3 @@ impl GeminiProvider {
         })
     }
 }
-

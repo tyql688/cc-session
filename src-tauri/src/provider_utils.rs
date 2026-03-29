@@ -29,8 +29,10 @@ pub fn project_name_from_path(project_path: &str) -> String {
     if project_path.is_empty() || project_path == NO_PROJECT {
         NO_PROJECT.to_string()
     } else {
-        Path::new(project_path)
-            .file_name().map_or_else(|| project_path.to_string(), |name| name.to_string_lossy().to_string())
+        Path::new(project_path).file_name().map_or_else(
+            || project_path.to_string(),
+            |name| name.to_string_lossy().to_string(),
+        )
     }
 }
 

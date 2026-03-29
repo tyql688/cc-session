@@ -14,7 +14,11 @@ fn role_label(role: &MessageRole) -> &'static str {
 
 fn format_date(epoch: i64) -> String {
     chrono::DateTime::from_timestamp(epoch, 0)
-        .map(|d| d.with_timezone(&chrono::Local).format("%Y-%m-%d %H:%M").to_string())
+        .map(|d| {
+            d.with_timezone(&chrono::Local)
+                .format("%Y-%m-%d %H:%M")
+                .to_string()
+        })
         .unwrap_or_default()
 }
 
