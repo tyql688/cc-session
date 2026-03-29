@@ -2,16 +2,11 @@
   <a href="README.md">English</a> | <a href="README.zh-CN.md">中文</a>
 </p>
 
-<pre align="center">
- ╔═══╗ ╔═══╗ ╔═══╗ ╔╗ ╔╗
- ║ ══╣ ║══   ║ ══╣ ║╚═╝║
- ╠══ ║ ║══   ╠══ ║ ║ ══╣
- ╚═══╝ ╚═══╝ ╚═══╝ ╚╗ ╔╝
-</pre>
+<h1 align="center">CC Session</h1>
 
 <p align="center">
   Browse, search and resume your AI coding sessions in one desktop app.<br>
-  Claude Code · Codex · Gemini CLI · Cursor · OpenCode
+  Claude Code · Codex · Gemini CLI · Kimi CLI · Cursor CLI · OpenCode
 </p>
 
 <p align="center">
@@ -29,7 +24,7 @@ AI coding tools like Claude Code, Codex, and Gemini CLI store session data local
 
 ## Features
 
-- **Unified view** — All your AI coding sessions from 5 providers in one place
+- **Unified view** — All your AI coding sessions from 6 providers in one place
 - **Full-text search** — Search across all session content with SQLite FTS5 (`⌘K`)
 - **Resume sessions** — Jump back into any session in Terminal, iTerm2, Ghostty, Kitty, Warp, WezTerm, or Alacritty (`⇧⌘R`)
 - **Live watch** — Auto-refreshes when active sessions update (`⌘L`)
@@ -49,7 +44,8 @@ AI coding tools like Claude Code, Codex, and Gemini CLI store session data local
 | Claude Code | `~/.claude/projects/**/*.jsonl`          | JSONL    | FS events  |
 | Codex CLI   | `~/.codex/sessions/**/*.jsonl`           | JSONL    | FS events  |
 | Gemini CLI  | `~/.gemini/tmp/*/chats/*.json`           | JSON     | FS events  |
-| Cursor      | `~/.cursor/chats/**/store.db`            | SQLite   | Polling    |
+| Kimi CLI    | `~/.kimi/sessions/**/*.jsonl`            | JSONL    | FS events  |
+| Cursor CLI  | `~/.cursor/chats/**/store.db`            | SQLite   | Polling    |
 | OpenCode    | `~/.local/share/opencode/opencode.db`    | SQLite   | Polling    |
 
 Each provider parses: messages, tool calls (with input/output), thinking/reasoning blocks, token usage, and inline images.

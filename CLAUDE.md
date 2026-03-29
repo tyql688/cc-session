@@ -105,6 +105,15 @@ Tool names are mapped to canonical names per provider (e.g. Codex `exec_command`
 - **Context markers.** Filter `--- Content from referenced files ---` and `--- End of content ---` text parts.
 - **`displayName` vs `name` in toolCalls.** Use `displayName` for human-readable names (Shell, WriteFile, Edit), fall back to internal `name` (run_shell_command, write_file). Map to canonical names.
 
+### Kimi CLI
+
+- **Session path uses MD5 of project path.** `~/.kimi/sessions/<md5(project_path)>/<session_uuid>/wire.jsonl`. Read `~/.kimi/kimi.json` to build the MD5 → project path mapping.
+- **wire.jsonl is an event stream**, not message-per-line. Key types: `TurnBegin` (user input), `ContentPart` (text/think), `ToolCall`/`ToolResult` (paired by `id`), `StatusUpdate` (token usage).
+- **Image deduplication.** `TurnBegin.user_input` has both `<image path="...">` text marker and `image_url` with base64 data. Skip text markers (`<image path=...>` and `</image>`) when `image_url` is present.
+- **Token usage in StatusUpdate.** Format: `{ input_other, output, input_cache_read, input_cache_creation }`. Map `input_tokens = input_other + input_cache_read + input_cache_creation`.
+- **`/` slash commands not in wire.jsonl.** They're handled client-side, only recorded in `user-history/*.jsonl` (no AI response).
+- **Timestamps are float seconds** (not milliseconds). Convert with `ts as i64` for epoch seconds.
+
 ### HTML Export
 
 - **Never use `&s[..N]` for truncation.** Multi-byte UTF-8 characters (Chinese, emoji) can be split, causing panic. Always use `truncate_char_boundary()` or don't truncate at all.
