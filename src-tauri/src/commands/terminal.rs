@@ -99,7 +99,7 @@ pub fn detect_terminal() -> String {
         if std::env::var("WT_SESSION").is_ok() {
             return "windows-terminal".to_string();
         }
-        return "powershell".to_string();
+        "powershell".to_string()
     }
 
     #[cfg(not(target_os = "windows"))]

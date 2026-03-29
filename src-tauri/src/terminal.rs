@@ -34,6 +34,7 @@ pub fn launch_terminal(target: &str, command: &str, cwd: Option<&str>) -> Result
     }
 }
 
+#[cfg(target_os = "macos")]
 fn launch_macos_terminal(command: &str, cwd: Option<&str>) -> Result<(), String> {
     let full_command = build_shell_command(command, cwd);
     let escaped = escape_osascript(&full_command);
@@ -60,6 +61,7 @@ end tell"#
     }
 }
 
+#[cfg(target_os = "macos")]
 fn launch_iterm(command: &str, cwd: Option<&str>) -> Result<(), String> {
     let full_command = build_shell_command(command, cwd);
     let escaped = escape_osascript(&full_command);
@@ -95,6 +97,7 @@ end tell"#
     }
 }
 
+#[cfg(target_os = "macos")]
 fn launch_ghostty(command: &str, cwd: Option<&str>) -> Result<(), String> {
     let args = build_ghostty_args(command, cwd);
 
@@ -110,6 +113,7 @@ fn launch_ghostty(command: &str, cwd: Option<&str>) -> Result<(), String> {
     }
 }
 
+#[cfg(target_os = "macos")]
 fn build_ghostty_args(command: &str, cwd: Option<&str>) -> Vec<String> {
     let input = ghostty_raw_input(command);
 
@@ -130,6 +134,7 @@ fn build_ghostty_args(command: &str, cwd: Option<&str>) -> Vec<String> {
     args
 }
 
+#[cfg(target_os = "macos")]
 fn ghostty_raw_input(command: &str) -> String {
     let mut escaped = String::from("raw:");
     for ch in command.chars() {
@@ -144,6 +149,7 @@ fn ghostty_raw_input(command: &str) -> String {
     escaped
 }
 
+#[cfg(target_os = "macos")]
 fn launch_warp(command: &str, cwd: Option<&str>) -> Result<(), String> {
     let full_command = build_shell_command(command, cwd);
     let escaped = escape_osascript(&full_command);
@@ -171,6 +177,7 @@ end tell"#
     }
 }
 
+#[cfg(target_os = "macos")]
 fn launch_kitty(command: &str, cwd: Option<&str>) -> Result<(), String> {
     let shell = std::env::var("SHELL").unwrap_or_else(|_| "/bin/zsh".to_string());
 
@@ -196,6 +203,7 @@ fn launch_kitty(command: &str, cwd: Option<&str>) -> Result<(), String> {
     }
 }
 
+#[cfg(target_os = "macos")]
 fn launch_wezterm(command: &str, cwd: Option<&str>) -> Result<(), String> {
     let full_command = build_shell_command(command, None);
     let shell = std::env::var("SHELL").unwrap_or_else(|_| "/bin/zsh".to_string());
@@ -224,6 +232,7 @@ fn launch_wezterm(command: &str, cwd: Option<&str>) -> Result<(), String> {
     }
 }
 
+#[cfg(target_os = "macos")]
 fn launch_alacritty(command: &str, cwd: Option<&str>) -> Result<(), String> {
     let full_command = build_shell_command(command, None);
     let shell = std::env::var("SHELL").unwrap_or_else(|_| "/bin/zsh".to_string());
@@ -252,6 +261,7 @@ fn launch_alacritty(command: &str, cwd: Option<&str>) -> Result<(), String> {
     }
 }
 
+#[cfg(target_os = "macos")]
 fn build_shell_command(command: &str, cwd: Option<&str>) -> String {
     match cwd {
         Some(dir) if !dir.trim().is_empty() => {
@@ -261,12 +271,14 @@ fn build_shell_command(command: &str, cwd: Option<&str>) -> String {
     }
 }
 
+#[cfg(target_os = "macos")]
 fn shell_escape(value: &str) -> String {
     // Single-quote wrapping is the POSIX-safe approach: only ' needs escaping
     let escaped = value.replace('\'', "'\\''");
     format!("'{escaped}'")
 }
 
+#[cfg(target_os = "macos")]
 fn escape_osascript(value: &str) -> String {
     value
         .replace('\\', "\\\\")
