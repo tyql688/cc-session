@@ -55,9 +55,9 @@ All providers implement `SessionProvider` trait:
 - `watch_paths()` → directories for file system watcher
 
 File-based (Claude, Codex, Gemini): FS event watching via `notify` crate.
-SQLite-based (Cursor, OpenCode): 2s polling in frontend when live watch enabled. Opened with `SQLITE_OPEN_READ_WRITE` to read WAL data.
+SQLite-based (Cursor CLI, OpenCode): 2s polling in frontend when live watch enabled. Opened with `SQLITE_OPEN_READ_WRITE` to read WAL data.
 
-Tool names are mapped to canonical names per provider (e.g. Codex `exec_command` → `Bash`, Cursor `StrReplace` → `Edit`) so the frontend has one consistent display path.
+Tool names are mapped to canonical names per provider (e.g. Codex `exec_command` → `Bash`, Cursor CLI `StrReplace` → `Edit`) so the frontend has one consistent display path.
 
 ## Data Sources
 
@@ -66,7 +66,7 @@ Tool names are mapped to canonical names per provider (e.g. Codex `exec_command`
 | Claude Code | `~/.claude/projects/**/*.jsonl`        | JSONL  |
 | Codex       | `~/.codex/sessions/**/*.jsonl`         | JSONL  |
 | Gemini      | `~/.gemini/tmp/*/chats/*.json`         | JSON   |
-| Cursor      | `~/.cursor/chats/**/store.db`          | SQLite |
+| Cursor CLI  | `~/.cursor/chats/**/store.db`          | SQLite |
 | OpenCode    | `~/.local/share/opencode/opencode.db`  | SQLite |
 
 ## Key Patterns
@@ -79,11 +79,11 @@ Tool names are mapped to canonical names per provider (e.g. Codex `exec_command`
 
 ## Lessons Learned (Pitfalls to Avoid)
 
-### SQLite Providers (Cursor, OpenCode)
+### SQLite Providers (Cursor CLI, OpenCode)
 
 - **SQLITE_OPEN_READ_ONLY cannot read WAL data.** Cursor and OpenCode use WAL mode. During active sessions, data lives in the WAL file. `READ_ONLY` connections only see checkpointed data. Must use `SQLITE_OPEN_READ_WRITE` even though we only read.
-- **Cursor store.db uses BLOB column type**, not TEXT. `row.get::<_, String>(0)` silently fails. Must use `row.get::<_, Vec<u8>>(0)` then `String::from_utf8_lossy`.
-- **Cursor content is JSON-array-as-string.** The `content` field in blobs is stored as a JSON string `"[{\"type\":\"text\",...}]"`, not a native JSON array. Need double-parse: first serde gives `Value::String`, then parse the string as `Vec<Value>`.
+- **Cursor CLI store.db uses BLOB column type**, not TEXT. `row.get::<_, String>(0)` silently fails. Must use `row.get::<_, Vec<u8>>(0)` then `String::from_utf8_lossy`.
+- **Cursor CLI content is JSON-array-as-string.** The `content` field in blobs is stored as a JSON string `"[{\"type\":\"text\",...}]"`, not a native JSON array. Need double-parse: first serde gives `Value::String`, then parse the string as `Vec<Value>`.
 - **FSEvents unreliable for SQLite WAL changes.** macOS file system events don't reliably fire for WAL writes. Solution: use 2-second polling in frontend for DB-based providers, keep FS events only for JSONL/JSON providers.
 - **OpenCode uses XDG path, not macOS standard.** `dirs::data_local_dir()` returns `~/Library/Application Support` on macOS, but OpenCode stores data in `~/.local/share/opencode/`. Must manually construct `$HOME/.local/share/opencode`.
 - **OpenCode "global" project has worktree="/".** Prefer session's `directory` field over project's `worktree` for path resolution.
@@ -115,9 +115,10 @@ Tool names are mapped to canonical names per provider (e.g. Codex `exec_command`
 ### General
 
 - **Provider isolation.** Changes to one provider's parser must not affect others. The boundary is the canonical tool name mapping — each provider maps its tool names to {Bash, Edit, Read, Write, Glob, Grep, Agent, Plan} and the frontend only handles these.
-- **Resume commands vary per provider.** Claude: `claude --resume ID`, Codex: `codex resume ID`, Gemini: `gemini --resume ID`, Cursor: `agent --resume=ID`, OpenCode: `opencode -s ID`.
+- **Resume commands vary per provider.** Claude: `claude --resume ID`, Codex: `codex resume ID`, Gemini: `gemini --resume ID`, Cursor CLI: `agent --resume=ID`, OpenCode: `opencode -s ID`.
 - **FTS content is intentionally truncated** to 2000 bytes via `truncate_to_bytes`. This is for index size, not display. Display content is never truncated.
-- **Timestamps.** Claude/Codex/Gemini have per-message timestamps. Cursor has none (use file metadata). OpenCode uses epoch milliseconds (convert with `ms / 1000`).
+- **Timestamps.** Claude/Codex/Gemini have per-message timestamps. Cursor CLI has none (use file metadata). OpenCode uses epoch milliseconds (convert with `ms / 1000`).
+- **Cursor CLI has no token usage data.** store.db blobs only contain `role`, `content`, `id` — no usage/token fields. Token billing is tracked server-side only.
 
 ## Conventions
 
@@ -126,4 +127,4 @@ Tool names are mapped to canonical names per provider (e.g. Codex `exec_command`
 - TypeScript: strict mode, no `any`
 - Commits: conventional commits (`feat:`, `fix:`, `refactor:`)
 - i18n: all user-facing strings via `t()`, never hardcoded
-- CSS: variables in `variables.css`. Provider colors: Claude `#8b5cf6`, Codex `#10b981`, Gemini `#f59e0b`, Cursor `#3b82f6`, OpenCode `#06b6d4`
+- CSS: variables in `variables.css`. Provider colors: Claude `#8b5cf6`, Codex `#10b981`, Gemini `#f59e0b`, Cursor CLI `#3b82f6`, OpenCode `#06b6d4`
