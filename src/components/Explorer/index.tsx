@@ -1,77 +1,21 @@
 import { createSignal, createEffect, createMemo, For, Show } from "solid-js";
-import type { SessionMeta, TreeNode, Provider } from "../lib/types";
-import { getResumeCommand, resumeSession, trashSession, exportSessionsBatch, toggleFavorite, renameSession, openInFolder } from "../lib/tauri";
+import type { SessionMeta, TreeNode, Provider } from "../../lib/types";
+import { getResumeCommand, resumeSession, trashSession, exportSessionsBatch, toggleFavorite, renameSession, openInFolder } from "../../lib/tauri";
 import { save } from "@tauri-apps/plugin-dialog";
-import { useI18n } from "../i18n/index";
-import { terminalApp, timeGrouping, addBlockedFolder, isPathBlocked } from "../stores/settings";
-import { ContextMenu, type MenuItemDef } from "./ContextMenu";
-import { InputDialog } from "./InputDialog";
-import { TreeNodeComponent, collectSessionNodes } from "./TreeNode";
+import { useI18n } from "../../i18n/index";
+import { terminalApp, timeGrouping, addBlockedFolder } from "../../stores/settings";
+import { ContextMenu, type MenuItemDef } from "../ContextMenu";
+import { InputDialog } from "../InputDialog";
+import { TreeNodeComponent, collectSessionNodes } from "../TreeNode";
 import {
   selectedIds,
   toggleSelected,
   clearSelection,
   selectionCount,
-} from "../stores/selection";
-import { toast, toastError } from "../stores/toast";
-import { bumpFavoriteVersion } from "../stores/favorites";
-
-/** Filter out projects whose path matches a blocked folder. */
-function filterBlockedFolders(tree: TreeNode[]): TreeNode[] {
-  return tree.map((provider) => ({
-    ...provider,
-    children: provider.children.filter((project) => {
-      // project id format: "provider:/path/to/project"
-      const path = project.id.includes(":") ? project.id.slice(project.id.indexOf(":") + 1) : "";
-      return !path || !isPathBlocked(path);
-    }),
-  })).filter((provider) => provider.children.length > 0);
-}
-
-function applyTimeGrouping(tree: TreeNode[], t: (key: string) => string): TreeNode[] {
-  const now = Date.now();
-  const todayStart = new Date(); todayStart.setHours(0, 0, 0, 0);
-  const weekStart = new Date(todayStart); weekStart.setDate(weekStart.getDate() - weekStart.getDay());
-  const monthStart = new Date(todayStart); monthStart.setDate(1);
-
-  const todayMs = todayStart.getTime();
-  const weekMs = weekStart.getTime();
-  const monthMs = monthStart.getTime();
-
-  function groupLabel(epochSec: number): string {
-    const ms = epochSec * 1000;
-    if (ms >= todayMs) return t("explorer.today");
-    if (ms >= weekMs) return t("explorer.thisWeek");
-    if (ms >= monthMs) return t("explorer.thisMonth");
-    return t("explorer.older");
-  }
-
-  return tree.map((provider) => ({
-    ...provider,
-    children: provider.children.map((project) => {
-      if (project.children.length <= 3) return project; // no grouping for small projects
-      const groups = new Map<string, TreeNode[]>();
-      for (const session of project.children) {
-        const label = groupLabel(session.updated_at || 0);
-        if (!groups.has(label)) groups.set(label, []);
-        groups.get(label)!.push(session);
-      }
-      if (groups.size <= 1) return project; // all in one group, no benefit
-      const groupNodes: TreeNode[] = [];
-      for (const [label, sessions] of groups) {
-        groupNodes.push({
-          id: `${project.id}:${label}`,
-          label,
-          node_type: "project",
-          children: sessions,
-          count: sessions.length,
-          provider: project.provider,
-        });
-      }
-      return { ...project, children: groupNodes };
-    }),
-  }));
-}
+} from "../../stores/selection";
+import { toast, toastError } from "../../stores/toast";
+import { bumpFavoriteVersion } from "../../stores/favorites";
+import { filterBlockedFolders, applyTimeGrouping, buildSessionMeta } from "./hooks";
 
 function ExplorerSkeleton() {
   return (
@@ -179,25 +123,6 @@ export function Explorer(props: {
     setSessionMenu(null);
     setNodeMenu(null);
     setSelectionMenu(null);
-  }
-
-  function buildSessionMeta(
-    node: TreeNode,
-    parentProjectLabel: string
-  ): SessionMeta {
-    return {
-      id: node.id,
-      provider: (node.provider ?? "claude") as Provider,
-      title: node.label,
-      project_path: "",
-      project_name: parentProjectLabel,
-      created_at: 0,
-      updated_at: 0,
-      message_count: 0,
-      file_size_bytes: 0,
-      source_path: "",
-      is_sidechain: node.is_sidechain ?? false,
-    };
   }
 
   // --- Click handlers ---
