@@ -1,4 +1,13 @@
-import { Show, For, createSignal, createResource, createEffect, on, onMount, onCleanup } from "solid-js";
+import {
+  Show,
+  For,
+  createSignal,
+  createResource,
+  createEffect,
+  on,
+  onMount,
+  onCleanup,
+} from "solid-js";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import type { SessionMeta, TreeNode } from "../lib/types";
 import { listRecentSessions } from "../lib/tauri";
@@ -22,14 +31,17 @@ export function EditorArea(props: {
   onOpenSession: (session: SessionMeta) => void;
 }) {
   const { t } = useI18n();
-  const activeSession = () => props.tabs.find((tab) => tab.id === props.activeTabId) ?? null;
+  const activeSession = () =>
+    props.tabs.find((tab) => tab.id === props.activeTabId) ?? null;
 
   // Refresh trigger: bumped on mount and whenever sessions change
   const [recentVersion, setRecentVersion] = createSignal(0);
   const [recentSessions] = createResource(recentVersion, () =>
     listRecentSessions(20)
       .catch(() => [])
-      .then((list) => list.filter((s) => !isPathBlocked(s.project_path)).slice(0, 10)),
+      .then((list) =>
+        list.filter((s) => !isPathBlocked(s.project_path)).slice(0, 10),
+      ),
   );
 
   // Refresh recent sessions when tree changes (covers coldStart, syncFromDisk, manual refresh, all providers)
@@ -43,9 +55,11 @@ export function EditorArea(props: {
 
   onMount(() => {
     let unlisten: UnlistenFn | undefined;
-    listen<void>("sessions-changed", () => setRecentVersion((v) => v + 1)).then((fn) => {
-      unlisten = fn;
-    });
+    listen<void>("sessions-changed", () => setRecentVersion((v) => v + 1)).then(
+      (fn) => {
+        unlisten = fn;
+      },
+    );
     onCleanup(() => unlisten?.());
   });
 
@@ -58,7 +72,14 @@ export function EditorArea(props: {
         fallback={
           <div class="editor-empty">
             <div class="editor-empty-icon">
-              <svg width="48" height="48" fill="none" stroke="currentColor" stroke-width="1" viewBox="0 0 24 24">
+              <svg
+                width="48"
+                height="48"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="1"
+                viewBox="0 0 24 24"
+              >
                 <path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z" />
               </svg>
             </div>
@@ -67,8 +88,14 @@ export function EditorArea(props: {
                 <p class="editor-empty-label">{t("editor.recentSessions")}</p>
                 <For each={recentSessions()}>
                   {(session) => (
-                    <button class="editor-empty-session" onClick={() => props.onOpenSession(session)}>
-                      <span class="provider-dot provider-logo" style={{ color: `var(--${session.provider})` }}>
+                    <button
+                      class="editor-empty-session"
+                      onClick={() => props.onOpenSession(session)}
+                    >
+                      <span
+                        class="provider-dot provider-logo"
+                        style={{ color: `var(--${session.provider})` }}
+                      >
                         <ProviderIcon provider={session.provider} />
                       </span>
                       <div class="editor-empty-session-info">
@@ -79,7 +106,12 @@ export function EditorArea(props: {
                           </Show>
                         </span>
                         <span class="editor-empty-session-path">
-                          {session.project_path ? session.project_path.split("/").slice(-2).join("/") : ""}
+                          {session.project_path
+                            ? session.project_path
+                                .split("/")
+                                .slice(-2)
+                                .join("/")
+                            : ""}
                         </span>
                       </div>
                     </button>
@@ -113,7 +145,11 @@ export function EditorArea(props: {
         <div class="editor-content">
           <Show when={activeSession()}>
             {(session) => (
-              <SessionView session={session()} onRefreshTree={props.onRefreshTree} onCloseTab={props.onTabClose} />
+              <SessionView
+                session={session()}
+                onRefreshTree={props.onRefreshTree}
+                onCloseTab={props.onTabClose}
+              />
             )}
           </Show>
         </div>

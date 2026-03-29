@@ -11,7 +11,10 @@ export function parseTimestamp(ts: string | null): number | null {
 
 export function formatTimeOnly(ms: number): string {
   const d = new Date(ms);
-  return d.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
+  return d.toLocaleTimeString(undefined, {
+    hour: "numeric",
+    minute: "2-digit",
+  });
 }
 
 export function formatTimestamp(epoch: number, locale?: string): string {

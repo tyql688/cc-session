@@ -81,4 +81,12 @@ function clearSearch() {
   clearTimeout(debounceTimer);
 }
 
-export { query, setQuery, results, isSearching, search, clearSearch, parseSearchQuery };
+export {
+  query,
+  setQuery,
+  results,
+  isSearching,
+  search,
+  clearSearch,
+  parseSearchQuery,
+};

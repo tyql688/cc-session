@@ -1,8 +1,14 @@
 import type { SessionMeta, TrashMeta, TreeNode, Provider } from "./types";
 import { getProviderLabel } from "./providers";
 
-export function buildFavoritesTree(sessions: SessionMeta[], noProjectLabel: string): TreeNode[] {
-  const providerMap = new Map<string, Map<string, { label: string; sessions: SessionMeta[] }>>();
+export function buildFavoritesTree(
+  sessions: SessionMeta[],
+  noProjectLabel: string,
+): TreeNode[] {
+  const providerMap = new Map<
+    string,
+    Map<string, { label: string; sessions: SessionMeta[] }>
+  >();
 
   for (const s of sessions) {
     const provider = s.provider || "claude";

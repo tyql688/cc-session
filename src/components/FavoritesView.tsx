@@ -1,4 +1,12 @@
-import { createSignal, createMemo, onMount, For, Show, createEffect, on } from "solid-js";
+import {
+  createSignal,
+  createMemo,
+  onMount,
+  For,
+  Show,
+  createEffect,
+  on,
+} from "solid-js";
 import { listFavorites } from "../lib/tauri";
 import type { SessionMeta, TreeNode } from "../lib/types";
 import { useI18n } from "../i18n/index";
@@ -7,14 +15,18 @@ import { toastError } from "../stores/toast";
 import { favoriteVersion } from "../stores/favorites";
 import { TreeNodeComponent } from "./TreeNode";
 
-export function FavoritesView(props: { onOpenSession: (s: SessionMeta) => void }) {
+export function FavoritesView(props: {
+  onOpenSession: (s: SessionMeta) => void;
+}) {
   const { t } = useI18n();
   const [favorites, setFavorites] = createSignal<SessionMeta[]>([]);
   const [loading, setLoading] = createSignal(true);
   const [expandedIds, setExpandedIds] = createSignal<Set<string>>(new Set());
   const [initialized, setInitialized] = createSignal(false);
 
-  const tree = createMemo(() => buildFavoritesTree(favorites(), t("explorer.noProject")));
+  const tree = createMemo(() =>
+    buildFavoritesTree(favorites(), t("explorer.noProject")),
+  );
 
   function autoExpand(nodes: TreeNode[]) {
     const ids = new Set<string>();
@@ -32,7 +44,9 @@ export function FavoritesView(props: { onOpenSession: (s: SessionMeta) => void }
       const data = await listFavorites();
       setFavorites(data);
       if (!initialized()) {
-        setExpandedIds(autoExpand(buildFavoritesTree(data, t("explorer.noProject"))));
+        setExpandedIds(
+          autoExpand(buildFavoritesTree(data, t("explorer.noProject"))),
+        );
         setInitialized(true);
       }
     } catch (e) {
@@ -93,7 +107,14 @@ export function FavoritesView(props: { onOpenSession: (s: SessionMeta) => void }
       </Show>
       <Show when={!loading() && favorites().length === 0}>
         <div class="empty-state">
-          <svg width="32" height="32" fill="none" stroke="var(--text-tertiary)" stroke-width="1.5" viewBox="0 0 24 24">
+          <svg
+            width="32"
+            height="32"
+            fill="none"
+            stroke="var(--text-tertiary)"
+            stroke-width="1.5"
+            viewBox="0 0 24 24"
+          >
             <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
           </svg>
           <p class="empty-state-text">{t("favorites.empty")}</p>

@@ -29,7 +29,12 @@ export function SessionToolbar(props: {
       output = 0,
       cacheRead = 0;
     for (const e of props.processedEntries()) {
-      const msgs = e.type === "message" ? [e.msg] : e.type === "merged-tools" ? e.messages : [];
+      const msgs =
+        e.type === "message"
+          ? [e.msg]
+          : e.type === "merged-tools"
+            ? e.messages
+            : [];
       for (const m of msgs) {
         if (m.token_usage) {
           input += m.token_usage.input_tokens;
@@ -47,11 +52,16 @@ export function SessionToolbar(props: {
       <div class="session-header">
         <div class="session-breadcrumb">
           <div class="breadcrumb-nav">
-            <span class="breadcrumb-provider" style={{ color: `var(--${props.meta().provider})` }}>
+            <span
+              class="breadcrumb-provider"
+              style={{ color: `var(--${props.meta().provider})` }}
+            >
               {providerLabel()}
             </span>
             <span class="breadcrumb-sep">&rsaquo;</span>
-            <span class="breadcrumb-project">{props.meta().project_name || t("explorer.noProject")}</span>
+            <span class="breadcrumb-project">
+              {props.meta().project_name || t("explorer.noProject")}
+            </span>
           </div>
           <div class="breadcrumb-title">{props.meta().title}</div>
         </div>
@@ -59,24 +69,44 @@ export function SessionToolbar(props: {
           <button
             class={`session-action-btn session-action-btn-icon${props.watching() ? " watching" : ""}`}
             onClick={props.onToggleWatch}
-            title={props.watching() ? t("session.watchStop") : t("session.watchStart")}
+            title={
+              props.watching()
+                ? t("session.watchStop")
+                : t("session.watchStart")
+            }
           >
             {props.watching() ? "\u25C9" : "\u25CE"}
           </button>
           <button
             class={`session-action-btn session-action-btn-icon${props.starred() ? " starred" : ""}`}
             onClick={props.onToggleFavorite}
-            title={props.starred() ? t("session.favoriteRemove") : t("session.favoriteAdd")}
+            title={
+              props.starred()
+                ? t("session.favoriteRemove")
+                : t("session.favoriteAdd")
+            }
           >
             {props.starred() ? "\u2605" : "\u2606"}
           </button>
-          <button class="session-action-btn primary" onClick={props.onResume} title={t("session.resume")}>
+          <button
+            class="session-action-btn primary"
+            onClick={props.onResume}
+            title={t("session.resume")}
+          >
             {t("session.resume")}
           </button>
-          <button class="session-action-btn" onClick={props.onExport} title={t("session.export")}>
+          <button
+            class="session-action-btn"
+            onClick={props.onExport}
+            title={t("session.export")}
+          >
             {t("session.export")}
           </button>
-          <button class="session-action-btn" onClick={props.onCopy} title={t("session.copy")}>
+          <button
+            class="session-action-btn"
+            onClick={props.onCopy}
+            title={t("session.copy")}
+          >
             {t("session.copy")}
           </button>
           <button
@@ -92,11 +122,13 @@ export function SessionToolbar(props: {
       {/* Info bar */}
       <div class="session-info">
         <span>
-          {t("session.created")}: {formatTimestamp(props.meta().created_at, locale())}
+          {t("session.created")}:{" "}
+          {formatTimestamp(props.meta().created_at, locale())}
         </span>
         <span class="info-sep">&middot;</span>
         <span>
-          {props.meta().message_count || props.messages().length} {t("session.messages")}
+          {props.meta().message_count || props.messages().length}{" "}
+          {t("session.messages")}
         </span>
         <span class="info-sep">&middot;</span>
         <span>{formatFileSize(props.meta().file_size_bytes)}</span>

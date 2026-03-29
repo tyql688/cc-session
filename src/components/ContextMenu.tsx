@@ -32,8 +32,10 @@ export function ContextMenu(props: Props) {
               const rect = el.getBoundingClientRect();
               const vw = window.innerWidth;
               const vh = window.innerHeight;
-              if (rect.right > vw) el.style.left = `${Math.max(4, pos().x - rect.width)}px`;
-              if (rect.bottom > vh) el.style.top = `${Math.max(4, pos().y - rect.height)}px`;
+              if (rect.right > vw)
+                el.style.left = `${Math.max(4, pos().x - rect.width)}px`;
+              if (rect.bottom > vh)
+                el.style.top = `${Math.max(4, pos().y - rect.height)}px`;
             });
           }}
           style={{ left: `${pos().x}px`, top: `${pos().y}px` }}
@@ -41,7 +43,10 @@ export function ContextMenu(props: Props) {
         >
           <For each={props.items}>
             {(item) => (
-              <Show when={!item.separator} fallback={<div class="context-menu-separator" />}>
+              <Show
+                when={!item.separator}
+                fallback={<div class="context-menu-separator" />}
+              >
                 <button
                   class={`context-menu-item${item.danger ? " danger" : ""}`}
                   onClick={() => {
@@ -49,7 +54,11 @@ export function ContextMenu(props: Props) {
                     props.onClose();
                   }}
                 >
-                  <span>{typeof item.label === "function" ? item.label() : item.label}</span>
+                  <span>
+                    {typeof item.label === "function"
+                      ? item.label()
+                      : item.label}
+                  </span>
                   <Show when={item.shortcut}>
                     <span class="shortcut">{item.shortcut}</span>
                   </Show>

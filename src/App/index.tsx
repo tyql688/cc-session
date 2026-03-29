@@ -146,7 +146,10 @@ export default function App() {
   });
 
   const filteredTree = createMemo(() =>
-    tree().filter((node) => !disabledProviders().includes(node.id as "claude" | "codex" | "gemini")),
+    tree().filter(
+      (node) =>
+        !disabledProviders().includes(node.id as "claude" | "codex" | "gemini"),
+    ),
   );
   const showExplorer = createMemo(() => {
     const v = activeView();
@@ -154,7 +157,9 @@ export default function App() {
   });
   const showExplorerTree = createMemo(() => {
     const v = activeView();
-    return v !== "settings" && v !== "trash" && v !== "favorites" && v !== "blocked";
+    return (
+      v !== "settings" && v !== "trash" && v !== "favorites" && v !== "blocked"
+    );
   });
 
   return (
@@ -163,7 +168,8 @@ export default function App() {
         class="titlebar"
         onMouseDown={(e) => {
           if (e.buttons !== 1) return;
-          if ((e.target as HTMLElement).closest("input, button, .search-panel")) return;
+          if ((e.target as HTMLElement).closest("input, button, .search-panel"))
+            return;
           e.preventDefault();
           if (e.detail === 2) {
             getCurrentWindow().toggleMaximize();
@@ -174,7 +180,8 @@ export default function App() {
       >
         <div class="titlebar-center">
           <span class="app-name">
-            <span class="app-name-bracket">&lt;</span>cc-session<span class="app-name-bracket">/&gt;</span>
+            <span class="app-name-bracket">&lt;</span>cc-session
+            <span class="app-name-bracket">/&gt;</span>
           </span>
         </div>
         <div class="titlebar-right">
@@ -228,8 +235,15 @@ export default function App() {
           />
         </Show>
       </div>
-      <StatusBar sessionCount={sessionCount()} providerCount={filteredTree().length} isIndexing={isLoading()} />
-      <KeyboardOverlay show={showKeyboardOverlay()} onClose={() => setShowKeyboardOverlay(false)} />
+      <StatusBar
+        sessionCount={sessionCount()}
+        providerCount={filteredTree().length}
+        isIndexing={isLoading()}
+      />
+      <KeyboardOverlay
+        show={showKeyboardOverlay()}
+        onClose={() => setShowKeyboardOverlay(false)}
+      />
       <ToastContainer />
     </div>
   );

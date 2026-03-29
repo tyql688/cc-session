@@ -1,7 +1,19 @@
-import { createSignal, createMemo, createResource, For, Show, onMount } from "solid-js";
+import {
+  createSignal,
+  createMemo,
+  createResource,
+  For,
+  Show,
+  onMount,
+} from "solid-js";
 import type { TrashMeta } from "../lib/types";
 import type { TreeNode } from "../lib/types";
-import { listTrash, restoreSession, emptyTrash, permanentDeleteTrash } from "../lib/tauri";
+import {
+  listTrash,
+  restoreSession,
+  emptyTrash,
+  permanentDeleteTrash,
+} from "../lib/tauri";
 import { ProviderDot } from "../lib/icons";
 import { collectSessionIds } from "../lib/tree-utils";
 import { buildTrashTree } from "../lib/tree-builders";
@@ -148,19 +160,37 @@ export function TrashView(props: { onRefreshTree: () => void }) {
             <span class="trash-tree-spacer" />
           </Show>
 
-          <Show when={nodeProps.node.node_type === "provider" && nodeProps.node.provider}>
+          <Show
+            when={
+              nodeProps.node.node_type === "provider" && nodeProps.node.provider
+            }
+          >
             <ProviderDot provider={nodeProps.node.provider!} />
           </Show>
           <Show when={isProject()}>
             <span class="trash-tree-icon">
-              <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24">
+              <svg
+                width="14"
+                height="14"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="1.5"
+                viewBox="0 0 24 24"
+              >
                 <path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z" />
               </svg>
             </span>
           </Show>
           <Show when={isLeaf()}>
             <span class="trash-tree-icon trash-tree-icon-session">
-              <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24">
+              <svg
+                width="14"
+                height="14"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="1.5"
+                viewBox="0 0 24 24"
+              >
                 <path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z" />
               </svg>
             </span>
@@ -188,7 +218,14 @@ export function TrashView(props: { onRefreshTree: () => void }) {
                 }}
                 title={t("trash.restore")}
               >
-                <svg width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                <svg
+                  width="12"
+                  height="12"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  viewBox="0 0 24 24"
+                >
                   <polyline points="1 4 1 10 7 10" />
                   <path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10" />
                 </svg>
@@ -201,7 +238,14 @@ export function TrashView(props: { onRefreshTree: () => void }) {
                 }}
                 title={t("trash.permanentDelete")}
               >
-                <svg width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                <svg
+                  width="12"
+                  height="12"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  viewBox="0 0 24 24"
+                >
                   <line x1="18" y1="6" x2="6" y2="18" />
                   <line x1="6" y1="6" x2="18" y2="18" />
                 </svg>
@@ -210,7 +254,9 @@ export function TrashView(props: { onRefreshTree: () => void }) {
           </Show>
 
           <Show when={isLeaf() && trashItem()}>
-            <span class="trash-tree-date">{formatTrashDate(trashItem()!.trashed_at)}</span>
+            <span class="trash-tree-date">
+              {formatTrashDate(trashItem()!.trashed_at)}
+            </span>
             <div class="trash-tree-actions">
               <button
                 class="trash-action-btn trash-action-btn-restore"
@@ -220,7 +266,14 @@ export function TrashView(props: { onRefreshTree: () => void }) {
                 }}
                 title={t("trash.restore")}
               >
-                <svg width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                <svg
+                  width="12"
+                  height="12"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  viewBox="0 0 24 24"
+                >
                   <polyline points="1 4 1 10 7 10" />
                   <path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10" />
                 </svg>
@@ -233,7 +286,14 @@ export function TrashView(props: { onRefreshTree: () => void }) {
                 }}
                 title={t("trash.permanentDelete")}
               >
-                <svg width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                <svg
+                  width="12"
+                  height="12"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  viewBox="0 0 24 24"
+                >
                   <line x1="18" y1="6" x2="6" y2="18" />
                   <line x1="6" y1="6" x2="18" y2="18" />
                 </svg>
@@ -244,7 +304,9 @@ export function TrashView(props: { onRefreshTree: () => void }) {
 
         <Show when={expanded() && !isLeaf()}>
           <For each={nodeProps.node.children}>
-            {(child) => <TrashTreeNode node={child} depth={nodeProps.depth + 1} />}
+            {(child) => (
+              <TrashTreeNode node={child} depth={nodeProps.depth + 1} />
+            )}
           </For>
         </Show>
       </div>
@@ -261,14 +323,21 @@ export function TrashView(props: { onRefreshTree: () => void }) {
           </Show>
         </span>
         <Show when={trashItems() && trashItems()!.length > 0}>
-          <button class="trash-empty-btn" onClick={() => setShowEmptyConfirm(true)}>
+          <button
+            class="trash-empty-btn"
+            onClick={() => setShowEmptyConfirm(true)}
+          >
             {t("trash.emptyTrash")}
           </button>
         </Show>
       </div>
 
       <div class="trash-list">
-        <Show when={!trashItems.loading && trashItems() && trashItems()!.length === 0}>
+        <Show
+          when={
+            !trashItems.loading && trashItems() && trashItems()!.length === 0
+          }
+        >
           <div class="trash-empty-state">
             <svg
               class="icon-faded"
@@ -292,7 +361,9 @@ export function TrashView(props: { onRefreshTree: () => void }) {
           </div>
         </Show>
 
-        <For each={tree()}>{(node) => <TrashTreeNode node={node} depth={0} />}</For>
+        <For each={tree()}>
+          {(node) => <TrashTreeNode node={node} depth={0} />}
+        </For>
       </div>
 
       <ConfirmDialog

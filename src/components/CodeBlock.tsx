@@ -114,8 +114,14 @@ export function CodeBlock(props: { code: string; language?: string }) {
   return (
     <div class="code-block">
       <div class="code-block-header">
-        {props.language && <span class="code-block-lang">{props.language}</span>}
-        <button class="code-block-copy" onClick={handleCopy} title={t("common.copyCode")}>
+        {props.language && (
+          <span class="code-block-lang">{props.language}</span>
+        )}
+        <button
+          class="code-block-copy"
+          onClick={handleCopy}
+          title={t("common.copyCode")}
+        >
           {copied() ? (
             <svg
               width="14"

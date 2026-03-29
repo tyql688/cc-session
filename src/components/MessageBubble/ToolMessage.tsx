@@ -27,7 +27,9 @@ function toolSummary(name: string, inputJson: string): string {
       case "Agent":
         return obj.description || "";
       default: {
-        const first = Object.values(obj).find((v) => typeof v === "string" && (v as string).length > 0);
+        const first = Object.values(obj).find(
+          (v) => typeof v === "string" && (v as string).length > 0,
+        );
         return first ? String(first).slice(0, 60) : "";
       }
     }
@@ -40,7 +42,10 @@ function toolSummary(name: string, inputJson: string): string {
 function formatToolInput(
   name: string,
   inputJson: string,
-): { lines: { label: string; value: string }[]; diff?: { old: string; new: string } } {
+): {
+  lines: { label: string; value: string }[];
+  diff?: { old: string; new: string };
+} {
   try {
     const obj = JSON.parse(inputJson);
     switch (name) {
@@ -60,19 +65,31 @@ function formatToolInput(
         return {
           lines: [
             { label: "file", value: obj.file_path || "" },
-            ...(obj.offset ? [{ label: "offset", value: String(obj.offset) }] : []),
-            ...(obj.limit ? [{ label: "limit", value: String(obj.limit) }] : []),
+            ...(obj.offset
+              ? [{ label: "offset", value: String(obj.offset) }]
+              : []),
+            ...(obj.limit
+              ? [{ label: "limit", value: String(obj.limit) }]
+              : []),
           ],
         };
       case "Bash":
-        return { lines: [{ label: "command", value: obj.command || obj.cmd || "" }] };
+        return {
+          lines: [{ label: "command", value: obj.command || obj.cmd || "" }],
+        };
       case "Plan": {
         const lines: { label: string; value: string }[] = [];
-        if (obj.explanation) lines.push({ label: "explanation", value: obj.explanation });
+        if (obj.explanation)
+          lines.push({ label: "explanation", value: obj.explanation });
         if (Array.isArray(obj.plan)) {
           const planText = obj.plan
             .map((s: { step: string; status: string }) => {
-              const icon = s.status === "completed" ? "✓" : s.status === "in_progress" ? "▸" : "○";
+              const icon =
+                s.status === "completed"
+                  ? "✓"
+                  : s.status === "in_progress"
+                    ? "▸"
+                    : "○";
               return `${icon} ${s.step}`;
             })
             .join("\n");
@@ -99,10 +116,15 @@ function formatToolInput(
   } catch {
     // apply_patch: raw patch text, extract file path from header
     if (name === "Apply_patch" && inputJson.includes("*** Begin Patch")) {
-      const fileMatch = inputJson.match(/\*\*\* (?:Add|Update|Delete) File:\s*(.+)/);
+      const fileMatch = inputJson.match(
+        /\*\*\* (?:Add|Update|Delete) File:\s*(.+)/,
+      );
       const filePath = fileMatch ? fileMatch[1].trim() : "";
       return {
-        lines: [...(filePath ? [{ label: "file", value: filePath }] : []), { label: "patch", value: inputJson }],
+        lines: [
+          ...(filePath ? [{ label: "file", value: filePath }] : []),
+          { label: "patch", value: inputJson },
+        ],
       };
     }
     return { lines: [{ label: "raw", value: inputJson }] };
@@ -128,7 +150,9 @@ const TOOL_ICONS: Record<string, string> = {
 };
 
 /** Parse MCP tool name: mcp__server__tool → { server, tool, display } */
-export function parseMcpToolName(name: string): { server: string; tool: string; display: string } | null {
+export function parseMcpToolName(
+  name: string,
+): { server: string; tool: string; display: string } | null {
   if (!name.startsWith("mcp__")) return null;
   const parts = name.slice(5).split("__");
   if (parts.length < 2) return null;
@@ -157,9 +181,12 @@ export function ToolMessage(props: { message: Message }) {
   const [expanded, setExpanded] = createSignal(false);
   const [previewSrc, setPreviewSrc] = createSignal<string | null>(null);
 
-  const hasInput = () => !!props.message.tool_input && props.message.tool_input.trim().length > 0;
-  const hasOutput = () => !!props.message.content && props.message.content.trim().length > 0;
-  const hasName = () => !!props.message.tool_name && props.message.tool_name.trim().length > 0;
+  const hasInput = () =>
+    !!props.message.tool_input && props.message.tool_input.trim().length > 0;
+  const hasOutput = () =>
+    !!props.message.content && props.message.content.trim().length > 0;
+  const hasName = () =>
+    !!props.message.tool_name && props.message.tool_name.trim().length > 0;
 
   if (!hasName()) return null;
 
@@ -167,8 +194,12 @@ export function ToolMessage(props: { message: Message }) {
   const mcp = () => parseMcpToolName(name());
   const icon = () => toolIcon(name());
   const displayName = () => toolDisplayName(name());
-  const summary = createMemo(() => (hasInput() ? toolSummary(name(), props.message.tool_input!) : ""));
-  const formatted = createMemo(() => (hasInput() ? formatToolInput(name(), props.message.tool_input!) : null));
+  const summary = createMemo(() =>
+    hasInput() ? toolSummary(name(), props.message.tool_input!) : "",
+  );
+  const formatted = createMemo(() =>
+    hasInput() ? formatToolInput(name(), props.message.tool_input!) : null,
+  );
 
   return (
     <div class={`msg-tool${expanded() ? " expanded" : ""}`}>

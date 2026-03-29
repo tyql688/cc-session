@@ -1,4 +1,10 @@
-export type Provider = "claude" | "codex" | "gemini" | "cursor" | "opencode" | "kimi";
+export type Provider =
+  | "claude"
+  | "codex"
+  | "gemini"
+  | "cursor"
+  | "opencode"
+  | "kimi";
 
 export interface SessionMeta {
   id: string;

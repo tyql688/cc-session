@@ -15,7 +15,9 @@ export function SessionSearch(props: {
    *  flips message order but not text order within each message. */
   function getMarksInVisualOrder(): Element[] {
     if (!props.messagesRef) return [];
-    const marks = Array.from(props.messagesRef.querySelectorAll("mark.search-highlight"));
+    const marks = Array.from(
+      props.messagesRef.querySelectorAll("mark.search-highlight"),
+    );
     marks.sort((a, b) => {
       const ra = a.getBoundingClientRect();
       const rb = b.getBoundingClientRect();
@@ -30,8 +32,11 @@ export function SessionSearch(props: {
     const marks = getMarksInVisualOrder();
     if (marks.length === 0) return;
     // Remove previous active highlight
-    props.messagesRef?.querySelector("mark.search-active")?.classList.remove("search-active");
-    const newIdx = (props.searchMatchIdx() + delta + marks.length) % marks.length;
+    props.messagesRef
+      ?.querySelector("mark.search-active")
+      ?.classList.remove("search-active");
+    const newIdx =
+      (props.searchMatchIdx() + delta + marks.length) % marks.length;
     props.setSearchMatchIdx(newIdx);
     const target = marks[newIdx];
     target.classList.add("search-active");
@@ -52,7 +57,9 @@ export function SessionSearch(props: {
           requestAnimationFrame(() => {
             const marks = getMarksInVisualOrder();
             if (marks.length > 0) {
-              props.messagesRef?.querySelector("mark.search-active")?.classList.remove("search-active");
+              props.messagesRef
+                ?.querySelector("mark.search-active")
+                ?.classList.remove("search-active");
               marks[0].classList.add("search-active");
               marks[0].scrollIntoView({ behavior: "smooth", block: "center" });
             }
@@ -80,10 +87,18 @@ export function SessionSearch(props: {
           return "";
         })()}
       </span>
-      <button class="session-search-nav" onClick={() => navigateSearchMatch(-1)} aria-label="Previous match">
+      <button
+        class="session-search-nav"
+        onClick={() => navigateSearchMatch(-1)}
+        aria-label="Previous match"
+      >
         &uarr;
       </button>
-      <button class="session-search-nav" onClick={() => navigateSearchMatch(1)} aria-label="Next match">
+      <button
+        class="session-search-nav"
+        onClick={() => navigateSearchMatch(1)}
+        aria-label="Next match"
+      >
         &darr;
       </button>
       <button

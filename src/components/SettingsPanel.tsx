@@ -2,7 +2,12 @@ import { createSignal, createResource, onMount, For, Show } from "solid-js";
 import { useI18n, setLocale } from "../i18n/index";
 import type { Locale } from "../i18n/index";
 import type { IndexStats, ProviderInfo } from "../lib/types";
-import { getIndexStats, rebuildIndex, clearIndex, getProviderPaths } from "../lib/tauri";
+import {
+  getIndexStats,
+  rebuildIndex,
+  clearIndex,
+  getProviderPaths,
+} from "../lib/tauri";
 import { toast, toastError } from "../stores/toast";
 import { theme, setTheme } from "../stores/theme";
 import type { Theme } from "../stores/theme";
@@ -20,11 +25,17 @@ import { relaunch } from "@tauri-apps/plugin-process";
 import { isMac } from "../lib/platform";
 import { formatFileSize } from "../lib/formatters";
 
-type SettingsCategory = "general" | "dataSources" | "index" | "keyboard" | "about";
+type SettingsCategory =
+  | "general"
+  | "dataSources"
+  | "index"
+  | "keyboard"
+  | "about";
 
 export function SettingsPanel() {
   const { t, locale } = useI18n();
-  const [activeCategory, setActiveCategory] = createSignal<SettingsCategory>("general");
+  const [activeCategory, setActiveCategory] =
+    createSignal<SettingsCategory>("general");
   const [isRebuilding, setIsRebuilding] = createSignal(false);
   const [version, setVersion] = createSignal("0.1.0");
   const [updateChecking, setUpdateChecking] = createSignal(false);
@@ -36,7 +47,9 @@ export function SettingsPanel() {
     try {
       const update = await check();
       if (update) {
-        const yes = confirm(`${t("settings.updateAvailable")}: v${update.version}\n\n${t("settings.updateConfirm")}`);
+        const yes = confirm(
+          `${t("settings.updateAvailable")}: v${update.version}\n\n${t("settings.updateConfirm")}`,
+        );
         if (yes) {
           setUpdateStatus(t("settings.updating"));
           await update.downloadAndInstall();
@@ -66,15 +79,19 @@ export function SettingsPanel() {
     }
   });
 
-  const [indexStats, { refetch: refetchStats }] = createResource<IndexStats>(async () => {
-    try {
-      return await getIndexStats();
-    } catch {
-      return { session_count: 0, db_size_bytes: 0, last_index_time: "" };
-    }
-  });
+  const [indexStats, { refetch: refetchStats }] = createResource<IndexStats>(
+    async () => {
+      try {
+        return await getIndexStats();
+      } catch {
+        return { session_count: 0, db_size_bytes: 0, last_index_time: "" };
+      }
+    },
+  );
 
-  const [providerPaths, { refetch: refetchProviderPaths }] = createResource<ProviderInfo[]>(async () => {
+  const [providerPaths, { refetch: refetchProviderPaths }] = createResource<
+    ProviderInfo[]
+  >(async () => {
     try {
       return await getProviderPaths();
     } catch {
@@ -83,8 +100,14 @@ export function SettingsPanel() {
   });
 
   const categories = [
-    { id: "general" as SettingsCategory, labelKey: "settings.general" as const },
-    { id: "dataSources" as SettingsCategory, labelKey: "settings.dataSources" as const },
+    {
+      id: "general" as SettingsCategory,
+      labelKey: "settings.general" as const,
+    },
+    {
+      id: "dataSources" as SettingsCategory,
+      labelKey: "settings.dataSources" as const,
+    },
     { id: "index" as SettingsCategory, labelKey: "settings.index" as const },
     { id: "keyboard" as SettingsCategory, labelKey: "keyboard.title" as const },
     { id: "about" as SettingsCategory, labelKey: "settings.about" as const },
@@ -104,7 +127,8 @@ export function SettingsPanel() {
   }
 
   function handleTerminalChange(value: string) {
-    if (validTerminals.includes(value as TerminalApp)) setTerminalApp(value as TerminalApp);
+    if (validTerminals.includes(value as TerminalApp))
+      setTerminalApp(value as TerminalApp);
   }
 
   async function handleRebuildIndex() {
@@ -203,7 +227,9 @@ export function SettingsPanel() {
             <div class="settings-row">
               <div>
                 <div class="settings-label">{t("settings.timeGrouping")}</div>
-                <div class="settings-desc">{t("settings.timeGroupingDesc")}</div>
+                <div class="settings-desc">
+                  {t("settings.timeGroupingDesc")}
+                </div>
               </div>
               <input
                 type="checkbox"
@@ -217,7 +243,9 @@ export function SettingsPanel() {
 
         <Show when={activeCategory() === "dataSources"}>
           <div class="settings-section">
-            <div class="settings-section-title">{t("settings.dataSources")}</div>
+            <div class="settings-section-title">
+              {t("settings.dataSources")}
+            </div>
             <Show when={providerPaths()}>
               <For each={providerPaths()}>
                 {(info) => (
@@ -232,10 +260,15 @@ export function SettingsPanel() {
                             title={t("settings.openInFinder")}
                             onClick={async () => {
                               try {
-                                const { open } = await import("@tauri-apps/plugin-shell");
+                                const { open } =
+                                  await import("@tauri-apps/plugin-shell");
                                 await open(info.path);
                               } catch (e) {
-                                console.warn("failed to open folder:", info.path, e);
+                                console.warn(
+                                  "failed to open folder:",
+                                  info.path,
+                                  e,
+                                );
                               }
                             }}
                           >
@@ -264,11 +297,15 @@ export function SettingsPanel() {
                           class={`settings-btn${disabledProviders().includes(info.key) ? " settings-btn-danger" : ""}`}
                           onClick={() => toggleProvider(info.key)}
                         >
-                          {disabledProviders().includes(info.key) ? t("settings.disabled") : t("settings.enabled")}
+                          {disabledProviders().includes(info.key)
+                            ? t("settings.disabled")
+                            : t("settings.enabled")}
                         </button>
                       </Show>
                       <Show when={!info.exists}>
-                        <span class="settings-stat text-danger">{t("settings.disabled")}</span>
+                        <span class="settings-stat text-danger">
+                          {t("settings.disabled")}
+                        </span>
                       </Show>
                     </div>
                   </div>
@@ -284,16 +321,24 @@ export function SettingsPanel() {
 
             <div class="settings-row">
               <div class="settings-label">{t("settings.totalSessions")}</div>
-              <span class="settings-stat">{indexStats()?.session_count ?? 0}</span>
+              <span class="settings-stat">
+                {indexStats()?.session_count ?? 0}
+              </span>
             </div>
 
             <div class="settings-row">
               <div class="settings-label">{t("settings.dbSize")}</div>
-              <span class="settings-stat">{formatFileSize(indexStats()?.db_size_bytes ?? 0)}</span>
+              <span class="settings-stat">
+                {formatFileSize(indexStats()?.db_size_bytes ?? 0)}
+              </span>
             </div>
 
             <div class="settings-row settings-row-spaced">
-              <button class="settings-btn" onClick={handleRebuildIndex} disabled={isRebuilding()}>
+              <button
+                class="settings-btn"
+                onClick={handleRebuildIndex}
+                disabled={isRebuilding()}
+              >
                 {isRebuilding() ? "..." : t("settings.rebuildIndex")}
               </button>
               <button
@@ -321,7 +366,9 @@ export function SettingsPanel() {
             <div class="settings-section-title">{t("keyboard.title")}</div>
 
             <div class="settings-shortcuts-group">
-              <div class="settings-shortcuts-label">{t("keyboard.navigation")}</div>
+              <div class="settings-shortcuts-label">
+                {t("keyboard.navigation")}
+              </div>
               <div class="settings-shortcut-row">
                 <span>{t("keyboard.search")}</span>
                 <kbd>{isMac ? "\u2318" : "Ctrl+"}K</kbd>
@@ -353,7 +400,9 @@ export function SettingsPanel() {
             </div>
 
             <div class="settings-shortcuts-group">
-              <div class="settings-shortcuts-label">{t("keyboard.session")}</div>
+              <div class="settings-shortcuts-label">
+                {t("keyboard.session")}
+              </div>
               <div class="settings-shortcut-row">
                 <span>{t("keyboard.resumeSession")}</span>
                 <kbd>{isMac ? "\u21E7\u2318" : "Shift+Ctrl+"}R</kbd>
@@ -380,7 +429,9 @@ export function SettingsPanel() {
             </div>
 
             <div class="settings-shortcuts-group">
-              <div class="settings-shortcuts-label">{t("keyboard.general")}</div>
+              <div class="settings-shortcuts-label">
+                {t("keyboard.general")}
+              </div>
               <div class="settings-shortcut-row">
                 <span>{t("keyboard.showShortcuts")}</span>
                 <kbd>{isMac ? "\u2318" : "Ctrl+"}/</kbd>
@@ -403,10 +454,18 @@ export function SettingsPanel() {
 
             <div class="settings-row">
               <div class="settings-label">{t("settings.version")}</div>
-              <div style={{ display: "flex", "align-items": "center", gap: "8px" }}>
+              <div
+                style={{ display: "flex", "align-items": "center", gap: "8px" }}
+              >
                 <span class="settings-stat">{version()}</span>
-                <button class="settings-btn" disabled={updateChecking()} onClick={handleCheckUpdate}>
-                  {updateChecking() ? "..." : updateStatus() || t("settings.checkUpdate")}
+                <button
+                  class="settings-btn"
+                  disabled={updateChecking()}
+                  onClick={handleCheckUpdate}
+                >
+                  {updateChecking()
+                    ? "..."
+                    : updateStatus() || t("settings.checkUpdate")}
                 </button>
               </div>
             </div>
@@ -418,7 +477,9 @@ export function SettingsPanel() {
                 href="https://github.com/tyql688/cc-session"
                 onClick={(e) => {
                   e.preventDefault();
-                  import("@tauri-apps/plugin-shell").then(({ open }) => open("https://github.com/tyql688/cc-session"));
+                  import("@tauri-apps/plugin-shell").then(({ open }) =>
+                    open("https://github.com/tyql688/cc-session"),
+                  );
                 }}
               >
                 cc-session

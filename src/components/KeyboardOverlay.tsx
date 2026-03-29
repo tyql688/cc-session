@@ -21,7 +21,10 @@ const shortcuts: ShortcutCategory[] = [
       { keys: `${shift}${mod}F`, descKey: "keyboard.globalSearch" },
       { keys: `${mod}1-9`, descKey: "keyboard.switchTab" },
       { keys: isMac ? `${mod}]` : "Ctrl+Tab", descKey: "keyboard.nextTab" },
-      { keys: isMac ? `${mod}[` : `${shift}Ctrl+Tab`, descKey: "keyboard.prevTab" },
+      {
+        keys: isMac ? `${mod}[` : `${shift}Ctrl+Tab`,
+        descKey: "keyboard.prevTab",
+      },
     ],
   },
   {
@@ -69,8 +72,18 @@ export function KeyboardOverlay(props: { show: boolean; onClose: () => void }) {
         >
           <div class="keyboard-overlay-header">
             <span class="keyboard-overlay-title">{t("keyboard.title")}</span>
-            <button class="keyboard-overlay-close" onClick={() => props.onClose()}>
-              <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+            <button
+              class="keyboard-overlay-close"
+              onClick={() => props.onClose()}
+            >
+              <svg
+                width="14"
+                height="14"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                viewBox="0 0 24 24"
+              >
                 <line x1="18" y1="6" x2="6" y2="18" />
                 <line x1="6" y1="6" x2="18" y2="18" />
               </svg>
@@ -80,11 +93,15 @@ export function KeyboardOverlay(props: { show: boolean; onClose: () => void }) {
             <For each={shortcuts}>
               {(cat) => (
                 <div>
-                  <div class="keyboard-category-title">{t(cat.categoryKey)}</div>
+                  <div class="keyboard-category-title">
+                    {t(cat.categoryKey)}
+                  </div>
                   <For each={cat.items}>
                     {(item) => (
                       <div class="keyboard-item">
-                        <span class="keyboard-item-desc">{t(item.descKey) || item.descKey}</span>
+                        <span class="keyboard-item-desc">
+                          {t(item.descKey) || item.descKey}
+                        </span>
                         <span class="keyboard-keys">{item.keys}</span>
                       </div>
                     )}

@@ -14,7 +14,11 @@ import { ToolMessage } from "./ToolMessage";
 export { ProviderIcon } from "../../lib/icons";
 export { formatMcpLabel } from "./ToolMessage";
 
-export function MessageBubble(props: { message: Message; provider?: Provider; highlightTerm?: string }) {
+export function MessageBubble(props: {
+  message: Message;
+  provider?: Provider;
+  highlightTerm?: string;
+}) {
   const segments = createMemo(() => parseContent(props.message.content));
   const [previewSrc, setPreviewSrc] = createSignal<string | null>(null);
 
@@ -52,12 +56,17 @@ export function MessageBubble(props: { message: Message; provider?: Provider; hi
 
   return (
     <>
-      <Show when={props.message.role !== "tool"} fallback={<ToolMessage message={props.message} />}>
+      <Show
+        when={props.message.role !== "tool"}
+        fallback={<ToolMessage message={props.message} />}
+      >
         <Show
           when={props.message.role !== "system"}
           fallback={
             props.message.content.startsWith("[thinking]\n") ? (
-              <ThinkingBlock content={props.message.content.slice("[thinking]\n".length)} />
+              <ThinkingBlock
+                content={props.message.content.slice("[thinking]\n".length)}
+              />
             ) : (
               <div class="msg-system">{props.message.content}</div>
             )
@@ -69,7 +78,9 @@ export function MessageBubble(props: { message: Message; provider?: Provider; hi
             >
               <Show
                 when={props.message.role === "user"}
-                fallback={<ProviderIcon provider={props.provider ?? "claude"} />}
+                fallback={
+                  <ProviderIcon provider={props.provider ?? "claude"} />
+                }
               >
                 <UserIcon />
               </Show>
@@ -81,11 +92,18 @@ export function MessageBubble(props: { message: Message; provider?: Provider; hi
                     if (seg.language?.toLowerCase() === "mermaid") {
                       return <MermaidBlock code={seg.content} />;
                     }
-                    return <CodeBlock code={seg.content} language={seg.language} />;
+                    return (
+                      <CodeBlock code={seg.content} language={seg.language} />
+                    );
                   }
                   if (seg.type === "image") {
                     if (isLocalPath(seg.content)) {
-                      return <LocalImage path={seg.content} onPreview={(s) => setPreviewSrc(s)} />;
+                      return (
+                        <LocalImage
+                          path={seg.content}
+                          onPreview={(s) => setPreviewSrc(s)}
+                        />
+                      );
                     }
                     return (
                       <div class="msg-image-wrap">
@@ -111,7 +129,11 @@ export function MessageBubble(props: { message: Message; provider?: Provider; hi
               <CopyMessageButton content={props.message.content} />
             </div>
           </div>
-          <Show when={props.message.role === "assistant" && props.message.token_usage}>
+          <Show
+            when={
+              props.message.role === "assistant" && props.message.token_usage
+            }
+          >
             <div class="msg-token-row">
               <TokenUsageDisplay usage={props.message.token_usage!} />
             </div>

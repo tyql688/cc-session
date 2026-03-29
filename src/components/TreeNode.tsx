@@ -26,7 +26,14 @@ export function ChevronIcon(props: { expanded: boolean }) {
 
 export function FolderIcon() {
   return (
-    <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24">
+    <svg
+      width="16"
+      height="16"
+      fill="none"
+      stroke="currentColor"
+      stroke-width="1.5"
+      viewBox="0 0 24 24"
+    >
       <path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z" />
     </svg>
   );
@@ -34,7 +41,14 @@ export function FolderIcon() {
 
 export function ChatIcon() {
   return (
-    <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24">
+    <svg
+      width="16"
+      height="16"
+      fill="none"
+      stroke="currentColor"
+      stroke-width="1.5"
+      viewBox="0 0 24 24"
+    >
       <path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z" />
     </svg>
   );
@@ -70,9 +84,17 @@ export function TreeNodeComponent(props: {
   parentProjectLabel?: string;
   isNodeExpanded: (nodeId: string) => boolean;
   toggleExpanded: (nodeId: string) => void;
-  onSessionContextMenu: (e: MouseEvent, node: TreeNode, parentProjectLabel: string) => void;
+  onSessionContextMenu: (
+    e: MouseEvent,
+    node: TreeNode,
+    parentProjectLabel: string,
+  ) => void;
   onNodeContextMenu: (e: MouseEvent, node: TreeNode) => void;
-  onSessionClick: (e: MouseEvent, node: TreeNode, parentProjectLabel: string) => void;
+  onSessionClick: (
+    e: MouseEvent,
+    node: TreeNode,
+    parentProjectLabel: string,
+  ) => void;
 }) {
   const { t } = useI18n();
   const isLeaf = () => props.node.node_type === "session";
@@ -104,7 +126,10 @@ export function TreeNodeComponent(props: {
       : props.parentProjectLabel;
 
   const displayLabel = () => {
-    if (props.node.node_type === "project" && props.node.label === "(No Project)") {
+    if (
+      props.node.node_type === "project" &&
+      props.node.label === "(No Project)"
+    ) {
       return t("explorer.noProject");
     }
     return props.node.label;
@@ -144,9 +169,13 @@ export function TreeNodeComponent(props: {
 
         <span
           class={`tree-node-label${props.node.node_type === "provider" ? " bold" : ""}`}
-          title={props.node.node_type === "session" ? props.node.label : undefined}
+          title={
+            props.node.node_type === "session" ? props.node.label : undefined
+          }
         >
-          {props.node.node_type === "session" ? formatSessionLabel(props.node.label) : displayLabel()}
+          {props.node.node_type === "session"
+            ? formatSessionLabel(props.node.label)
+            : displayLabel()}
         </span>
 
         <Show when={props.node.is_sidechain}>

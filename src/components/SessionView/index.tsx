@@ -1,7 +1,22 @@
-import { createSignal, createEffect, createMemo, For, Show, on, onMount, onCleanup } from "solid-js";
+import {
+  createSignal,
+  createEffect,
+  createMemo,
+  For,
+  Show,
+  on,
+  onMount,
+  onCleanup,
+} from "solid-js";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import type { SessionMeta, Message, MessageRole } from "../../lib/types";
-import { getSessionDetail, trashSession, resumeSession, isFavorite, toggleFavorite } from "../../lib/tauri";
+import {
+  getSessionDetail,
+  trashSession,
+  resumeSession,
+  isFavorite,
+  toggleFavorite,
+} from "../../lib/tauri";
 import { useI18n } from "../../i18n/index";
 import { MessageBubble } from "../MessageBubble";
 import { MergedToolRow } from "../MergedToolRow";
@@ -25,7 +40,9 @@ export function SessionView(props: {
   const BATCH_SIZE = 80;
   const LOAD_MORE_THRESHOLD = 1;
   const [visibleCount, setVisibleCount] = createSignal(BATCH_SIZE);
-  const [hiddenRoles, setHiddenRoles] = createSignal<Set<MessageRole>>(new Set());
+  const [hiddenRoles, setHiddenRoles] = createSignal<Set<MessageRole>>(
+    new Set(),
+  );
   const [sessionSearch, setSessionSearch] = createSignal("");
   const [searchBarOpen, setSearchBarOpen] = createSignal(false);
   const [searchMatchIdx, setSearchMatchIdx] = createSignal(0);
@@ -48,7 +65,10 @@ export function SessionView(props: {
     filteredEntries().forEach((e, idx) => {
       if (e.type === "message" && e.msg.content.toLowerCase().includes(term)) {
         indices.push(idx);
-      } else if (e.type === "merged-tools" && e.messages.some((m) => m.content.toLowerCase().includes(term))) {
+      } else if (
+        e.type === "merged-tools" &&
+        e.messages.some((m) => m.content.toLowerCase().includes(term))
+      ) {
         indices.push(idx);
       }
     });
@@ -57,9 +77,15 @@ export function SessionView(props: {
 
   // Role counts for filter toolbar
   const roleCounts = createMemo(() => {
-    const counts: Record<string, number> = { user: 0, assistant: 0, tool: 0, system: 0 };
+    const counts: Record<string, number> = {
+      user: 0,
+      assistant: 0,
+      tool: 0,
+      system: 0,
+    };
     for (const e of processedEntries()) {
-      if (e.type === "message") counts[e.msg.role] = (counts[e.msg.role] || 0) + 1;
+      if (e.type === "message")
+        counts[e.msg.role] = (counts[e.msg.role] || 0) + 1;
       else if (e.type === "merged-tools") counts.tool += e.messages.length;
     }
     return counts;
@@ -90,7 +116,11 @@ export function SessionView(props: {
         setMessages([]);
         setVisibleCount(BATCH_SIZE);
         try {
-          const detail = await getSessionDetail(sessionId, props.session.source_path, props.session.provider);
+          const detail = await getSessionDetail(
+            sessionId,
+            props.session.source_path,
+            props.session.provider,
+          );
           // Discard result if a newer load was triggered
           if (version !== loadVersion) return;
           setMeta(detail.meta);
@@ -131,13 +161,18 @@ export function SessionView(props: {
     // column-reverse: scrollTop=0 is bottom (newest). User scrolls up -> scrollTop
     // goes negative. We want to load more when user reaches the visual top.
     // Visual top = max negative scrollTop = -(scrollHeight - clientHeight).
-    const atVisualTop = target.scrollHeight + target.scrollTop - target.clientHeight <= LOAD_MORE_THRESHOLD;
+    const atVisualTop =
+      target.scrollHeight + target.scrollTop - target.clientHeight <=
+      LOAD_MORE_THRESHOLD;
 
     if (atVisualTop) {
       loadOlderDebounce = setTimeout(() => {
         if (!messagesRef) return;
         const stillAtTop =
-          messagesRef.scrollHeight + messagesRef.scrollTop - messagesRef.clientHeight <= LOAD_MORE_THRESHOLD;
+          messagesRef.scrollHeight +
+            messagesRef.scrollTop -
+            messagesRef.clientHeight <=
+          LOAD_MORE_THRESHOLD;
         if (stillAtTop) {
           loadOlderEntries();
         }
@@ -154,7 +189,9 @@ export function SessionView(props: {
   const onSessionSearch = () => {
     setSearchBarOpen(true);
     requestAnimationFrame(() => {
-      (document.querySelector(".session-search-input") as HTMLInputElement)?.focus();
+      (
+        document.querySelector(".session-search-input") as HTMLInputElement
+      )?.focus();
     });
   };
 
@@ -188,7 +225,10 @@ export function SessionView(props: {
       return;
     }
 
-    if (messagesRef.scrollHeight <= messagesRef.clientHeight + LOAD_MORE_THRESHOLD) {
+    if (
+      messagesRef.scrollHeight <=
+      messagesRef.clientHeight + LOAD_MORE_THRESHOLD
+    ) {
       requestAnimationFrame(() => {
         loadOlderEntries();
       });
@@ -206,7 +246,11 @@ export function SessionView(props: {
 
   async function reloadSession() {
     try {
-      const detail = await getSessionDetail(props.session.id, props.session.source_path, props.session.provider);
+      const detail = await getSessionDetail(
+        props.session.id,
+        props.session.source_path,
+        props.session.provider,
+      );
       const oldCount = messages().length;
       setMeta(detail.meta);
       setMessages(detail.messages);
@@ -233,7 +277,8 @@ export function SessionView(props: {
       unwatchFn = undefined;
 
       if (isWatching) {
-        const activeSourcePath = meta().source_path || props.session.source_path;
+        const activeSourcePath =
+          meta().source_path || props.session.source_path;
         const isDbSource = activeSourcePath?.endsWith(".db");
 
         if (isDbSource) {
@@ -320,7 +365,12 @@ export function SessionView(props: {
 
   const handleDelete = async () => {
     try {
-      await trashSession(props.session.id, props.session.source_path, props.session.provider, props.session.title);
+      await trashSession(
+        props.session.id,
+        props.session.source_path,
+        props.session.provider,
+        props.session.title,
+      );
       setShowDeleteConfirm(false);
       props.onCloseTab(props.session.id);
       props.onRefreshTree();
@@ -359,10 +409,15 @@ export function SessionView(props: {
       {/* Filter toolbar — only show roles that have messages */}
       <div class="filter-toolbar">
         <For
-          each={(["user", "assistant", "tool", "system"] as MessageRole[]).filter((r) => (roleCounts()[r] || 0) > 0)}
+          each={(
+            ["user", "assistant", "tool", "system"] as MessageRole[]
+          ).filter((r) => (roleCounts()[r] || 0) > 0)}
         >
           {(role) => (
-            <button class={`filter-btn${hiddenRoles().has(role) ? "" : " active"}`} onClick={() => toggleRole(role)}>
+            <button
+              class={`filter-btn${hiddenRoles().has(role) ? "" : " active"}`}
+              onClick={() => toggleRole(role)}
+            >
               {role === "user"
                 ? t("session.filterUser")
                 : role === "assistant"
@@ -401,7 +456,11 @@ export function SessionView(props: {
       </Show>
 
       <Show when={!loading() && !error()}>
-        <div class="session-messages" ref={messagesRef} onScroll={handleMessagesScroll}>
+        <div
+          class="session-messages"
+          ref={messagesRef}
+          onScroll={handleMessagesScroll}
+        >
           <For each={visibleEntries()}>
             {(entry) => {
               if (entry.type === "time-sep") {
@@ -414,13 +473,21 @@ export function SessionView(props: {
               if (entry.type === "merged-tools") {
                 return (
                   <div class="session-entry" data-entry-key={entry.key}>
-                    <MergedToolRow tools={entry.tools} messages={entry.messages} highlightTerm={sessionSearch()} />
+                    <MergedToolRow
+                      tools={entry.tools}
+                      messages={entry.messages}
+                      highlightTerm={sessionSearch()}
+                    />
                   </div>
                 );
               }
               return (
                 <div class="session-entry" data-entry-key={entry.key}>
-                  <MessageBubble message={entry.msg} provider={meta().provider} highlightTerm={sessionSearch()} />
+                  <MessageBubble
+                    message={entry.msg}
+                    provider={meta().provider}
+                    highlightTerm={sessionSearch()}
+                  />
                 </div>
               );
             }}
@@ -441,7 +508,11 @@ export function SessionView(props: {
         danger={true}
       />
 
-      <ExportDialog open={showExportDialog()} session={props.session} onClose={() => setShowExportDialog(false)} />
+      <ExportDialog
+        open={showExportDialog()}
+        session={props.session}
+        onClose={() => setShowExportDialog(false)}
+      />
     </div>
   );
 }

@@ -14,9 +14,13 @@ export type TerminalApp =
   | "powershell"
   | "cmd"; // Windows
 
-const storedTerminal = localStorage.getItem("cc-session-terminal") as TerminalApp | null;
+const storedTerminal = localStorage.getItem(
+  "cc-session-terminal",
+) as TerminalApp | null;
 
-const [terminalApp, setTerminalAppSignal] = createSignal<TerminalApp>(storedTerminal || "terminal");
+const [terminalApp, setTerminalAppSignal] = createSignal<TerminalApp>(
+  storedTerminal || "terminal",
+);
 
 // Auto-detect terminal on first launch
 if (!storedTerminal) {
@@ -50,10 +54,14 @@ export function setTerminalApp(t: TerminalApp) {
 export { terminalApp };
 
 // Provider toggle: store disabled providers in localStorage
-const [disabledProviders, setDisabledProvidersSignal] = createSignal<Provider[]>(
+const [disabledProviders, setDisabledProvidersSignal] = createSignal<
+  Provider[]
+>(
   (() => {
     try {
-      return JSON.parse(localStorage.getItem("cc-session-disabled-providers") || "[]") as Provider[];
+      return JSON.parse(
+        localStorage.getItem("cc-session-disabled-providers") || "[]",
+      ) as Provider[];
     } catch {
       return [] as Provider[];
     }
@@ -62,7 +70,9 @@ const [disabledProviders, setDisabledProvidersSignal] = createSignal<Provider[]>
 
 export function toggleProvider(id: Provider) {
   setDisabledProvidersSignal((prev) => {
-    const next = prev.includes(id) ? prev.filter((p) => p !== id) : [...prev, id];
+    const next = prev.includes(id)
+      ? prev.filter((p) => p !== id)
+      : [...prev, id];
     localStorage.setItem("cc-session-disabled-providers", JSON.stringify(next));
     return next;
   });
@@ -86,7 +96,9 @@ export { timeGrouping };
 const [blockedFolders, setBlockedFoldersSignal] = createSignal<string[]>(
   (() => {
     try {
-      return JSON.parse(localStorage.getItem("cc-session-blocked-folders") || "[]") as string[];
+      return JSON.parse(
+        localStorage.getItem("cc-session-blocked-folders") || "[]",
+      ) as string[];
     } catch {
       return [] as string[];
     }
@@ -111,7 +123,9 @@ export function removeBlockedFolder(path: string) {
 }
 
 export function isPathBlocked(path: string): boolean {
-  return blockedFolders().some((blocked) => path === blocked || path.startsWith(blocked + "/"));
+  return blockedFolders().some(
+    (blocked) => path === blocked || path.startsWith(blocked + "/"),
+  );
 }
 
 export { blockedFolders };

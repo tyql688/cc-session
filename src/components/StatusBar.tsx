@@ -4,7 +4,11 @@ import type { Locale } from "../i18n/index";
 import { theme, setTheme, applyTheme } from "../stores/theme";
 import type { Theme } from "../stores/theme";
 
-export function StatusBar(props: { sessionCount: number; providerCount: number; isIndexing?: boolean }) {
+export function StatusBar(props: {
+  sessionCount: number;
+  providerCount: number;
+  isIndexing?: boolean;
+}) {
   const { t, locale, setLocale } = useI18n();
 
   onMount(() => {
@@ -49,7 +53,8 @@ export function StatusBar(props: { sessionCount: number; providerCount: number; 
             t("status.indexing")
           ) : (
             <>
-              {t("status.indexed")} — {props.sessionCount.toLocaleString()} {t("status.sessions")}
+              {t("status.indexed")} — {props.sessionCount.toLocaleString()}{" "}
+              {t("status.sessions")}
             </>
           )}
         </span>
@@ -63,11 +68,17 @@ export function StatusBar(props: { sessionCount: number; providerCount: number; 
           {themeIcon()}
         </button>
         <span class="locale-toggle">
-          <button class={`locale-btn${locale() === "en" ? " active" : ""}`} onClick={() => setLocale("en" as Locale)}>
+          <button
+            class={`locale-btn${locale() === "en" ? " active" : ""}`}
+            onClick={() => setLocale("en" as Locale)}
+          >
             EN
           </button>
           <span class="locale-divider">|</span>
-          <button class={`locale-btn${locale() === "zh" ? " active" : ""}`} onClick={() => setLocale("zh" as Locale)}>
+          <button
+            class={`locale-btn${locale() === "zh" ? " active" : ""}`}
+            onClick={() => setLocale("zh" as Locale)}
+          >
             中
           </button>
         </span>

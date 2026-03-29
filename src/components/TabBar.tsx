@@ -74,7 +74,10 @@ export function TabBar(props: {
               }}
               onContextMenu={(e) => handleContextMenu(e, tab.id)}
             >
-              <span class="tab-dot" style={{ background: providerColor(tab.provider) }} />
+              <span
+                class="tab-dot"
+                style={{ background: providerColor(tab.provider) }}
+              />
               <span class="tab-title">{tab.title}</span>
               <button
                 class={`tab-close${isActive() ? " visible" : ""}`}
@@ -91,7 +94,11 @@ export function TabBar(props: {
         }}
       </For>
 
-      <ContextMenu items={menuItems()} position={menuState()?.pos ?? null} onClose={() => setMenuState(null)} />
+      <ContextMenu
+        items={menuItems()}
+        position={menuState()?.pos ?? null}
+        onClose={() => setMenuState(null)}
+      />
     </div>
   );
 }

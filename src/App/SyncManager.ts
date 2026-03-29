@@ -21,8 +21,12 @@ export function createSyncManager(callbacks: SyncCallbacks) {
     callbacks.syncTabsWithTree(treeData);
   }
 
-  async function syncFromDisk(options?: { changedPaths?: string[]; showSpinner?: boolean }) {
-    const changedPaths = options?.changedPaths?.filter((path) => path.length > 0) ?? [];
+  async function syncFromDisk(options?: {
+    changedPaths?: string[];
+    showSpinner?: boolean;
+  }) {
+    const changedPaths =
+      options?.changedPaths?.filter((path) => path.length > 0) ?? [];
     const showSpinner = options?.showSpinner ?? false;
 
     if (syncInFlight) {

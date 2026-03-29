@@ -51,7 +51,13 @@ export function InputDialog(props: {
 
   return (
     <Show when={props.open}>
-      <div class="modal-overlay" onClick={handleOverlayClick} role="dialog" aria-modal="true" aria-label={props.title}>
+      <div
+        class="modal-overlay"
+        onClick={handleOverlayClick}
+        role="dialog"
+        aria-modal="true"
+        aria-label={props.title}
+      >
         <div class="modal-card">
           <div class="modal-title">{props.title}</div>
           <div class="modal-message">{props.label}</div>

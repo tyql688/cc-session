@@ -20,7 +20,13 @@ export function ConfirmDialog(props: {
 
   return (
     <Show when={props.open}>
-      <div class="modal-overlay" onClick={handleOverlayClick} role="dialog" aria-modal="true" aria-label={props.title}>
+      <div
+        class="modal-overlay"
+        onClick={handleOverlayClick}
+        role="dialog"
+        aria-modal="true"
+        aria-label={props.title}
+      >
         <div class="modal-card">
           <div class="modal-title">{props.title}</div>
           <div class="modal-message">{props.message}</div>
@@ -28,7 +34,10 @@ export function ConfirmDialog(props: {
             <button class="btn btn-secondary" onClick={props.onCancel}>
               {t("confirm.cancel")}
             </button>
-            <button class={`btn ${props.danger ? "btn-danger" : "btn-primary"}`} onClick={props.onConfirm}>
+            <button
+              class={`btn ${props.danger ? "btn-danger" : "btn-primary"}`}
+              onClick={props.onConfirm}
+            >
               {props.confirmLabel}
             </button>
           </div>

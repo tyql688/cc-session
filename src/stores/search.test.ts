@@ -4,7 +4,9 @@ import { parseSearchQuery } from "./search";
 
 describe("parseSearchQuery", () => {
   it("extracts provider, project, and free text", () => {
-    expect(parseSearchQuery("provider:claude project:web fix flaky test")).toEqual({
+    expect(
+      parseSearchQuery("provider:claude project:web fix flaky test"),
+    ).toEqual({
       query: "fix flaky test",
       provider: "claude",
       project: "web",
@@ -14,7 +16,9 @@ describe("parseSearchQuery", () => {
   });
 
   it("parses date filters and ignores invalid dates", () => {
-    expect(parseSearchQuery("after:2025-01-01 before:not-a-date search me")).toEqual({
+    expect(
+      parseSearchQuery("after:2025-01-01 before:not-a-date search me"),
+    ).toEqual({
       query: "search me",
       provider: undefined,
       project: undefined,

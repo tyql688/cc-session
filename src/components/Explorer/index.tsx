@@ -11,14 +11,27 @@ import {
 } from "../../lib/tauri";
 import { save } from "@tauri-apps/plugin-dialog";
 import { useI18n } from "../../i18n/index";
-import { terminalApp, timeGrouping, addBlockedFolder } from "../../stores/settings";
+import {
+  terminalApp,
+  timeGrouping,
+  addBlockedFolder,
+} from "../../stores/settings";
 import { ContextMenu, type MenuItemDef } from "../ContextMenu";
 import { InputDialog } from "../InputDialog";
 import { TreeNodeComponent, collectSessionNodes } from "../TreeNode";
-import { selectedIds, toggleSelected, clearSelection, selectionCount } from "../../stores/selection";
+import {
+  selectedIds,
+  toggleSelected,
+  clearSelection,
+  selectionCount,
+} from "../../stores/selection";
 import { toast, toastError } from "../../stores/toast";
 import { bumpFavoriteVersion } from "../../stores/favorites";
-import { filterBlockedFolders, applyTimeGrouping, buildSessionMeta } from "./hooks";
+import {
+  filterBlockedFolders,
+  applyTimeGrouping,
+  buildSessionMeta,
+} from "./hooks";
 
 function ExplorerSkeleton() {
   return (
@@ -100,7 +113,9 @@ export function Explorer(props: {
             return next;
           });
           requestAnimationFrame(() => {
-            const el = document.querySelector(`[data-session-id="${sessionId}"]`);
+            const el = document.querySelector(
+              `[data-session-id="${sessionId}"]`,
+            );
             el?.scrollIntoView({ block: "nearest", behavior: "smooth" });
           });
           return;
@@ -130,7 +145,11 @@ export function Explorer(props: {
 
   // --- Click handlers ---
 
-  function handleSessionClick(e: MouseEvent, node: TreeNode, parentProjectLabel: string) {
+  function handleSessionClick(
+    e: MouseEvent,
+    node: TreeNode,
+    parentProjectLabel: string,
+  ) {
     if (e.metaKey || e.ctrlKey) {
       toggleSelected(node.id);
       return;
@@ -139,7 +158,11 @@ export function Explorer(props: {
     props.onOpenSession(buildSessionMeta(node, parentProjectLabel));
   }
 
-  function handleSessionContextMenu(e: MouseEvent, node: TreeNode, parentProjectLabel: string) {
+  function handleSessionContextMenu(
+    e: MouseEvent,
+    node: TreeNode,
+    parentProjectLabel: string,
+  ) {
     setNodeMenu(null);
     setSelectionMenu(null);
     const sel = selectedIds();
@@ -185,7 +208,9 @@ export function Explorer(props: {
     }
   }
 
-  function findSessionInTree(sessionId: string): { provider: string; projectPath: string } | null {
+  function findSessionInTree(
+    sessionId: string,
+  ): { provider: string; projectPath: string } | null {
     function search(
       nodes: TreeNode[],
       providerHint: string,
@@ -196,7 +221,8 @@ export function Explorer(props: {
           return { provider: providerHint, projectPath: projectHint };
         }
         if (node.children && node.children.length > 0) {
-          const nextProvider = node.node_type === "provider" ? node.id : providerHint;
+          const nextProvider =
+            node.node_type === "provider" ? node.id : providerHint;
           // Only capture projectPath from the first project level (direct child of provider),
           // not from time group sub-nodes which also have node_type "project".
           const nextProject =
@@ -270,12 +296,15 @@ export function Explorer(props: {
     const items: MenuItemDef[] = [
       {
         label: t("contextMenu.openInNewTab"),
-        onClick: () => props.onOpenSession(buildSessionMeta(node, projectLabel)),
+        onClick: () =>
+          props.onOpenSession(buildSessionMeta(node, projectLabel)),
       },
       {
         label: t("contextMenu.copySessionId"),
         onClick: () => {
-          void navigator.clipboard.writeText(node.id).then(() => toast(t("toast.idCopied")));
+          void navigator.clipboard
+            .writeText(node.id)
+            .then(() => toast(t("toast.idCopied")));
         },
       },
       {
@@ -298,7 +327,9 @@ export function Explorer(props: {
             {
               label: t("contextMenu.copyPath"),
               onClick: () => {
-                void navigator.clipboard.writeText(sessionProjectPath).then(() => toast(t("toast.copied")));
+                void navigator.clipboard
+                  .writeText(sessionProjectPath)
+                  .then(() => toast(t("toast.copied")));
               },
             },
           ]
@@ -318,7 +349,9 @@ export function Explorer(props: {
           try {
             const newState = await toggleFavorite(node.id);
             bumpFavoriteVersion();
-            toast(t(newState ? "toast.favoriteAdded" : "toast.favoriteRemoved"));
+            toast(
+              t(newState ? "toast.favoriteAdded" : "toast.favoriteRemoved"),
+            );
           } catch (_e) {
             toastError(t("toast.favoriteFailed"));
           }
@@ -383,7 +416,9 @@ export function Explorer(props: {
       ];
     }
     // project — extract path from node.id format "provider:/path/to/project"
-    const projectPath = node.id.includes(":") ? node.id.slice(node.id.indexOf(":") + 1) : "";
+    const projectPath = node.id.includes(":")
+      ? node.id.slice(node.id.indexOf(":") + 1)
+      : "";
     const hasPath = projectPath.length > 0;
     return [
       ...(hasPath
@@ -397,7 +432,9 @@ export function Explorer(props: {
             {
               label: t("contextMenu.copyPath"),
               onClick: () => {
-                void navigator.clipboard.writeText(projectPath).then(() => toast(t("toast.copied")));
+                void navigator.clipboard
+                  .writeText(projectPath)
+                  .then(() => toast(t("toast.copied")));
               },
             },
             { label: "", separator: true, onClick: () => {} },
@@ -490,9 +527,21 @@ export function Explorer(props: {
         </For>
       </div>
 
-      <ContextMenu items={sessionMenuItems()} position={sessionMenu()?.pos ?? null} onClose={closeAllMenus} />
-      <ContextMenu items={selectionMenuItems()} position={selectionMenu()} onClose={closeAllMenus} />
-      <ContextMenu items={nodeMenuItems()} position={nodeMenu()?.pos ?? null} onClose={closeAllMenus} />
+      <ContextMenu
+        items={sessionMenuItems()}
+        position={sessionMenu()?.pos ?? null}
+        onClose={closeAllMenus}
+      />
+      <ContextMenu
+        items={selectionMenuItems()}
+        position={selectionMenu()}
+        onClose={closeAllMenus}
+      />
+      <ContextMenu
+        items={nodeMenuItems()}
+        position={nodeMenu()?.pos ?? null}
+        onClose={closeAllMenus}
+      />
 
       <InputDialog
         open={renameTarget() !== null}

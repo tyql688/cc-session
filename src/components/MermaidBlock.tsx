@@ -46,10 +46,16 @@ export function MermaidBlock(props: { code: string }) {
   }
 
   return (
-    <Show when={!error()} fallback={<CodeBlock code={props.code} language="mermaid" />}>
+    <Show
+      when={!error()}
+      fallback={<CodeBlock code={props.code} language="mermaid" />}
+    >
       <div class="mermaid-block">
         <div class="mermaid-toolbar">
-          <button class="mermaid-toggle" onClick={() => setShowSource((v) => !v)}>
+          <button
+            class="mermaid-toggle"
+            onClick={() => setShowSource((v) => !v)}
+          >
             {showSource() ? t("common.viewDiagram") : t("common.viewSource")}
           </button>
         </div>
@@ -57,7 +63,10 @@ export function MermaidBlock(props: { code: string }) {
             Mermaid's "strict" securityLevel sanitizes the SVG (removes scripts,
             foreign objects, and event handlers), so this is considered safe. */}
         {/* eslint-disable-next-line solid/no-innerhtml */}
-        <Show when={showSource()} fallback={<div class="mermaid-diagram" innerHTML={html() || ""} />}>
+        <Show
+          when={showSource()}
+          fallback={<div class="mermaid-diagram" innerHTML={html() || ""} />}
+        >
           <CodeBlock code={props.code} language="mermaid" />
         </Show>
       </div>

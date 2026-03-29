@@ -7,13 +7,18 @@ import { toast, toastError } from "../stores/toast";
 
 type ExportFormat = "json" | "markdown" | "html";
 
-const FORMAT_OPTIONS: { value: ExportFormat; labelKey: string; ext: string }[] = [
-  { value: "json", labelKey: "export.json", ext: "json" },
-  { value: "markdown", labelKey: "export.markdown", ext: "md" },
-  { value: "html", labelKey: "export.html", ext: "html" },
-];
+const FORMAT_OPTIONS: { value: ExportFormat; labelKey: string; ext: string }[] =
+  [
+    { value: "json", labelKey: "export.json", ext: "json" },
+    { value: "markdown", labelKey: "export.markdown", ext: "md" },
+    { value: "html", labelKey: "export.html", ext: "html" },
+  ];
 
-export function ExportDialog(props: { open: boolean; session: SessionMeta; onClose: () => void }) {
+export function ExportDialog(props: {
+  open: boolean;
+  session: SessionMeta;
+  onClose: () => void;
+}) {
   const { t } = useI18n();
   const [format, setFormat] = createSignal<ExportFormat>("json");
   const [exporting, setExporting] = createSignal(false);
@@ -31,7 +36,9 @@ export function ExportDialog(props: { open: boolean; session: SessionMeta; onClo
     try {
       const outputPath = await save({
         defaultPath: `${props.session.title || "session"}.${selected.ext}`,
-        filters: [{ name: selected.value.toUpperCase(), extensions: [selected.ext] }],
+        filters: [
+          { name: selected.value.toUpperCase(), extensions: [selected.ext] },
+        ],
       });
 
       if (!outputPath) return;
@@ -75,7 +82,11 @@ export function ExportDialog(props: { open: boolean; session: SessionMeta; onClo
             <button class="btn btn-secondary" onClick={props.onClose}>
               {t("confirm.cancel")}
             </button>
-            <button class="btn btn-primary" onClick={handleExport} disabled={exporting()}>
+            <button
+              class="btn btn-primary"
+              onClick={handleExport}
+              disabled={exporting()}
+            >
               {exporting() ? "..." : t("session.export")}
             </button>
           </div>

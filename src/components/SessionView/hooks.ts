@@ -22,7 +22,9 @@ export function processMessages(msgs: Message[]): ProcessedEntry[] {
         j++;
       }
       if (toolGroup.length > 1) {
-        const toolNames = toolGroup.map((m) => m.tool_name).filter((n): n is string => !!n && n.trim().length > 0);
+        const toolNames = toolGroup
+          .map((m) => m.tool_name)
+          .filter((n): n is string => !!n && n.trim().length > 0);
         entries.push({
           key: `tools-${i}-${toolGroup[0].timestamp ?? "none"}`,
           type: "merged-tools",

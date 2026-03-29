@@ -14,13 +14,17 @@ export function parseContent(raw: string): ContentSegment[] {
 
   const segments: ContentSegment[] = [];
   // Match code blocks and image references
-  const blockRegex = /```([\w+#.-]*)\n?([\s\S]*?)```|\[Image(?:\s*#\d+)?(?::\s*source:\s*([^\]]+))?\]/g;
+  const blockRegex =
+    /```([\w+#.-]*)\n?([\s\S]*?)```|\[Image(?:\s*#\d+)?(?::\s*source:\s*([^\]]+))?\]/g;
   let lastIndex = 0;
   let match: RegExpExecArray | null;
 
   while ((match = blockRegex.exec(raw)) !== null) {
     if (match.index > lastIndex) {
-      segments.push({ type: "text", content: raw.slice(lastIndex, match.index) });
+      segments.push({
+        type: "text",
+        content: raw.slice(lastIndex, match.index),
+      });
     }
     if (match[2] !== undefined) {
       // Code block
@@ -66,7 +70,13 @@ function wrapHighlight(text: string, term: string): JSX.Element {
   return (
     <>
       <For each={parts}>
-        {(part) => (part.toLowerCase() === lowerTerm ? <mark class="search-highlight">{part}</mark> : <>{part}</>)}
+        {(part) =>
+          part.toLowerCase() === lowerTerm ? (
+            <mark class="search-highlight">{part}</mark>
+          ) : (
+            <>{part}</>
+          )
+        }
       </For>
     </>
   );
@@ -85,7 +95,10 @@ function isSafeUrl(url: string): boolean {
 }
 
 /** Parse inline markdown formatting within a single line and return JSX elements. */
-function renderInlineMarkdown(text: string, highlightTerm?: string): JSX.Element {
+function renderInlineMarkdown(
+  text: string,
+  highlightTerm?: string,
+): JSX.Element {
   // Process inline formatting: bold, italic, inline code, links, math
   const elements: JSX.Element[] = [];
   // Combined regex for inline elements:
@@ -106,7 +119,13 @@ function renderInlineMarkdown(text: string, highlightTerm?: string): JSX.Element
     // Push preceding text (with optional search highlight)
     if (m.index > lastIdx) {
       const preceding = text.slice(lastIdx, m.index);
-      elements.push(highlightTerm ? wrapHighlight(preceding, highlightTerm) : <>{preceding}</>);
+      elements.push(
+        highlightTerm ? (
+          wrapHighlight(preceding, highlightTerm)
+        ) : (
+          <>{preceding}</>
+        ),
+      );
     }
 
     if (m[1]) {
@@ -120,15 +139,29 @@ function renderInlineMarkdown(text: string, highlightTerm?: string): JSX.Element
       }
     } else if (m[3]) {
       // inline code — highlight inside code spans too
-      elements.push(<code>{highlightTerm ? wrapHighlight(m[4], highlightTerm) : m[4]}</code>);
+      elements.push(
+        <code>
+          {highlightTerm ? wrapHighlight(m[4], highlightTerm) : m[4]}
+        </code>,
+      );
     } else if (m[5]) {
       // bold
       const boldText = m[6] || m[7];
-      elements.push(<strong>{highlightTerm ? wrapHighlight(boldText, highlightTerm) : boldText}</strong>);
+      elements.push(
+        <strong>
+          {highlightTerm ? wrapHighlight(boldText, highlightTerm) : boldText}
+        </strong>,
+      );
     } else if (m[8]) {
       // italic
       const italicText = m[9] || m[10];
-      elements.push(<em>{highlightTerm ? wrapHighlight(italicText, highlightTerm) : italicText}</em>);
+      elements.push(
+        <em>
+          {highlightTerm
+            ? wrapHighlight(italicText, highlightTerm)
+            : italicText}
+        </em>,
+      );
     } else if (m[11]) {
       // link
       const linkText = m[12];
@@ -149,7 +182,11 @@ function renderInlineMarkdown(text: string, highlightTerm?: string): JSX.Element
         );
       } else {
         // Unsafe scheme (e.g. javascript:, data:) — render as plain text
-        elements.push(<span>{highlightTerm ? wrapHighlight(linkText, highlightTerm) : linkText}</span>);
+        elements.push(
+          <span>
+            {highlightTerm ? wrapHighlight(linkText, highlightTerm) : linkText}
+          </span>,
+        );
       }
     } else if (m[14]) {
       // inline math $...$
@@ -168,7 +205,13 @@ function renderInlineMarkdown(text: string, highlightTerm?: string): JSX.Element
   // Remaining text
   if (lastIdx < text.length) {
     const remaining = text.slice(lastIdx);
-    elements.push(highlightTerm ? wrapHighlight(remaining, highlightTerm) : <>{remaining}</>);
+    elements.push(
+      highlightTerm ? (
+        wrapHighlight(remaining, highlightTerm)
+      ) : (
+        <>{remaining}</>
+      ),
+    );
   }
 
   if (elements.length === 0) {
@@ -179,7 +222,10 @@ function renderInlineMarkdown(text: string, highlightTerm?: string): JSX.Element
 }
 
 /** Render a text segment with markdown formatting as JSX. */
-export function renderMarkdownText(text: string, highlightTerm?: string): JSX.Element {
+export function renderMarkdownText(
+  text: string,
+  highlightTerm?: string,
+): JSX.Element {
   const lines = text.split("\n");
   const elements: JSX.Element[] = [];
   let i = 0;
@@ -214,17 +260,23 @@ export function renderMarkdownText(text: string, highlightTerm?: string): JSX.El
 
     // Headers
     if (trimmed.startsWith("### ")) {
-      elements.push(<h3>{renderInlineMarkdown(trimmed.slice(4), highlightTerm)}</h3>);
+      elements.push(
+        <h3>{renderInlineMarkdown(trimmed.slice(4), highlightTerm)}</h3>,
+      );
       i++;
       continue;
     }
     if (trimmed.startsWith("## ")) {
-      elements.push(<h2>{renderInlineMarkdown(trimmed.slice(3), highlightTerm)}</h2>);
+      elements.push(
+        <h2>{renderInlineMarkdown(trimmed.slice(3), highlightTerm)}</h2>,
+      );
       i++;
       continue;
     }
     if (trimmed.startsWith("# ")) {
-      elements.push(<h1>{renderInlineMarkdown(trimmed.slice(2), highlightTerm)}</h1>);
+      elements.push(
+        <h1>{renderInlineMarkdown(trimmed.slice(2), highlightTerm)}</h1>,
+      );
       i++;
       continue;
     }
@@ -254,7 +306,15 @@ export function renderMarkdownText(text: string, highlightTerm?: string): JSX.El
       elements.push(
         <blockquote class="msg-blockquote">
           <For each={quoteLines}>
-            {(ql) => (ql ? <p class="msg-text-line">{renderInlineMarkdown(ql, highlightTerm)}</p> : <br />)}
+            {(ql) =>
+              ql ? (
+                <p class="msg-text-line">
+                  {renderInlineMarkdown(ql, highlightTerm)}
+                </p>
+              ) : (
+                <br />
+              )
+            }
           </For>
         </blockquote>,
       );
@@ -262,7 +322,11 @@ export function renderMarkdownText(text: string, highlightTerm?: string): JSX.El
     }
 
     // Table: | col | col |
-    if (trimmed.startsWith("|") && trimmed.endsWith("|") && trimmed.includes("|", 1)) {
+    if (
+      trimmed.startsWith("|") &&
+      trimmed.endsWith("|") &&
+      trimmed.includes("|", 1)
+    ) {
       const tableRows: string[][] = [];
       let hasHeader = false;
       while (i < lines.length) {
@@ -292,7 +356,9 @@ export function renderMarkdownText(text: string, highlightTerm?: string): JSX.El
             {headerRow && (
               <thead>
                 <tr>
-                  <For each={headerRow}>{(c) => <th>{renderInlineMarkdown(c, highlightTerm)}</th>}</For>
+                  <For each={headerRow}>
+                    {(c) => <th>{renderInlineMarkdown(c, highlightTerm)}</th>}
+                  </For>
                 </tr>
               </thead>
             )}
@@ -300,7 +366,9 @@ export function renderMarkdownText(text: string, highlightTerm?: string): JSX.El
               <For each={bodyRows}>
                 {(row) => (
                   <tr>
-                    <For each={row}>{(c) => <td>{renderInlineMarkdown(c, highlightTerm)}</td>}</For>
+                    <For each={row}>
+                      {(c) => <td>{renderInlineMarkdown(c, highlightTerm)}</td>}
+                    </For>
                   </tr>
                 )}
               </For>
@@ -318,7 +386,9 @@ export function renderMarkdownText(text: string, highlightTerm?: string): JSX.El
         const li = lines[i].trimStart();
         const ulMatch = li.match(/^[-*]\s+(.*)/);
         if (ulMatch) {
-          listItems.push(<li>{renderInlineMarkdown(ulMatch[1], highlightTerm)}</li>);
+          listItems.push(
+            <li>{renderInlineMarkdown(ulMatch[1], highlightTerm)}</li>,
+          );
           i++;
         } else {
           break;
@@ -335,7 +405,9 @@ export function renderMarkdownText(text: string, highlightTerm?: string): JSX.El
         const li = lines[i].trimStart();
         const olMatch = li.match(/^\d+\.\s+(.*)/);
         if (olMatch) {
-          listItems.push(<li>{renderInlineMarkdown(olMatch[1], highlightTerm)}</li>);
+          listItems.push(
+            <li>{renderInlineMarkdown(olMatch[1], highlightTerm)}</li>,
+          );
           i++;
         } else {
           break;
@@ -353,7 +425,9 @@ export function renderMarkdownText(text: string, highlightTerm?: string): JSX.El
     }
 
     // Normal paragraph line
-    elements.push(<p class="msg-text-line">{renderInlineMarkdown(line, highlightTerm)}</p>);
+    elements.push(
+      <p class="msg-text-line">{renderInlineMarkdown(line, highlightTerm)}</p>,
+    );
     i++;
   }
 

@@ -9,10 +9,15 @@ export interface KeyboardDeps {
   setActiveView: (view: string) => void;
   closeTab: (id: string) => void;
   closeAllTabs: () => void;
-  syncFromDisk: (opts?: { showSpinner?: boolean; changedPaths?: string[] }) => void;
+  syncFromDisk: (opts?: {
+    showSpinner?: boolean;
+    changedPaths?: string[];
+  }) => void;
 }
 
-export function createKeyboardHandler(deps: KeyboardDeps): (e: KeyboardEvent) => void {
+export function createKeyboardHandler(
+  deps: KeyboardDeps,
+): (e: KeyboardEvent) => void {
   return (e: KeyboardEvent) => {
     const mod = e.metaKey || e.ctrlKey;
 
@@ -69,7 +74,9 @@ export function createKeyboardHandler(deps: KeyboardDeps): (e: KeyboardEvent) =>
         deps.setShowKeyboardOverlay(false);
         return;
       }
-      const searchEl = document.querySelector<HTMLElement>("[data-focus-search]");
+      const searchEl = document.querySelector<HTMLElement>(
+        "[data-focus-search]",
+      );
       if (searchEl && document.activeElement?.closest("[data-focus-search]")) {
         (document.activeElement as HTMLElement)?.blur();
       }
@@ -77,7 +84,10 @@ export function createKeyboardHandler(deps: KeyboardDeps): (e: KeyboardEvent) =>
     }
 
     // Cmd+] or Ctrl+Tab: Next tab
-    if ((e.metaKey && e.key === "]") || (e.ctrlKey && e.key === "Tab" && !e.shiftKey)) {
+    if (
+      (e.metaKey && e.key === "]") ||
+      (e.ctrlKey && e.key === "Tab" && !e.shiftKey)
+    ) {
       e.preventDefault();
       const tabs = deps.openTabs();
       const currentId = deps.activeTabId();
@@ -90,7 +100,10 @@ export function createKeyboardHandler(deps: KeyboardDeps): (e: KeyboardEvent) =>
     }
 
     // Cmd+[ or Ctrl+Shift+Tab: Previous tab
-    if ((e.metaKey && e.key === "[") || (e.ctrlKey && e.key === "Tab" && e.shiftKey)) {
+    if (
+      (e.metaKey && e.key === "[") ||
+      (e.ctrlKey && e.key === "Tab" && e.shiftKey)
+    ) {
       e.preventDefault();
       const tabs = deps.openTabs();
       const currentId = deps.activeTabId();
@@ -112,9 +125,13 @@ export function createKeyboardHandler(deps: KeyboardDeps): (e: KeyboardEvent) =>
     // Cmd+Shift+F: Focus global search
     if (mod && e.shiftKey && (e.key === "f" || e.key === "F")) {
       e.preventDefault();
-      const searchEl = document.querySelector<HTMLElement>("[data-focus-search]");
+      const searchEl = document.querySelector<HTMLElement>(
+        "[data-focus-search]",
+      );
       if (searchEl) {
-        (searchEl as HTMLElement & { __focusInput?: () => void }).__focusInput?.();
+        (
+          searchEl as HTMLElement & { __focusInput?: () => void }
+        ).__focusInput?.();
       }
       return;
     }

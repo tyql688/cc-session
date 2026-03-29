@@ -8,19 +8,26 @@ export function filterBlockedFolders(tree: TreeNode[]): TreeNode[] {
       ...provider,
       children: provider.children.filter((project) => {
         // project id format: "provider:/path/to/project"
-        const path = project.id.includes(":") ? project.id.slice(project.id.indexOf(":") + 1) : "";
+        const path = project.id.includes(":")
+          ? project.id.slice(project.id.indexOf(":") + 1)
+          : "";
         return !path || !isPathBlocked(path);
       }),
     }))
     .filter((provider) => provider.children.length > 0);
 }
 
-export function applyTimeGrouping(tree: TreeNode[], t: (key: string) => string): TreeNode[] {
+export function applyTimeGrouping(
+  tree: TreeNode[],
+  t: (key: string) => string,
+): TreeNode[] {
   const todayStart = new Date();
   todayStart.setHours(0, 0, 0, 0);
   const weekStart = new Date(todayStart);
   const dayOfWeek = weekStart.getDay();
-  weekStart.setDate(weekStart.getDate() - (dayOfWeek === 0 ? 6 : dayOfWeek - 1));
+  weekStart.setDate(
+    weekStart.getDate() - (dayOfWeek === 0 ? 6 : dayOfWeek - 1),
+  );
   const monthStart = new Date(todayStart);
   monthStart.setDate(1);
 
@@ -63,7 +70,10 @@ export function applyTimeGrouping(tree: TreeNode[], t: (key: string) => string):
   }));
 }
 
-export function buildSessionMeta(node: TreeNode, parentProjectLabel: string): SessionMeta {
+export function buildSessionMeta(
+  node: TreeNode,
+  parentProjectLabel: string,
+): SessionMeta {
   return {
     id: node.id,
     provider: (node.provider ?? "claude") as Provider,
