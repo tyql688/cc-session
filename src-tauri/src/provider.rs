@@ -21,21 +21,27 @@ pub struct ParsedSession {
     pub content_text: String,
 }
 
-/// Create a provider instance by enum variant.
-pub fn make_provider(provider: &Provider) -> Box<dyn SessionProvider> {
+/// Create a provider instance by enum variant. Returns None if HOME is unavailable.
+pub fn make_provider(provider: &Provider) -> Option<Box<dyn SessionProvider>> {
     match provider {
-        Provider::Claude => Box::new(crate::providers::claude::ClaudeProvider::new()),
-        Provider::Codex => Box::new(crate::providers::codex::CodexProvider::new()),
-        Provider::Gemini => Box::new(crate::providers::gemini::GeminiProvider::new()),
-        Provider::Cursor => Box::new(crate::providers::cursor::CursorProvider::new()),
-        Provider::OpenCode => Box::new(crate::providers::opencode::OpenCodeProvider::new()),
-        Provider::Kimi => Box::new(crate::providers::kimi::KimiProvider::new()),
+        Provider::Claude => crate::providers::claude::ClaudeProvider::new()
+            .map(|p| Box::new(p) as Box<dyn SessionProvider>),
+        Provider::Codex => crate::providers::codex::CodexProvider::new()
+            .map(|p| Box::new(p) as Box<dyn SessionProvider>),
+        Provider::Gemini => crate::providers::gemini::GeminiProvider::new()
+            .map(|p| Box::new(p) as Box<dyn SessionProvider>),
+        Provider::Cursor => crate::providers::cursor::CursorProvider::new()
+            .map(|p| Box::new(p) as Box<dyn SessionProvider>),
+        Provider::OpenCode => crate::providers::opencode::OpenCodeProvider::new()
+            .map(|p| Box::new(p) as Box<dyn SessionProvider>),
+        Provider::Kimi => crate::providers::kimi::KimiProvider::new()
+            .map(|p| Box::new(p) as Box<dyn SessionProvider>),
     }
 }
 
-/// Create all provider instances.
+/// Create all provider instances, silently skipping any that cannot resolve HOME.
 pub fn all_providers() -> Vec<Box<dyn SessionProvider>> {
-    Provider::all().iter().map(make_provider).collect()
+    Provider::all().iter().filter_map(make_provider).collect()
 }
 
 pub trait SessionProvider: Send + Sync {

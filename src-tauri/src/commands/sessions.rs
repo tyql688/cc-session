@@ -187,7 +187,8 @@ pub(crate) fn sync_source_for_provider(
     source_path: &str,
     db: &Database,
 ) -> Result<(), String> {
-    let provider_impl = make_provider(&provider);
+    let provider_impl = make_provider(&provider)
+        .ok_or_else(|| "cannot resolve HOME directory — provider unavailable".to_string())?;
 
     let sessions = provider_impl
         .scan_source(source_path)
@@ -236,7 +237,7 @@ fn provider_from_source_path(source_path: &str) -> Option<Provider> {
     None
 }
 
-fn make_provider(provider: &Provider) -> Box<dyn SessionProvider> {
+fn make_provider(provider: &Provider) -> Option<Box<dyn SessionProvider>> {
     crate::provider::make_provider(provider)
 }
 
@@ -246,6 +247,7 @@ fn load_messages_from_provider(
     source_path: &str,
 ) -> Result<Vec<Message>, String> {
     make_provider(provider)
+        .ok_or_else(|| "cannot resolve HOME directory — provider unavailable".to_string())?
         .load_messages(session_id, source_path)
         .map_err(|e| format!("failed to load messages: {e}"))
 }

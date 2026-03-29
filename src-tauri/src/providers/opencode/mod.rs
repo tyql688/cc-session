@@ -15,20 +15,17 @@ pub struct OpenCodeProvider {
 }
 
 impl OpenCodeProvider {
-    pub fn new() -> Self {
+    pub fn new() -> Option<Self> {
         // OpenCode stores its DB in XDG_DATA_HOME/opencode/ (~/.local/share/opencode/ on macOS/Linux)
-        let data_dir = std::env::var("XDG_DATA_HOME")
-            .map(PathBuf::from)
-            .unwrap_or_else(|_| {
-                dirs::home_dir()
-                    .unwrap_or_else(|| PathBuf::from("/tmp"))
-                    .join(".local")
-                    .join("share")
-            })
-            .join("opencode");
-        Self {
+        let base = if let Ok(xdg) = std::env::var("XDG_DATA_HOME") {
+            PathBuf::from(xdg)
+        } else {
+            dirs::home_dir()?.join(".local").join("share")
+        };
+        let data_dir = base.join("opencode");
+        Some(Self {
             db_path: data_dir.join("opencode.db"),
-        }
+        })
     }
 
     fn open_db(&self) -> Result<Connection, ProviderError> {

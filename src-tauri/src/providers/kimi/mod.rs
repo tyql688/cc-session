@@ -15,12 +15,11 @@ pub struct KimiProvider {
 }
 
 impl KimiProvider {
-    pub fn new() -> Self {
-        let home_dir = dirs::home_dir()
-            .expect("cannot resolve HOME directory -- app cannot function without it");
-        Self {
+    pub fn new() -> Option<Self> {
+        let home_dir = dirs::home_dir()?;
+        Some(Self {
             kimi_dir: home_dir.join(".kimi"),
-        }
+        })
     }
 
     fn sessions_dir(&self) -> PathBuf {
