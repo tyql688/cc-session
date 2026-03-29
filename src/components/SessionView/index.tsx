@@ -114,7 +114,7 @@ export function SessionView(props: {
     });
   }
 
-  let messagesRef: HTMLDivElement | undefined; // eslint-disable-line no-unassigned-vars -- assigned via JSX ref
+  let messagesRef: HTMLDivElement | undefined;
   let loadOlderDebounce: ReturnType<typeof setTimeout> | undefined;
 
   function loadOlderEntries() {

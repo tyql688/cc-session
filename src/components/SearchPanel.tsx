@@ -15,7 +15,7 @@ export function SearchPanel(props: { onOpenSession: (session: SessionMeta) => vo
   const { t } = useI18n();
   const [focused, setFocused] = createSignal(false);
   const [selectedIndex, setSelectedIndex] = createSignal(-1);
-  let inputRef: HTMLInputElement | undefined; // eslint-disable-line no-unassigned-vars -- assigned via JSX ref
+  let inputRef: HTMLInputElement | undefined;
 
   let blurTimer: ReturnType<typeof setTimeout> | undefined;
 

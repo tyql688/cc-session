@@ -78,7 +78,7 @@ export function CodeBlock(props: { code: string; language?: string }) {
   const { t } = useI18n();
   const [copied, setCopied] = createSignal(false);
   let copyTimer: ReturnType<typeof setTimeout> | undefined;
-  let codeRef: HTMLElement | undefined; // eslint-disable-line no-unassigned-vars -- assigned via JSX ref
+  let codeRef: HTMLElement | undefined;
 
   onCleanup(() => clearTimeout(copyTimer));
 
