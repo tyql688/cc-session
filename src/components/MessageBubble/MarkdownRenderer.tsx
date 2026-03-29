@@ -72,6 +72,18 @@ function wrapHighlight(text: string, term: string): JSX.Element {
   )}</>;
 }
 
+/** Check whether a URL uses a safe scheme before opening it. */
+function isSafeUrl(url: string): boolean {
+  // Allow relative paths (e.g. /foo/bar) — Tauri shell plugin already gates these
+  if (url.startsWith("/")) return true;
+  try {
+    const parsed = new URL(url, "https://placeholder");
+    return ["http:", "https:", "mailto:"].includes(parsed.protocol);
+  } catch {
+    return false;
+  }
+}
+
 /** Parse inline markdown formatting within a single line and return JSX elements. */
 function renderInlineMarkdown(text: string, highlightTerm?: string): JSX.Element {
   // Process inline formatting: bold, italic, inline code, links, math
@@ -119,14 +131,21 @@ function renderInlineMarkdown(text: string, highlightTerm?: string): JSX.Element
       // link
       const linkText = m[12];
       const linkUrl = m[13];
-      elements.push(
-        <a href={linkUrl} target="_blank" rel="noopener noreferrer" onClick={(e) => {
-          e.preventDefault();
-          window.open(linkUrl, "_blank");
-        }}>
-          {highlightTerm ? wrapHighlight(linkText, highlightTerm) : linkText}
-        </a>
-      );
+      if (isSafeUrl(linkUrl)) {
+        elements.push(
+          <a href={linkUrl} target="_blank" rel="noopener noreferrer" onClick={(e) => {
+            e.preventDefault();
+            window.open(linkUrl, "_blank");
+          }}>
+            {highlightTerm ? wrapHighlight(linkText, highlightTerm) : linkText}
+          </a>
+        );
+      } else {
+        // Unsafe scheme (e.g. javascript:, data:) — render as plain text
+        elements.push(
+          <span>{highlightTerm ? wrapHighlight(linkText, highlightTerm) : linkText}</span>
+        );
+      }
     } else if (m[14]) {
       // inline math $...$
       const html = renderKatex(m[15], false);

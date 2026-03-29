@@ -32,7 +32,7 @@ export function MermaidBlock(props: { code: string }) {
       mermaidMod.initialize({
         startOnLoad: false,
         theme: isDarkMode() ? "dark" : "default",
-        securityLevel: "loose",
+        securityLevel: "strict",
         fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace",
       });
       const id = `mermaid-render-${++renderCounter}`;
@@ -56,6 +56,9 @@ export function MermaidBlock(props: { code: string }) {
             {showSource() ? t("common.viewDiagram") : t("common.viewSource")}
           </button>
         </div>
+        {/* Security: innerHTML is used here to render Mermaid SVG output.
+            Mermaid's "strict" securityLevel sanitizes the SVG (removes scripts,
+            foreign objects, and event handlers), so this is considered safe. */}
         <Show when={showSource()} fallback={
           <div class="mermaid-diagram" innerHTML={html() || ""} />
         }>

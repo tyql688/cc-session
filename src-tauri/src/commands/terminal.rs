@@ -19,12 +19,32 @@ fn sanitize_session_id(id: &str) -> String {
         .collect()
 }
 
+/// Allowed command prefixes for open_in_terminal — must match known provider resume commands.
+const ALLOWED_CMD_PREFIXES: &[&str] = &[
+    "claude ",
+    "codex ",
+    "gemini ",
+    "cursor ",
+    "agent ",
+    "opencode ",
+];
+
 #[tauri::command]
 pub fn open_in_terminal(
     command: String,
     cwd: Option<String>,
     terminal_app: String,
 ) -> Result<(), String> {
+    if !ALLOWED_CMD_PREFIXES.iter().any(|p| command.starts_with(p)) {
+        return Err(format!(
+            "command rejected: must start with a known provider prefix ({})",
+            ALLOWED_CMD_PREFIXES
+                .iter()
+                .map(|p| p.trim())
+                .collect::<Vec<_>>()
+                .join(", ")
+        ));
+    }
     terminal::launch_terminal(&terminal_app, &command, cwd.as_deref())
 }
 
