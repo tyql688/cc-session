@@ -82,14 +82,39 @@ impl KimiProvider {
 
             match msg_type {
                 "TurnBegin" => {
-                    // Extract user input text
+                    // Extract user input text + images
                     if let Some(Value::Array(parts)) = payload.get("user_input") {
+                        let has_image = parts
+                            .iter()
+                            .any(|p| p.get("type").and_then(|t| t.as_str()) == Some("image_url"));
                         let mut text_parts = Vec::new();
                         for part in parts {
-                            if let Some(text) =
-                                part.get("text").and_then(|v| v.as_str())
-                            {
-                                text_parts.push(text.to_string());
+                            let part_type =
+                                part.get("type").and_then(|t| t.as_str()).unwrap_or("text");
+                            match part_type {
+                                "text" => {
+                                    let text =
+                                        part.get("text").and_then(|v| v.as_str()).unwrap_or("");
+                                    // Skip <image path="..."> markers when inline image data exists
+                                    if has_image && text.contains("<image path=") {
+                                        continue;
+                                    }
+                                    if !text.is_empty() {
+                                        text_parts.push(text.to_string());
+                                    }
+                                }
+                                "image_url" => {
+                                    // Extract image: prefer local path from prompt-cache, fall back to data URI
+                                    if let Some(url) = part
+                                        .get("image_url")
+                                        .and_then(|iu| iu.get("url"))
+                                        .and_then(|v| v.as_str())
+                                    {
+                                        text_parts
+                                            .push(format!("[Image: source: {url}]"));
+                                    }
+                                }
+                                _ => {}
                             }
                         }
                         let text = text_parts.join("\n");
@@ -97,7 +122,13 @@ impl KimiProvider {
                             continue;
                         }
                         if first_user_message.is_none() {
-                            first_user_message = Some(text.clone());
+                            // Strip image markers from title
+                            let title_text = text
+                                .lines()
+                                .find(|l| !l.starts_with("[Image:"))
+                                .unwrap_or(&text)
+                                .to_string();
+                            first_user_message = Some(title_text);
                         }
                         content_parts.push(text.clone());
                         messages.push(Message {
