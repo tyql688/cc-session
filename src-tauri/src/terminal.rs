@@ -449,13 +449,14 @@ fn launch_linux_default(command: &str, cwd: Option<&str>) -> Result<(), String> 
     let shell = std::env::var("SHELL").unwrap_or_else(|_| "/bin/bash".to_string());
 
     for term in &terminals {
-        let result = Command::new(term)
-            .args(["--", &shell, "-c", &full])
-            .spawn();
+        let result = Command::new(term).args(["--", &shell, "-c", &full]).spawn();
         if result.is_ok() {
             return Ok(());
         }
     }
 
-    Err("no supported terminal emulator found; install gnome-terminal, konsole, or xterm".to_string())
+    Err(
+        "no supported terminal emulator found; install gnome-terminal, konsole, or xterm"
+            .to_string(),
+    )
 }
