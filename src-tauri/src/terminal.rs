@@ -1,5 +1,7 @@
+#[cfg(any(target_os = "macos", target_os = "windows"))]
 use std::process::Command;
 
+#[allow(unused_variables)]
 pub fn launch_terminal(target: &str, command: &str, cwd: Option<&str>) -> Result<(), String> {
     if command.trim().is_empty() {
         return Err("Command is empty".to_string());
