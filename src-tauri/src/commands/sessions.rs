@@ -15,10 +15,7 @@ pub async fn reindex(state: State<'_, AppState>) -> Result<usize, String> {
 }
 
 #[tauri::command]
-pub async fn sync_sources(
-    paths: Vec<String>,
-    state: State<'_, AppState>,
-) -> Result<usize, String> {
+pub async fn sync_sources(paths: Vec<String>, state: State<'_, AppState>) -> Result<usize, String> {
     let state = state.inner().clone();
     tokio::task::spawn_blocking(move || {
         let mut unique_paths = std::collections::HashSet::new();
