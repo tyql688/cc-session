@@ -1,4 +1,4 @@
-import { Show, For, createSignal, createResource, onMount, onCleanup } from "solid-js";
+import { Show, For, createSignal, createResource, createEffect, on, onMount, onCleanup } from "solid-js";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import type { SessionMeta, TreeNode } from "../lib/types";
 import { listRecentSessions } from "../lib/tauri";
@@ -31,6 +31,9 @@ export function EditorArea(props: {
       .catch(() => [])
       .then((list) => list.filter((s) => !isPathBlocked(s.project_path)).slice(0, 10)),
   );
+
+  // Refresh recent sessions when tree changes (covers coldStart, syncFromDisk, manual refresh, all providers)
+  createEffect(on(() => props.tree, () => setRecentVersion((v) => v + 1), { defer: true }));
 
   onMount(() => {
     let unlisten: UnlistenFn | undefined;
