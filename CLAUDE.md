@@ -17,21 +17,32 @@ npx tsc --noEmit              # TS type check
 
 ```
 src/                       # Solid.js frontend
-  components/              # UI (Explorer, SessionView, MessageBubble, TabBar, etc.)
+  App/                     # Root component (index.tsx, KeyboardShortcuts.ts, SyncManager.ts)
+  components/
+    MessageBubble/         # Message rendering (index, MarkdownRenderer, ToolMessage, etc.)
+    SessionView/           # Session detail (index, SessionToolbar, SessionSearch, hooks)
+    Explorer/              # Tree navigation (index, hooks)
+    ...                    # Flat components: TreeNode, TabBar, CodeBlock, etc.
   stores/                  # Reactive state (toast, search, theme, settings, favorites)
   i18n/                    # en.json, zh.json
-  lib/                     # types.ts, tauri.ts (IPC wrappers), providers.ts
+  lib/                     # types.ts, tauri.ts, providers.ts, icons.tsx, formatters.ts,
+                           # platform.ts, tree-utils.ts, tree-builders.ts
   styles/                  # variables.css, layout.css, messages.css, components.css
 src-tauri/src/
-  providers/               # claude.rs, codex.rs, gemini.rs, cursor.rs, opencode.rs
+  providers/
+    claude/                # mod.rs, parser.rs, images.rs
+    codex/                 # mod.rs, parser.rs, tools.rs
+    gemini/                # mod.rs, logs_parser.rs, chat_parser.rs, orphan.rs, images.rs, tools.rs
+    cursor/                # mod.rs, parser.rs, tools.rs
+    opencode/              # mod.rs, parser.rs
   commands/                # sessions.rs, settings.rs, trash.rs, terminal.rs
-  exporter/                # json.rs, markdown.rs, html.rs
-  db.rs                    # SQLite + FTS5, mutex-safe via lock_conn()
+  exporter/                # json.rs, markdown.rs, html.rs, templates.rs
+  db/                      # mod.rs (schema), queries.rs, sync.rs, row_mapper.rs
   indexer.rs               # Parallel scan, batch upsert, tree building
   watcher.rs               # notify crate, FS events for JSONL/JSON providers
   models.rs                # Provider, SessionMeta, Message, TokenUsage, TreeNode
   provider.rs              # SessionProvider trait, make_provider()
-  provider_utils.rs        # Shared helpers (title extraction, timestamp parsing, etc.)
+  provider_utils.rs        # Shared helpers, FTS_CONTENT_LIMIT constant
 ```
 
 ## Provider Architecture
