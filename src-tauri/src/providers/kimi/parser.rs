@@ -113,8 +113,7 @@ impl KimiProvider {
                                         .and_then(|iu| iu.get("url"))
                                         .and_then(|v| v.as_str())
                                     {
-                                        text_parts
-                                            .push(format!("[Image: source: {url}]"));
+                                        text_parts.push(format!("[Image: source: {url}]"));
                                     }
                                 }
                                 _ => {}
@@ -148,10 +147,8 @@ impl KimiProvider {
                     let part_type = payload.get("type").and_then(|v| v.as_str()).unwrap_or("");
                     match part_type {
                         "think" => {
-                            let think_text = payload
-                                .get("think")
-                                .and_then(|v| v.as_str())
-                                .unwrap_or("");
+                            let think_text =
+                                payload.get("think").and_then(|v| v.as_str()).unwrap_or("");
                             if !think_text.is_empty() {
                                 messages.push(Message {
                                     role: MessageRole::System,
@@ -164,10 +161,7 @@ impl KimiProvider {
                             }
                         }
                         "text" => {
-                            let text = payload
-                                .get("text")
-                                .and_then(|v| v.as_str())
-                                .unwrap_or("");
+                            let text = payload.get("text").and_then(|v| v.as_str()).unwrap_or("");
                             if !text.is_empty() {
                                 content_parts.push(text.to_string());
                                 messages.push(Message {
@@ -239,8 +233,7 @@ impl KimiProvider {
                     if let Some(tu) = payload.get("token_usage") {
                         let input_other =
                             tu.get("input_other").and_then(|v| v.as_u64()).unwrap_or(0) as u32;
-                        let output =
-                            tu.get("output").and_then(|v| v.as_u64()).unwrap_or(0) as u32;
+                        let output = tu.get("output").and_then(|v| v.as_u64()).unwrap_or(0) as u32;
                         let cache_read = tu
                             .get("input_cache_read")
                             .and_then(|v| v.as_u64())

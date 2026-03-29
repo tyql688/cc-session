@@ -118,9 +118,7 @@ impl SessionProvider for KimiProvider {
 
         let parsed = self
             .parse_session_file(&path, &project_map)
-            .ok_or_else(|| {
-                ProviderError::Parse("failed to parse kimi session file".to_string())
-            })?;
+            .ok_or_else(|| ProviderError::Parse("failed to parse kimi session file".to_string()))?;
 
         Ok(parsed.messages)
     }
