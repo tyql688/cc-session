@@ -99,7 +99,7 @@ pub fn detect_terminal() -> String {
         if std::env::var("WT_SESSION").is_ok() {
             return "windows-terminal".to_string();
         }
-        return "powershell".to_string();
+        "powershell".to_string()
     }
 
     // Linux: check common terminal indicators
@@ -122,7 +122,7 @@ pub fn detect_terminal() -> String {
         {
             return "gnome-terminal".to_string();
         }
-        return "xterm".to_string();
+        "xterm".to_string()
     }
 
     #[cfg(not(any(target_os = "windows", target_os = "linux")))]
