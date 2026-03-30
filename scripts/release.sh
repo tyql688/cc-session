@@ -53,8 +53,11 @@ sedi "s/\"version\": \"[^\"]*\"/\"version\": \"$VERSION\"/" src-tauri/tauri.conf
 # Update Cargo.lock
 (cd src-tauri && cargo check --quiet 2>/dev/null || true)
 
+# Update package-lock.json
+npm install --package-lock-only --ignore-scripts --silent 2>/dev/null || true
+
 echo "Committing..."
-git add package.json src-tauri/Cargo.toml src-tauri/Cargo.lock src-tauri/tauri.conf.json
+git add package.json package-lock.json src-tauri/Cargo.toml src-tauri/Cargo.lock src-tauri/tauri.conf.json
 git commit -m "chore: release $TAG"
 
 echo "Tagging $TAG..."
