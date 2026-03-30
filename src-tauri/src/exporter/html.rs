@@ -26,7 +26,39 @@ fn html_escape(s: &str) -> String {
         .replace('\'', "&#39;")
 }
 
+fn is_allowed_image_path(path: &str) -> bool {
+    let Ok(canonical) = std::fs::canonicalize(path) else {
+        return false;
+    };
+    let s = canonical.to_string_lossy();
+    let home_ok = dirs::home_dir().is_some_and(|h| s.starts_with(&*h.to_string_lossy()));
+    let tmp_ok = {
+        #[cfg(not(target_os = "windows"))]
+        {
+            s.starts_with("/tmp/")
+                || s.starts_with("/private/tmp/")
+                || s.starts_with("/var/folders/")
+        }
+        #[cfg(target_os = "windows")]
+        {
+            std::env::var("TEMP")
+                .map(|t| s.starts_with(&t))
+                .unwrap_or(false)
+                || std::env::var("TMP")
+                    .map(|t| s.starts_with(&t))
+                    .unwrap_or(false)
+        }
+    };
+    home_ok || tmp_ok
+}
+
 fn inline_image(path: &str) -> String {
+    if !is_allowed_image_path(path) {
+        return format!(
+            r#"<div class="msg-image"><em>[Image path not allowed: {}]</em></div>"#,
+            html_escape(path)
+        );
+    }
     let Ok(data) = std::fs::read(path) else {
         return format!(
             r#"<div class="msg-image"><em>[Image not found: {}]</em></div>"#,
@@ -62,23 +94,55 @@ fn render_content(raw: &str) -> String {
                 lang = rest.trim().to_string();
                 code_buf.clear();
             } else {
-                // Check for image references: [Image: source: /path/to/file.png]
-                // or [Image #N]
-                let trimmed = line.trim();
-                if trimmed.starts_with("[Image") && trimmed.ends_with(']') {
-                    if let Some(path_start) = trimmed.find("source: ") {
-                        let path = trimmed[path_start + 8..trimmed.len() - 1].trim();
-                        if path.starts_with("data:") {
-                            // Already base64 data URI — use directly
-                            out.push_str(&format!(
-                                r#"<div class="msg-image"><img src="{}" alt="User image" style="max-width:100%;max-height:500px;border-radius:8px;border:1px solid #e5e7eb"></div>"#,
-                                html_escape(path)
-                            ));
-                        } else {
-                            out.push_str(&inline_image(path));
-                        }
-                        continue;
+                // Check for image references inline: [Image: source: /path/to/file.png]
+                // They may appear anywhere in the line, possibly with surrounding text.
+                if line.contains("[Image") && line.contains("source: ") {
+                    if !out.is_empty() {
+                        out.push_str("<br>");
                     }
+                    let mut remaining = line.as_bytes();
+                    let line_str = line;
+                    let mut pos = 0;
+                    while pos < line_str.len() {
+                        if let Some(start) = line_str[pos..].find("[Image") {
+                            let abs_start = pos + start;
+                            // Find the closing ']' after "source: "
+                            if let Some(src_off) = line_str[abs_start..].find("source: ") {
+                                let path_begin = abs_start + src_off + 8;
+                                if let Some(end) = line_str[path_begin..].find(']') {
+                                    let abs_end = path_begin + end;
+                                    // Emit text before the image marker
+                                    if abs_start > pos {
+                                        out.push_str(&html_escape(&line_str[pos..abs_start]));
+                                    }
+                                    let path = line_str[path_begin..abs_end].trim();
+                                    if path.starts_with("data:") {
+                                        out.push_str(&format!(
+                                            r#"<div class="msg-image"><img src="{}" alt="User image" style="max-width:100%;max-height:500px;border-radius:8px;border:1px solid #e5e7eb"></div>"#,
+                                            html_escape(path)
+                                        ));
+                                    } else {
+                                        out.push_str(&inline_image(path));
+                                    }
+                                    pos = abs_end + 1; // skip past ']'
+                                    remaining = &line.as_bytes()[pos..];
+                                    continue;
+                                }
+                            }
+                            // Malformed marker — emit as text
+                            out.push_str(&html_escape(&line_str[pos..pos + start + 6]));
+                            pos += start + 6;
+                            remaining = &line.as_bytes()[pos..];
+                        } else {
+                            break;
+                        }
+                    }
+                    // Emit any trailing text after last image marker
+                    if pos < line_str.len() {
+                        out.push_str(&html_escape(&line_str[pos..]));
+                    }
+                    let _ = remaining; // suppress unused warning
+                    continue;
                 }
 
                 if !out.is_empty() {
@@ -632,7 +696,7 @@ pub fn render(detail: &SessionDetail) -> String {
 }
 
 pub fn export_html(detail: &SessionDetail, output_path: &Path) -> Result<(), String> {
-    let html = render(detail);
+    let html = super::redact_home_path(&render(detail));
     fs::write(output_path, html).map_err(|e| format!("failed to write file: {e}"))?;
     Ok(())
 }

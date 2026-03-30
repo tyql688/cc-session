@@ -65,6 +65,14 @@ pub fn delete_session(
                 source_path
             ));
         }
+        // Block deletion of SQLite database files (Cursor store.db, OpenCode opencode.db)
+        // — these contain ALL sessions, not just one
+        if source_path.ends_with(".db") {
+            return Err(format!(
+                "refused to delete '{}': cannot delete shared database file",
+                source_path
+            ));
+        }
         std::fs::remove_file(path)
             .map_err(|e| format!("failed to delete file '{source_path}': {e}"))?;
     }
@@ -94,8 +102,12 @@ pub async fn delete_sessions_batch(
                         source_path
                     ));
                 }
-                std::fs::remove_file(path)
-                    .map_err(|e| format!("failed to delete file {source_path}: {e}"))?;
+                if source_path.ends_with(".db") {
+                    // Skip physical deletion for SQLite-based providers — just remove from index
+                } else {
+                    std::fs::remove_file(path)
+                        .map_err(|e| format!("failed to delete file {source_path}: {e}"))?;
+                }
             }
             state
                 .db
@@ -185,7 +197,7 @@ pub(crate) fn load_detail(
     provider: &str,
     db: &Database,
 ) -> Result<SessionDetail, String> {
-    let provider_enum = str_to_provider(provider);
+    let provider_enum = str_to_provider(provider)?;
 
     let db_meta = find_meta_from_db(db, session_id);
 
@@ -293,11 +305,8 @@ fn build_fallback_meta(
     }
 }
 
-fn str_to_provider(s: &str) -> Provider {
-    Provider::parse(s).unwrap_or_else(|| {
-        log::warn!("unknown provider '{}', falling back to Claude", s);
-        Provider::Claude
-    })
+fn str_to_provider(s: &str) -> Result<Provider, String> {
+    Provider::parse(s).ok_or_else(|| format!("unknown provider: '{s}'"))
 }
 
 #[tauri::command]
@@ -359,6 +368,14 @@ pub fn open_in_folder(path: String) -> Result<(), String> {
     let p = std::path::Path::new(&path);
     if !p.exists() {
         return Err(format!("path not found: {path}"));
+    }
+    // Validate path is under HOME to prevent opening arbitrary system directories
+    if let Ok(canonical) = p.canonicalize() {
+        let s = canonical.to_string_lossy();
+        let home_ok = dirs::home_dir().is_some_and(|h| s.starts_with(&*h.to_string_lossy()));
+        if !home_ok {
+            return Err(format!("path not allowed: {path}"));
+        }
     }
     #[cfg(target_os = "macos")]
     {

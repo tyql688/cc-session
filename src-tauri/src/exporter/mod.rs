@@ -7,6 +7,16 @@ use std::path::Path;
 
 use crate::models::SessionDetail;
 
+/// Replace the user's home directory path with `~` for privacy in exports.
+pub(crate) fn redact_home_path(content: &str) -> String {
+    if let Some(home) = dirs::home_dir() {
+        let home_str = home.to_string_lossy();
+        content.replace(home_str.as_ref(), "~")
+    } else {
+        content.to_string()
+    }
+}
+
 pub fn export(detail: &SessionDetail, format: &str, output_path: &str) -> Result<(), String> {
     let path = Path::new(output_path);
     match format {
