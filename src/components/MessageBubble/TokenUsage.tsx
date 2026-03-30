@@ -57,20 +57,28 @@ export function TokenUsageDisplay(props: { usage: TokenUsage }) {
   const fmt = (n: number) => n.toLocaleString();
   const cached = () => props.usage.cache_read_input_tokens;
   const created = () => props.usage.cache_creation_input_tokens;
+  const { t } = useI18n();
   return (
     <div class="msg-token-usage">
-      <span title="Input tokens">↑{fmt(props.usage.input_tokens)}</span>
+      <span title={t("common.inputTokens")}>
+        ↑{fmt(props.usage.input_tokens)}
+      </span>
       <span class="msg-token-sep">·</span>
-      <span title="Output tokens">↓{fmt(props.usage.output_tokens)}</span>
+      <span title={t("common.outputTokens")}>
+        ↓{fmt(props.usage.output_tokens)}
+      </span>
       <Show when={cached() > 0}>
         <span class="msg-token-sep">·</span>
-        <span class="msg-token-cached" title="Cache read tokens">
+        <span class="msg-token-cached" title={t("common.cacheReadTokens")}>
           cache_read {fmt(cached())}
         </span>
       </Show>
       <Show when={created() > 0}>
         <span class="msg-token-sep">·</span>
-        <span class="msg-token-cache-write" title="Cache creation tokens">
+        <span
+          class="msg-token-cache-write"
+          title={t("common.cacheWriteTokens")}
+        >
           cache_write {fmt(created())}
         </span>
       </Show>
