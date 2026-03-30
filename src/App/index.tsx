@@ -23,6 +23,7 @@ import { createSyncManager } from "./SyncManager";
 import "../styles/index.css";
 
 export default function App() {
+  const { t } = useI18n();
   const [tree, setTree] = createSignal<TreeNode[]>([]);
   const [sessionCount, setSessionCount] = createSignal(0);
   const [activeView, setActiveView] = createSignal("explorer");
@@ -164,6 +165,41 @@ export default function App() {
   });
 
   return (
+    <ErrorBoundary
+      fallback={(err) => (
+        <div style={{
+          display: "flex",
+          "flex-direction": "column",
+          "align-items": "center",
+          "justify-content": "center",
+          height: "100vh",
+          gap: "16px",
+          padding: "24px",
+          "text-align": "center",
+          "font-family": "var(--font-family)",
+          color: "var(--text-primary)",
+          background: "var(--bg-primary)",
+        }}>
+          <h2>{t("error.title")}</h2>
+          <p style={{ color: "var(--text-secondary)", "max-width": "500px" }}>
+            {err?.message || t("error.message")}
+          </p>
+          <button
+            onClick={() => window.location.reload()}
+            style={{
+              padding: "8px 16px",
+              "border-radius": "6px",
+              border: "1px solid var(--border-color)",
+              background: "var(--bg-secondary)",
+              color: "var(--text-primary)",
+              cursor: "pointer",
+            }}
+          >
+            {t("error.reload")}
+          </button>
+        </div>
+      )}
+    >
     <div class="app-layout">
       <div
         class="titlebar"
@@ -247,5 +283,6 @@ export default function App() {
       />
       <ToastContainer />
     </div>
+    </ErrorBoundary>
   );
 }
