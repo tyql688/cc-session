@@ -13,16 +13,19 @@ pub fn get_resume_command(
 ) -> Result<String, String> {
     let safe_id = sanitize_session_id(&session_id);
     if provider == "cc-mirror" {
-        if let Some(name) = state
+        return match state
             .db
             .get_session(&session_id)
             .ok()
             .flatten()
             .and_then(|s| s.variant_name)
         {
-            let safe_name = sanitize_session_id(&name);
-            return Ok(format!("{safe_name} --resume {safe_id}"));
-        }
+            Some(name) => {
+                let safe_name = sanitize_session_id(&name);
+                Ok(format!("{safe_name} --resume {safe_id}"))
+            }
+            None => Err("cc-mirror session missing variant name".to_string()),
+        };
     }
     let p = Provider::parse(&provider).unwrap_or_else(|| {
         eprintln!(
@@ -107,8 +110,7 @@ pub fn resume_session(
             let safe_name = sanitize_session_id(name);
             format!("{safe_name} --resume {safe_id}")
         } else {
-            // Fallback: cc-mirror is based on Claude Code
-            Provider::CcMirror.resume_command(&safe_id)
+            return Err("cc-mirror session missing variant name, cannot resume".to_string());
         }
     } else {
         let p = Provider::parse(&provider).unwrap_or(Provider::Claude);

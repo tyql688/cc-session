@@ -48,7 +48,8 @@ const PROVIDERS: Record<Provider, ProviderConfig> = {
     key: "cc-mirror",
     label: "CC-Mirror",
     color: "cc-mirror",
-    resumeCommand: (id) => `claude --resume ${id}`,
+    // cc-mirror uses variant_name as command; handled separately in Explorer
+    resumeCommand: () => "",
   },
 };
 

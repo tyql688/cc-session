@@ -72,7 +72,8 @@ impl Provider {
             Provider::Cursor => format!("agent --resume={session_id}"),
             Provider::OpenCode => format!("opencode -s {session_id}"),
             Provider::Kimi => format!("kimi --session {session_id}"),
-            Provider::CcMirror => format!("claude --resume {session_id}"),
+            // cc-mirror requires variant_name; this fallback should not be used
+            Provider::CcMirror => String::new(),
         }
     }
 
