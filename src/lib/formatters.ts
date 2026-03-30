@@ -44,6 +44,11 @@ export function formatTimestamp(epoch: number, locale?: string): string {
   return d.toLocaleString();
 }
 
+export function formatAbsoluteTime(epoch: number): string {
+  if (!epoch) return "\u2014";
+  return new Date(epoch * 1000).toLocaleString();
+}
+
 export function fmtK(n: number): string {
   if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
   if (n >= 1_000) return `${(n / 1_000).toFixed(1)}k`;
