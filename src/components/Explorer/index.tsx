@@ -339,7 +339,7 @@ export function Explorer(props: {
             cmd = `${sessionInfo.providerLabel} --resume ${node.id}`;
           } else {
             const config = getProviderConfig(provider);
-            cmd = `${config.resumePrefix} ${node.id}`;
+            cmd = config.resumeCommand(node.id);
           }
           void navigator.clipboard
             .writeText(cmd)
