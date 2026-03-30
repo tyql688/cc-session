@@ -330,8 +330,21 @@ fn launch_windows_powershell(command: &str, cwd: Option<&str>) -> Result<(), Str
 
 #[cfg(target_os = "windows")]
 fn launch_windows_cmd(command: &str, cwd: Option<&str>) -> Result<(), String> {
-    let bat_cmd = build_cmd_command(command, cwd);
-    run_windows_start(&["cmd", "/K", &bat_cmd], "Command Prompt")
+    // Write a temp .bat file to avoid `&&` being parsed by the outer cmd in
+    // `cmd /C start "" cmd /K "cd /d ... && ..."`.
+    let bat_path = std::env::temp_dir().join(format!("cc_session_{}.bat", std::process::id()));
+    let mut bat = String::from("@echo off\r\n");
+    if let Some(dir) = cwd {
+        if !dir.is_empty() {
+            bat.push_str(&format!("cd /d \"{}\"\r\n", dir));
+        }
+    }
+    bat.push_str(command);
+    bat.push_str("\r\n");
+    std::fs::write(&bat_path, &bat).map_err(|e| format!("failed to write temp script: {e}"))?;
+
+    let bat_str = bat_path.to_string_lossy().to_string();
+    run_windows_start(&["cmd", "/K", &bat_str], "Command Prompt")
 }
 
 /// Launch a Windows terminal via `cmd /C start` with CREATE_NO_WINDOW to avoid
