@@ -19,16 +19,8 @@ fn sanitize_session_id(id: &str) -> String {
         .collect()
 }
 
-/// Allowed command prefixes for open_in_terminal — must match known provider resume commands.
-const ALLOWED_CMD_PREFIXES: &[&str] = &[
-    "claude ",
-    "codex ",
-    "gemini ",
-    "cursor ",
-    "agent ",
-    "opencode ",
-    "kimi ",
-];
+/// Shell metacharacters that must never appear in a terminal command.
+const SHELL_META: &[char] = &['&', ';', '|', '`', '$', '(', ')', '{', '}', '<', '>', '\n', '\r'];
 
 #[tauri::command]
 pub fn open_in_terminal(
@@ -36,16 +28,29 @@ pub fn open_in_terminal(
     cwd: Option<String>,
     terminal_app: String,
 ) -> Result<(), String> {
-    if !ALLOWED_CMD_PREFIXES.iter().any(|p| command.starts_with(p)) {
+    // Reject any shell metacharacters to prevent command injection
+    if command.chars().any(|c| SHELL_META.contains(&c)) {
+        return Err("command rejected: contains shell metacharacters".to_string());
+    }
+
+    // Must match: <provider> --resume <id> or <provider> -s <id> etc.
+    let parts: Vec<&str> = command.split_whitespace().collect();
+    if parts.len() < 3 {
+        return Err("command rejected: expected '<provider> <flag> <session_id>'".to_string());
+    }
+
+    const ALLOWED_PROVIDERS: &[&str] = &[
+        "claude", "codex", "gemini", "cursor", "agent", "opencode", "kimi",
+    ];
+
+    if !ALLOWED_PROVIDERS.contains(&parts[0]) {
         return Err(format!(
-            "command rejected: must start with a known provider prefix ({})",
-            ALLOWED_CMD_PREFIXES
-                .iter()
-                .map(|p| p.trim())
-                .collect::<Vec<_>>()
-                .join(", ")
+            "command rejected: unknown provider '{}'. Allowed: {}",
+            parts[0],
+            ALLOWED_PROVIDERS.join(", ")
         ));
     }
+
     terminal::launch_terminal(&terminal_app, &command, cwd.as_deref())
 }
 
