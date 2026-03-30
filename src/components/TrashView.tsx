@@ -20,7 +20,7 @@ import { buildTrashTree } from "../lib/tree-builders";
 import { useI18n } from "../i18n/index";
 import { toast, toastError } from "../stores/toast";
 import { errorMessage } from "../lib/errors";
-import { formatTimestamp } from "../lib/formatters";
+import { formatAbsoluteTime } from "../lib/formatters";
 import { ConfirmDialog } from "./ConfirmDialog";
 
 export function TrashView(props: { onRefreshTree: () => void }) {
@@ -254,7 +254,7 @@ export function TrashView(props: { onRefreshTree: () => void }) {
 
           <Show when={isLeaf() && trashItem()}>
             <span class="trash-tree-date">
-              {formatTimestamp(trashItem()!.trashed_at)}
+              {formatAbsoluteTime(trashItem()!.trashed_at)}
             </span>
             <div class="trash-tree-actions">
               <button
