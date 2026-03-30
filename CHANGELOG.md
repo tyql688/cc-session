@@ -5,6 +5,29 @@ All notable changes to this project will be documented in this file.
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 versioned with [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.0] - 2026-03-30
+
+### Added
+
+- **CC-Mirror provider** — multi-variant Claude Code aggregator support under `~/.cc-mirror/`, with per-variant session grouping and resume commands
+- **Parser golden tests** — integration tests for Gemini, Cursor CLI, and OpenCode parsers with fixture files; fix `delete_session` validation
+
+### Fixed
+
+- **Windows terminal resume** — CMD terminal now spawns `cmd.exe` directly; Windows Terminal and PowerShell resume paths corrected
+- **HTML export** — removed avatar background color for cleaner export output
+- **ErrorBoundary** — frontend wrapped in ErrorBoundary to prevent white screen crashes
+- **SQLite safety** — external SQLite connections now use `PRAGMA query_only` to prevent accidental writes
+- **Provider fallback** — `Provider::parse` logs warning instead of silently defaulting to Claude
+- **Release script** — added test gate before version bump
+- **Terminal security** — hardened `open_in_terminal` command validation
+- **Sync safety** — prevent full index deletion when provider scan returns 0 sessions
+- **CI** — added `cargo test` step to CI pipeline
+
+### Changed
+
+- Removed dead `_searchMatches` memo in SessionView
+
 ## [0.1.5] - 2026-03-30
 
 ### Added
