@@ -44,6 +44,12 @@ const PROVIDERS: Record<Provider, ProviderConfig> = {
     color: "kimi",
     resumePrefix: "kimi --session",
   },
+  "cc-mirror": {
+    key: "cc-mirror",
+    label: "CC-Mirror",
+    color: "cc-mirror",
+    resumePrefix: "claude --resume",
+  },
 };
 
 export function getProviderLabel(provider: Provider): string {
