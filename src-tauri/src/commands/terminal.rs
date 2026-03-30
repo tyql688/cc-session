@@ -8,7 +8,10 @@ use super::AppState;
 #[tauri::command]
 pub fn get_resume_command(session_id: String, provider: String) -> Result<String, String> {
     let safe_id = sanitize_session_id(&session_id);
-    let p = Provider::parse(&provider).unwrap_or(Provider::Claude);
+    let p = Provider::parse(&provider).unwrap_or_else(|| {
+        eprintln!("warning: unknown provider '{}', falling back to Claude", provider);
+        Provider::Claude
+    });
     Ok(p.resume_command(&safe_id))
 }
 
@@ -63,7 +66,10 @@ pub fn resume_session(
     state: State<AppState>,
 ) -> Result<(), String> {
     let safe_id = sanitize_session_id(&session_id);
-    let p = Provider::parse(&provider).unwrap_or(Provider::Claude);
+    let p = Provider::parse(&provider).unwrap_or_else(|| {
+        eprintln!("warning: unknown provider '{}', falling back to Claude", provider);
+        Provider::Claude
+    });
     let cmd = p.resume_command(&safe_id);
 
     let cwd = state
