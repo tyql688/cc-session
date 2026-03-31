@@ -184,7 +184,7 @@ impl Database {
         let mut stmt = conn.prepare(
             "SELECT s.id, s.provider, s.title, s.project_path, s.project_name,
                     s.created_at, s.updated_at, s.message_count, s.file_size_bytes, s.source_path, s.is_sidechain,
-                    s.variant_name
+                    s.variant_name, s.model, s.cc_version, s.git_branch
              FROM favorites f
              JOIN sessions s ON s.id = f.session_id
              ORDER BY f.added_at DESC",
@@ -230,7 +230,7 @@ fn search_with_fts(
     let mut sql = String::from(
         "SELECT s.id, s.provider, s.title, s.project_path, s.project_name,
                 s.created_at, s.updated_at, s.message_count, s.file_size_bytes, s.source_path, s.is_sidechain,
-                s.variant_name,
+                s.variant_name, s.model, s.cc_version, s.git_branch,
                 snippet(sessions_fts, -1, '<mark>', '</mark>', '...', 64) AS snip
          FROM sessions_fts
          JOIN sessions s ON s.rowid = sessions_fts.rowid
@@ -249,7 +249,7 @@ fn search_with_like(
     let mut sql = String::from(
         "SELECT s.id, s.provider, s.title, s.project_path, s.project_name,
                 s.created_at, s.updated_at, s.message_count, s.file_size_bytes, s.source_path, s.is_sidechain,
-                s.variant_name,
+                s.variant_name, s.model, s.cc_version, s.git_branch,
                 CASE
                     WHEN ?1 <> '' THEN substr(s.content_text, 1, 200)
                     ELSE ''
