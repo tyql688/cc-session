@@ -66,15 +66,11 @@ impl Indexer {
             BTreeMap::new();
 
         for session in sessions {
-            let display_key = if session.provider == Provider::CcMirror {
-                if let Some(ref vn) = session.variant_name {
-                    format!("cc-mirror:{vn}")
-                } else {
-                    "cc-mirror".to_string()
-                }
-            } else {
-                session.provider.key().to_string()
-            };
+            let provider_impl = crate::provider::make_provider(&session.provider);
+            let display_key = provider_impl
+                .as_ref()
+                .map(|p| p.display_key(session.variant_name.as_deref()))
+                .unwrap_or_else(|| session.provider.key().to_string());
             let project_key = if session.project_path.is_empty() {
                 String::new()
             } else {
@@ -225,19 +221,21 @@ impl Indexer {
             });
         }
 
-        // Sort: known providers in display order, cc-mirror variants right after Claude
-        tree.sort_by_key(|node| {
-            let id = &node.id;
-            match id.as_str() {
-                "claude" => (0, id.clone()),
-                _ if id.starts_with("cc-mirror") => (1, id.clone()),
-                "codex" => (2, id.clone()),
-                "gemini" => (3, id.clone()),
-                "cursor" => (4, id.clone()),
-                "opencode" => (5, id.clone()),
-                "kimi" => (6, id.clone()),
-                _ => (99, id.clone()),
-            }
+        // Sort providers by their declared sort_order, then by id
+        tree.sort_by(|a, b| {
+            let order_a = a
+                .provider
+                .as_ref()
+                .and_then(crate::provider::make_provider)
+                .map(|p| p.sort_order())
+                .unwrap_or(99);
+            let order_b = b
+                .provider
+                .as_ref()
+                .and_then(crate::provider::make_provider)
+                .map(|p| p.sort_order())
+                .unwrap_or(99);
+            order_a.cmp(&order_b).then(a.id.cmp(&b.id))
         });
 
         Ok(tree)
