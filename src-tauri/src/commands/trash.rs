@@ -370,21 +370,7 @@ fn trash_children(
         if !child_src.exists() || child_path.is_empty() {
             continue;
         }
-        let child_base = child_src.file_name().map_or_else(
-            || format!("{child_id}.jsonl"),
-            |f| f.to_string_lossy().to_string(),
-        );
-        let child_base = child_base.replace(['/', '\\'], "_");
-        let child_name = if let Some(dot_pos) = child_base.rfind('.') {
-            format!(
-                "{}_{}{}",
-                &child_base[..dot_pos],
-                now_ts,
-                &child_base[dot_pos..]
-            )
-        } else {
-            format!("{child_base}_{now_ts}")
-        };
+        let child_name = crate::provider::trash_file_name(child_src, now_ts);
         let child_dest = trash_dir.join(&child_name);
         let _ = std::fs::rename(child_src, &child_dest).or_else(|_| {
             std::fs::copy(child_src, &child_dest).and_then(|_| std::fs::remove_file(child_src))

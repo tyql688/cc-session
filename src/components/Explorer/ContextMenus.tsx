@@ -38,6 +38,7 @@ export function buildSessionMenuItems(ctx: SessionMenuContext): MenuItemDef[] {
       label: t("contextMenu.copyResumeCommand"),
       onClick: () => {
         const provider = node.provider ?? "claude";
+        // providerLabel carries the variant name for cc-mirror; ignored by other providers
         const cmd = buildResumeCommand(provider, node.id, providerLabel);
         void navigator.clipboard
           .writeText(cmd)

@@ -32,16 +32,10 @@ pub struct ParsedSession {
 /// Static metadata for a provider. Implemented by zero-sized descriptor structs
 /// in each provider module. Accessed via `Provider::descriptor()`.
 pub trait ProviderDescriptor: Send + Sync {
-    /// Whether source files contain multiple sessions.
-    fn is_shared_source(&self) -> bool {
-        false
-    }
-
     /// Whether a specific source file is shared (contains multiple sessions).
-    /// Default delegates to `is_shared_source()`. Providers with mixed storage
-    /// (e.g. Gemini: logs.json is shared, chat files are not) should override.
+    /// Providers with mixed storage (e.g. Gemini) should override.
     fn is_shared_file(&self, _source_path: &str) -> bool {
-        self.is_shared_source()
+        false
     }
 
     /// Check if a source file path belongs to this provider.
@@ -116,27 +110,29 @@ impl Provider {
     }
 }
 
+/// Generate a trash-safe filename by sanitizing and inserting a timestamp.
+pub fn trash_file_name(source_path: &Path, timestamp: i64) -> String {
+    let base_name = source_path.file_name().map_or_else(
+        || "session".to_string(),
+        |f| f.to_string_lossy().to_string(),
+    );
+    let base_name = base_name.replace(['/', '\\'], "_");
+    match base_name.rfind('.') {
+        Some(dot_pos) => {
+            let (name, ext) = base_name.split_at(dot_pos);
+            format!("{name}_{timestamp}{ext}")
+        }
+        None => format!("{base_name}_{timestamp}"),
+    }
+}
+
 /// Move a source file to the trash directory. Shared helper for `trash_session` implementations.
 pub fn move_to_trash(
     source_path: &Path,
     trash_dir: &Path,
     timestamp: i64,
 ) -> Result<TrashResult, ProviderError> {
-    let base_name = source_path.file_name().map_or_else(
-        || "session".to_string(),
-        |f| f.to_string_lossy().to_string(),
-    );
-    let base_name = base_name.replace(['/', '\\'], "_");
-    let file_name = if let Some(dot_pos) = base_name.rfind('.') {
-        format!(
-            "{}_{}{}",
-            &base_name[..dot_pos],
-            timestamp,
-            &base_name[dot_pos..]
-        )
-    } else {
-        format!("{base_name}_{timestamp}")
-    };
+    let file_name = trash_file_name(source_path, timestamp);
     let dest = trash_dir.join(&file_name);
     std::fs::rename(source_path, &dest)
         .or_else(|_| {
@@ -191,7 +187,7 @@ pub trait SessionProvider: Send + Sync {
     ) -> Result<Vec<Message>, ProviderError>;
 
     /// Delete a session's data from its shared source file.
-    /// Only called for providers where `descriptor().is_shared_source()` returns true.
+    /// Only called for providers where `descriptor().is_shared_file()` returns true.
     fn delete_from_source(
         &self,
         _source_path: &str,
