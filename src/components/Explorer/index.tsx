@@ -103,10 +103,12 @@ export function Explorer(props: {
   });
 
   // Reveal active session: expand ancestor nodes and scroll into view.
-  // Handles arbitrary nesting depth (provider → project → time group → session → subagent).
+  // Must search displayTree (not props.tree) because time grouping inserts
+  // intermediate nodes with different IDs.
   createEffect(() => {
     const sessionId = props.activeSessionId;
-    if (!sessionId || props.tree.length === 0) return;
+    const tree = displayTree();
+    if (!sessionId || tree.length === 0) return;
 
     // DFS: find the path of ancestor node IDs leading to the target session
     function findPath(nodes: TreeNode[], target: string): string[] | null {
@@ -118,7 +120,7 @@ export function Explorer(props: {
       return null;
     }
 
-    const path = findPath(props.tree, sessionId);
+    const path = findPath(tree, sessionId);
     if (!path) return;
 
     setExpandedIds((prev) => {
