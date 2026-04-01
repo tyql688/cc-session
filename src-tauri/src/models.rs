@@ -108,6 +108,26 @@ impl Provider {
         }
     }
 
+    /// CLI command names that can appear as the first word of a resume command.
+    /// Used for shell injection prevention in terminal commands.
+    pub fn cli_commands() -> &'static [&'static str] {
+        &[
+            "claude", "codex", "gemini", "cursor", "agent", "opencode", "kimi",
+        ]
+    }
+
+    /// Parse a display key (as produced by `display_key()`) back to a provider and label.
+    /// Handles cc-mirror variants like "cc-mirror:cczai" → (CcMirror, "cczai").
+    pub fn parse_display_key(display_key: &str) -> Option<(Provider, String)> {
+        if let Some(variant_name) = display_key.strip_prefix("cc-mirror:") {
+            Some((Provider::CcMirror, variant_name.to_string()))
+        } else {
+            let p = Provider::parse(display_key)?;
+            let label = p.label().to_string();
+            Some((p, label))
+        }
+    }
+
     /// Sort order for provider groups in the tree.
     pub fn sort_order(&self) -> u32 {
         match self {
