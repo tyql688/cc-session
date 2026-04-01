@@ -12,8 +12,8 @@ use crate::provider_utils::{session_title, truncate_to_bytes, FTS_CONTENT_LIMIT}
 
 pub struct Descriptor;
 impl crate::provider::ProviderDescriptor for Descriptor {
-    fn is_shared_source(&self) -> bool {
-        true
+    fn is_shared_file(&self, _source_path: &str) -> bool {
+        true // opencode.db always contains all sessions
     }
     fn owns_source_path(&self, source_path: &str) -> bool {
         source_path
