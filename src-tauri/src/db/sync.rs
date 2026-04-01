@@ -137,16 +137,7 @@ impl Database {
         })
     }
 
-    /// Remove only this session from DB (no cascade). Used by trash.
-    /// Children become orphans and stay visible until parent is restored or permanently deleted.
-    pub fn remove_session(&self, id: &str) -> Result<(), rusqlite::Error> {
-        let conn = self.lock_write()?;
-        conn.execute("DELETE FROM favorites WHERE session_id = ?1", params![id])?;
-        conn.execute("DELETE FROM sessions WHERE id = ?1", params![id])?;
-        Ok(())
-    }
-
-    /// Delete this session and all its children from DB. Used by permanent delete.
+    /// Delete this session and all its children from DB.
     pub fn delete_session(&self, id: &str) -> Result<(), rusqlite::Error> {
         let conn = self.lock_write()?;
         conn.execute("DELETE FROM favorites WHERE session_id IN (SELECT id FROM sessions WHERE parent_id = ?1)", params![id])?;
