@@ -142,16 +142,16 @@ export function TreeNodeComponent(props: {
     return props.node.label;
   };
 
-  const nodeSelected = () => isLeaf() && isSelected(props.node.id);
+  const nodeSelected = () => isSession() && isSelected(props.node.id);
 
   return (
     <div class="tree-node-wrapper">
       <button
-        class={`tree-node tree-node-${props.node.node_type}${isLeaf() && props.activeSessionId === props.node.id ? " active" : ""}${nodeSelected() ? " selected" : ""}`}
+        class={`tree-node tree-node-${props.node.node_type}${isSession() && props.activeSessionId === props.node.id ? " active" : ""}${nodeSelected() ? " selected" : ""}`}
         style={{ "padding-left": `${props.depth * 16 + 8}px` }}
         onClick={handleClick}
         onContextMenu={handleContextMenu}
-        data-session-id={isLeaf() ? props.node.id : undefined}
+        data-session-id={isSession() ? props.node.id : undefined}
       >
         <Show when={!isLeaf() && !isSubagentParent()}>
           <ChevronIcon expanded={expanded()} />
