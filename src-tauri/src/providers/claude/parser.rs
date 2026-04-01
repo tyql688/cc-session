@@ -227,13 +227,11 @@ pub fn parse_session_file(path: &PathBuf) -> Option<ParsedSession> {
                 let file = std::fs::File::open(&parent_jsonl).ok()?;
                 let reader = std::io::BufReader::new(file);
                 use std::io::BufRead;
-                for line in reader.lines().take(10) {
-                    if let Ok(line) = line {
-                        if let Ok(entry) = serde_json::from_str::<serde_json::Value>(&line) {
-                            if let Some(c) = entry.get("cwd").and_then(|c| c.as_str()) {
-                                if !c.is_empty() {
-                                    return Some(c.to_string());
-                                }
+                for line in reader.lines().take(10).flatten() {
+                    if let Ok(entry) = serde_json::from_str::<serde_json::Value>(&line) {
+                        if let Some(c) = entry.get("cwd").and_then(|c| c.as_str()) {
+                            if !c.is_empty() {
+                                return Some(c.to_string());
                             }
                         }
                     }
@@ -824,7 +822,7 @@ pub fn resolve_persisted_outputs(content: &str) -> String {
                     if !allowed.iter().any(|base| {
                         std::fs::canonicalize(base)
                             .ok()
-                            .map_or(false, |b| canonical.starts_with(&b))
+                            .is_some_and(|b| canonical.starts_with(&b))
                     }) {
                         return None;
                     }
