@@ -198,12 +198,17 @@ export function SessionView(props: {
     document.addEventListener("cc-session:delete", onDelete);
     document.addEventListener("cc-session:session-search", onSessionSearch);
 
-    // Restore saved scroll position
-    const saved = scrollCache.get(props.session.id);
-    if (saved !== undefined && messagesRef) {
-      requestAnimationFrame(() => {
-        if (messagesRef) messagesRef.scrollTop = saved;
-      });
+    // Restore saved scroll position after messages load
+    const savedScroll = scrollCache.get(props.session.id);
+    if (savedScroll !== undefined) {
+      const tryRestore = () => {
+        if (messagesRef && messages().length > 0) {
+          messagesRef.scrollTop = savedScroll;
+        } else {
+          requestAnimationFrame(tryRestore);
+        }
+      };
+      requestAnimationFrame(tryRestore);
     }
   });
 
