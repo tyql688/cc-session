@@ -46,16 +46,6 @@ pub fn all_providers() -> Vec<Box<dyn SessionProvider>> {
     Provider::all().iter().filter_map(make_provider).collect()
 }
 
-/// Identify which provider owns a source path by asking each provider.
-pub fn provider_from_source_path(source_path: &str) -> Option<Provider> {
-    for p in all_providers() {
-        if p.owns_source_path(source_path) {
-            return Some(p.provider());
-        }
-    }
-    None
-}
-
 pub trait SessionProvider: Send + Sync {
     fn provider(&self) -> Provider;
     fn watch_paths(&self) -> Vec<PathBuf>;
@@ -73,15 +63,8 @@ pub trait SessionProvider: Send + Sync {
         source_path: &str,
     ) -> Result<Vec<Message>, ProviderError>;
 
-    /// Whether this provider's source files are shared across multiple sessions.
-    /// Shared sources (e.g. OpenCode's opencode.db, Gemini's logs.json) cannot be
-    /// physically moved to trash — only soft-deleted.
-    fn is_shared_source(&self) -> bool {
-        false
-    }
-
     /// Delete a session's data from its shared source file.
-    /// Only called for providers where `is_shared_source()` returns true.
+    /// Only called for providers where `Provider::is_shared_source()` returns true.
     fn delete_from_source(
         &self,
         _source_path: &str,
@@ -89,19 +72,4 @@ pub trait SessionProvider: Send + Sync {
     ) -> Result<(), ProviderError> {
         Ok(())
     }
-
-    /// Check if a source file path belongs to this provider.
-    fn owns_source_path(&self, source_path: &str) -> bool;
-
-    /// Build the CLI resume command for a session.
-    fn resume_command(&self, session_id: &str, variant_name: Option<&str>) -> Option<String>;
-
-    /// Key used to group sessions in the tree. Defaults to provider key.
-    fn display_key(&self, variant_name: Option<&str>) -> String {
-        let _ = variant_name;
-        self.provider().key().to_string()
-    }
-
-    /// Sort order for provider groups in the tree.
-    fn sort_order(&self) -> u32;
 }

@@ -534,10 +534,6 @@ impl SessionProvider for OpenCodeProvider {
         Ok(messages)
     }
 
-    fn is_shared_source(&self) -> bool {
-        true
-    }
-
     fn delete_from_source(&self, source_path: &str, session_id: &str) -> Result<(), ProviderError> {
         let conn = Connection::open(source_path)?;
         let _ = conn.execute(
@@ -576,19 +572,5 @@ impl SessionProvider for OpenCodeProvider {
         }
         let _ = conn.execute("DELETE FROM session WHERE id = ?1", params![session_id]);
         Ok(())
-    }
-
-    fn owns_source_path(&self, source_path: &str) -> bool {
-        source_path
-            .replace('\\', "/")
-            .contains("/opencode/opencode.db")
-    }
-
-    fn resume_command(&self, session_id: &str, _variant_name: Option<&str>) -> Option<String> {
-        Some(format!("opencode -s {session_id}"))
-    }
-
-    fn sort_order(&self) -> u32 {
-        5
     }
 }

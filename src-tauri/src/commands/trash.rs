@@ -65,10 +65,7 @@ pub fn trash_session(
 
     // Check if this is a shared file (e.g. Gemini logs.json with multiple sessions)
     let provider_enum = crate::models::Provider::parse(&resolved_provider);
-    let provider_impl = provider_enum
-        .as_ref()
-        .and_then(crate::provider::make_provider);
-    let shared = provider_impl.as_ref().is_some_and(|p| p.is_shared_source());
+    let shared = provider_enum.as_ref().is_some_and(|p| p.is_shared_source());
 
     if shared {
         // SHARED FILE: record in trash metadata (soft delete).
