@@ -31,9 +31,6 @@ export function EditorArea(props: {
   onOpenSession: (session: SessionMeta) => void;
 }) {
   const { t } = useI18n();
-  const activeSession = () =>
-    props.tabs.find((tab) => tab.id === props.activeTabId) ?? null;
-
   // Refresh trigger: bumped on mount and whenever sessions change
   const [recentVersion, setRecentVersion] = createSignal(0);
   const [recentSessions] = createResource(recentVersion, () =>
@@ -143,15 +140,23 @@ export function EditorArea(props: {
           onCloseTabsToRight={props.onCloseTabsToRight}
         />
         <div class="editor-content">
-          <Show when={activeSession()}>
+          <For each={props.tabs}>
             {(session) => (
-              <SessionView
-                session={session()}
-                onRefreshTree={props.onRefreshTree}
-                onCloseTab={props.onTabClose}
-              />
+              <div
+                class="editor-tab-pane"
+                style={{
+                  display:
+                    session.id === props.activeTabId ? "contents" : "none",
+                }}
+              >
+                <SessionView
+                  session={session}
+                  onRefreshTree={props.onRefreshTree}
+                  onCloseTab={props.onTabClose}
+                />
+              </div>
             )}
-          </Show>
+          </For>
         </div>
       </Show>
     </div>
