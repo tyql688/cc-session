@@ -116,6 +116,14 @@ export function TreeNodeComponent(props: {
   const hasChildren = () => props.node.children.length > 0;
   const isSession = () => props.node.node_type === "session";
   const isSubagentParent = () => isSession() && hasChildren();
+  // Project folder where all direct session children are sidechain (orphans)
+  const isOrphanFolder = () =>
+    props.node.node_type === "project" &&
+    props.node.project_path &&
+    props.node.children.length > 0 &&
+    props.node.children.every(
+      (c) => c.node_type !== "session" || c.is_sidechain,
+    );
   const isLeaf = () => props.node.node_type === "session" && !hasChildren();
   const expanded = () => props.isNodeExpanded(props.node.id);
 
@@ -180,11 +188,18 @@ export function TreeNodeComponent(props: {
           <ProviderDot provider={props.node.provider!} />
         </Show>
         <Show
-          when={props.node.node_type === "project" && props.node.project_path}
+          when={
+            props.node.node_type === "project" &&
+            props.node.project_path &&
+            !isOrphanFolder()
+          }
         >
           <span class="tree-node-icon">
             <FolderIcon />
           </span>
+        </Show>
+        <Show when={isOrphanFolder()}>
+          <span class="tree-node-icon tree-node-icon-orphan-folder">⤷</span>
         </Show>
         <Show
           when={props.node.node_type === "project" && !props.node.project_path}
