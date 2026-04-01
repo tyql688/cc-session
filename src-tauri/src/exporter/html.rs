@@ -418,15 +418,7 @@ fn tool_summary(name: &str, input: &str) -> String {
 }
 
 fn provider_color(provider: &Provider) -> &'static str {
-    match provider {
-        Provider::Claude => "#8b5cf6",
-        Provider::Codex => "#10b981",
-        Provider::Gemini => "#f59e0b",
-        Provider::Cursor => "#3b82f6",
-        Provider::OpenCode => "#06b6d4",
-        Provider::Kimi => "#6366f1",
-        Provider::CcMirror => "#f472b6",
-    }
+    provider.color()
 }
 
 fn user_avatar_svg() -> &'static str {

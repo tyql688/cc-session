@@ -66,11 +66,9 @@ impl Indexer {
             BTreeMap::new();
 
         for session in sessions {
-            let provider_impl = crate::provider::make_provider(&session.provider);
-            let display_key = provider_impl
-                .as_ref()
-                .map(|p| p.display_key(session.variant_name.as_deref()))
-                .unwrap_or_else(|| session.provider.key().to_string());
+            let display_key = session
+                .provider
+                .display_key(session.variant_name.as_deref());
             let project_key = if session.project_path.is_empty() {
                 String::new()
             } else {
@@ -223,18 +221,8 @@ impl Indexer {
 
         // Sort providers by their declared sort_order, then by id
         tree.sort_by(|a, b| {
-            let order_a = a
-                .provider
-                .as_ref()
-                .and_then(crate::provider::make_provider)
-                .map(|p| p.sort_order())
-                .unwrap_or(99);
-            let order_b = b
-                .provider
-                .as_ref()
-                .and_then(crate::provider::make_provider)
-                .map(|p| p.sort_order())
-                .unwrap_or(99);
+            let order_a = a.provider.as_ref().map(|p| p.sort_order()).unwrap_or(99);
+            let order_b = b.provider.as_ref().map(|p| p.sort_order()).unwrap_or(99);
             order_a.cmp(&order_b).then(a.id.cmp(&b.id))
         });
 

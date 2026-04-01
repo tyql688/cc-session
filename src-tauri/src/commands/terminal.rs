@@ -13,8 +13,6 @@ pub fn get_resume_command(
 ) -> Result<String, String> {
     let safe_id = sanitize_session_id(&session_id);
     let p = Provider::parse(&provider).ok_or_else(|| format!("unknown provider '{provider}'"))?;
-    let provider_impl =
-        crate::provider::make_provider(&p).ok_or("provider unavailable".to_string())?;
 
     let variant_name = state
         .db
@@ -23,8 +21,7 @@ pub fn get_resume_command(
         .flatten()
         .and_then(|s| s.variant_name);
 
-    provider_impl
-        .resume_command(&safe_id, variant_name.as_deref())
+    p.resume_command(&safe_id, variant_name.as_deref())
         .ok_or_else(|| format!("{} session missing variant name", provider))
 }
 
@@ -95,13 +92,11 @@ pub fn resume_session(
 ) -> Result<(), String> {
     let safe_id = sanitize_session_id(&session_id);
     let p = Provider::parse(&provider).ok_or_else(|| format!("unknown provider '{provider}'"))?;
-    let provider_impl =
-        crate::provider::make_provider(&p).ok_or("provider unavailable".to_string())?;
 
     let session = state.db.get_session(&session_id).ok().flatten();
     let variant_name = session.as_ref().and_then(|s| s.variant_name.clone());
 
-    let cmd = provider_impl
+    let cmd = p
         .resume_command(&safe_id, variant_name.as_deref())
         .ok_or_else(|| format!("{} session missing variant name, cannot resume", provider))?;
 
