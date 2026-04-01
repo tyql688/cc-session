@@ -226,6 +226,14 @@
   text-align: center;
 }
 
+.tree-node-icon-orphan-folder {
+  font-size: 14px;
+  color: var(--text-warning, #e5a00d);
+  opacity: 0.7;
+  width: 16px;
+  text-align: center;
+}
+
 .provider-dot {
   display: inline-flex;
   align-items: center;
