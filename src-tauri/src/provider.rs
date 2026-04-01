@@ -46,6 +46,16 @@ pub fn all_providers() -> Vec<Box<dyn SessionProvider>> {
     Provider::all().iter().filter_map(make_provider).collect()
 }
 
+/// Identify which provider owns a source path by asking each provider.
+pub fn provider_from_source_path(source_path: &str) -> Option<Provider> {
+    for p in all_providers() {
+        if p.owns_source_path(source_path) {
+            return Some(p.provider());
+        }
+    }
+    None
+}
+
 pub trait SessionProvider: Send + Sync {
     fn provider(&self) -> Provider;
     fn watch_paths(&self) -> Vec<PathBuf>;
