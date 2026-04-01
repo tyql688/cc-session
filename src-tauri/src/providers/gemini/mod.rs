@@ -325,4 +325,13 @@ impl SessionProvider for GeminiProvider {
         // Gemini logs.json: session removal is handled by shared_deletions mechanism
         Ok(())
     }
+
+    fn trash_session(
+        &self,
+        _source_path: &std::path::Path,
+        _trash_dir: &std::path::Path,
+        _timestamp: i64,
+    ) -> Result<crate::provider::TrashResult, ProviderError> {
+        Ok(crate::provider::TrashResult::SoftDeleted)
+    }
 }

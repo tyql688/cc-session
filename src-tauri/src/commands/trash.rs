@@ -63,37 +63,10 @@ pub fn trash_session(
         .lock()
         .map_err(|_| "trash meta lock poisoned".to_string())?;
 
-    // Check if this is a shared file (e.g. Gemini logs.json with multiple sessions)
-    let provider_enum = crate::models::Provider::parse(&resolved_provider);
-    let shared = provider_enum.as_ref().is_some_and(|p| p.is_shared_source());
-
-    if shared {
-        // SHARED FILE: record in trash metadata (soft delete).
-        // Do NOT delete from source DB yet — that happens on empty_trash / permanent_delete.
-        let mut entries = read_trash_meta(&meta_path);
-        entries.push(TrashMeta {
-            id: session_id.clone(),
-            provider: resolved_provider.clone(),
-            title: resolved_title,
-            original_path: resolved_path,
-            trashed_at: now_ts,
-            trash_file: String::new(),
-            project_name: resolved_project,
-        });
-        atomic_write_json(&meta_path, &entries)?;
-
-        state
-            .db
-            .delete_session(&session_id)
-            .map_err(|e| format!("failed to delete from db: {e}"))?;
-        return Ok(());
-    }
-
-    // DEDICATED FILE: move file to trash directory
     let src = std::path::Path::new(&resolved_path);
 
     if !src.exists() || resolved_path.is_empty() {
-        // File already gone, just remove from DB and record
+        // Source already gone — just record and clean up
         let mut entries = read_trash_meta(&meta_path);
         entries.push(TrashMeta {
             id: session_id.clone(),
@@ -104,8 +77,6 @@ pub fn trash_session(
             trash_file: String::new(),
             project_name: resolved_project.clone(),
         });
-
-        // Trash child session files that still exist on disk
         trash_children(
             &session_id,
             &resolved_provider,
@@ -115,9 +86,7 @@ pub fn trash_session(
             &mut entries,
             &state,
         );
-
         atomic_write_json(&meta_path, &entries)?;
-
         state
             .db
             .delete_session(&session_id)
@@ -125,27 +94,24 @@ pub fn trash_session(
         return Ok(());
     }
 
-    let base_name = src.file_name().map_or_else(
-        || format!("{session_id}.jsonl"),
-        |f| f.to_string_lossy().to_string(),
-    );
-    // Sanitize: strip path separators to prevent directory traversal
-    let base_name = base_name.replace(['/', '\\'], "_");
-    let file_name = if let Some(dot_pos) = base_name.rfind('.') {
-        format!(
-            "{}_{}{}",
-            &base_name[..dot_pos],
-            now_ts,
-            &base_name[dot_pos..]
-        )
-    } else {
-        format!("{base_name}_{now_ts}")
+    // Delegate to provider's trash strategy
+    let provider_enum = crate::models::Provider::parse(&resolved_provider);
+    let provider_impl = provider_enum
+        .as_ref()
+        .and_then(crate::provider::make_provider);
+    let result = match &provider_impl {
+        Some(p) => p
+            .trash_session(src, &trash_dir, now_ts)
+            .map_err(|e| format!("failed to trash session: {e}"))?,
+        None => {
+            return Err(format!("unknown provider: {}", resolved_provider));
+        }
     };
 
-    let dest = trash_dir.join(&file_name);
-    std::fs::rename(src, &dest)
-        .or_else(|_| std::fs::copy(src, &dest).and_then(|_| std::fs::remove_file(src)))
-        .map_err(|e| format!("failed to move file to trash: {e}"))?;
+    let trash_file = match &result {
+        crate::provider::TrashResult::Moved { trash_file } => trash_file.clone(),
+        crate::provider::TrashResult::SoftDeleted => String::new(),
+    };
 
     let mut entries = read_trash_meta(&meta_path);
     entries.push(TrashMeta {
@@ -154,27 +120,28 @@ pub fn trash_session(
         title: resolved_title,
         original_path: resolved_path,
         trashed_at: now_ts,
-        trash_file: file_name,
+        trash_file,
         project_name: resolved_project.clone(),
     });
 
-    trash_children(
-        &session_id,
-        &resolved_provider,
-        &resolved_project,
-        now_ts,
-        &trash_dir,
-        &mut entries,
-        &state,
-    );
+    // Only trash children for dedicated-file providers
+    if matches!(result, crate::provider::TrashResult::Moved { .. }) {
+        trash_children(
+            &session_id,
+            &resolved_provider,
+            &resolved_project,
+            now_ts,
+            &trash_dir,
+            &mut entries,
+            &state,
+        );
+    }
 
     atomic_write_json(&meta_path, &entries)?;
-
     state
         .db
         .delete_session(&session_id)
         .map_err(|e| format!("failed to delete from db: {e}"))?;
-
     Ok(())
 }
 

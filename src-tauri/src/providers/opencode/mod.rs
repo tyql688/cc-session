@@ -534,6 +534,15 @@ impl SessionProvider for OpenCodeProvider {
         Ok(messages)
     }
 
+    fn trash_session(
+        &self,
+        _source_path: &std::path::Path,
+        _trash_dir: &std::path::Path,
+        _timestamp: i64,
+    ) -> Result<crate::provider::TrashResult, ProviderError> {
+        Ok(crate::provider::TrashResult::SoftDeleted)
+    }
+
     fn delete_from_source(&self, source_path: &str, session_id: &str) -> Result<(), ProviderError> {
         let conn = Connection::open(source_path)?;
         let _ = conn.execute(

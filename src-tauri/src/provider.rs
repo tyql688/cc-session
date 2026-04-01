@@ -1,8 +1,16 @@
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use thiserror::Error;
 
 use crate::models::{Message, Provider, SessionMeta};
+
+/// Result of trashing a session.
+pub enum TrashResult {
+    /// File was moved to the trash directory.
+    Moved { trash_file: String },
+    /// Shared source — session soft-deleted (no file moved).
+    SoftDeleted,
+}
 
 #[derive(Error, Debug)]
 pub enum ProviderError {
@@ -71,5 +79,39 @@ pub trait SessionProvider: Send + Sync {
         _session_id: &str,
     ) -> Result<(), ProviderError> {
         Ok(())
+    }
+
+    /// Trash a session's source file. Default: move file to trash directory.
+    /// Shared-source providers should override to return `SoftDeleted`.
+    fn trash_session(
+        &self,
+        source_path: &Path,
+        trash_dir: &Path,
+        timestamp: i64,
+    ) -> Result<TrashResult, ProviderError> {
+        let base_name = source_path.file_name().map_or_else(
+            || "session".to_string(),
+            |f| f.to_string_lossy().to_string(),
+        );
+        let base_name = base_name.replace(['/', '\\'], "_");
+        let file_name = if let Some(dot_pos) = base_name.rfind('.') {
+            format!(
+                "{}_{}{}",
+                &base_name[..dot_pos],
+                timestamp,
+                &base_name[dot_pos..]
+            )
+        } else {
+            format!("{base_name}_{timestamp}")
+        };
+        let dest = trash_dir.join(&file_name);
+        std::fs::rename(source_path, &dest)
+            .or_else(|_| {
+                std::fs::copy(source_path, &dest).and_then(|_| std::fs::remove_file(source_path))
+            })
+            .map_err(ProviderError::Io)?;
+        Ok(TrashResult::Moved {
+            trash_file: file_name,
+        })
     }
 }
