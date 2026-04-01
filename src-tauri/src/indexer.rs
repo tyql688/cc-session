@@ -128,18 +128,42 @@ impl Indexer {
                         }
                     })
                     .unwrap_or_else(|| "(No Project)".to_string());
-                let session_nodes: Vec<TreeNode> = sessions
+                // Separate top-level sessions from subagents
+                let (top_sessions, _): (Vec<_>, Vec<_>) = sessions
                     .iter()
-                    .map(|s| TreeNode {
-                        id: s.id.clone(),
-                        label: s.title.clone(),
-                        node_type: TreeNodeType::Session,
-                        children: Vec::new(),
-                        count: 0,
-                        provider: Some(provider_enum.clone()),
-                        updated_at: Some(s.updated_at),
-                        is_sidechain: s.is_sidechain,
-                        project_path: None,
+                    .partition(|s| s.parent_id.is_none());
+
+                let session_nodes: Vec<TreeNode> = top_sessions
+                    .iter()
+                    .map(|s| {
+                        // Find children of this session
+                        let child_nodes: Vec<TreeNode> = sessions
+                            .iter()
+                            .filter(|c| c.parent_id.as_deref() == Some(&s.id))
+                            .map(|c| TreeNode {
+                                id: c.id.clone(),
+                                label: c.title.clone(),
+                                node_type: TreeNodeType::Session,
+                                children: Vec::new(),
+                                count: 0,
+                                provider: Some(provider_enum.clone()),
+                                updated_at: Some(c.updated_at),
+                                is_sidechain: true,
+                                project_path: None,
+                            })
+                            .collect();
+
+                        TreeNode {
+                            id: s.id.clone(),
+                            label: s.title.clone(),
+                            node_type: TreeNodeType::Session,
+                            children: child_nodes,
+                            count: 0,
+                            provider: Some(provider_enum.clone()),
+                            updated_at: Some(s.updated_at),
+                            is_sidechain: s.is_sidechain,
+                            project_path: None,
+                        }
                     })
                     .collect();
 
