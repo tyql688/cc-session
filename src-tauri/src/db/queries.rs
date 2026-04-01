@@ -107,8 +107,21 @@ impl Database {
         Ok(())
     }
 
-
     pub fn db_size_bytes(&self) -> u64 {
+        // Use (page_count - freelist_count) * page_size for actual data usage.
+        // File size includes free pages that can't be reclaimed while app is running.
+        if let Ok(conn) = self.lock_read() {
+            let used: u64 = conn
+                .query_row(
+                    "SELECT (page_count - freelist_count) * page_size FROM pragma_page_count, pragma_freelist_count, pragma_page_size",
+                    [],
+                    |row| row.get(0),
+                )
+                .unwrap_or(0);
+            if used > 0 {
+                return used;
+            }
+        }
         std::fs::metadata(&self.db_path)
             .map(|m| m.len())
             .unwrap_or(0)
