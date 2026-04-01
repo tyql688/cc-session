@@ -135,10 +135,14 @@ impl Indexer {
                 let session_nodes: Vec<TreeNode> = top_sessions
                     .iter()
                     .map(|s| {
-                        // Find children of this session
-                        let child_nodes: Vec<TreeNode> = sessions
+                        // Find children of this session, sorted by creation time
+                        let mut children: Vec<_> = sessions
                             .iter()
                             .filter(|c| c.parent_id.as_deref() == Some(&s.id))
+                            .collect();
+                        children.sort_by_key(|c| c.created_at);
+                        let child_nodes: Vec<TreeNode> = children
+                            .iter()
                             .map(|c| TreeNode {
                                 id: c.id.clone(),
                                 label: c.title.clone(),

@@ -127,6 +127,18 @@ export function SessionView(props: {
     });
   }
 
+  // Global scroll position cache per session
+  const scrollCache =
+    ((globalThis as Record<string, unknown>).__scrollCache as Map<
+      string,
+      number
+    >) ??
+    (() => {
+      const m = new Map<string, number>();
+      (globalThis as Record<string, unknown>).__scrollCache = m;
+      return m;
+    })();
+
   let messagesRef: HTMLDivElement | undefined;
   let loadOlderDebounce: ReturnType<typeof setTimeout> | undefined;
 
@@ -185,9 +197,21 @@ export function SessionView(props: {
     document.addEventListener("cc-session:watch", onWatch);
     document.addEventListener("cc-session:delete", onDelete);
     document.addEventListener("cc-session:session-search", onSessionSearch);
+
+    // Restore saved scroll position
+    const saved = scrollCache.get(props.session.id);
+    if (saved !== undefined && messagesRef) {
+      requestAnimationFrame(() => {
+        if (messagesRef) messagesRef.scrollTop = saved;
+      });
+    }
   });
 
   onCleanup(() => {
+    // Save scroll position before unmount
+    if (messagesRef) {
+      scrollCache.set(props.session.id, messagesRef.scrollTop);
+    }
     clearTimeout(loadOlderDebounce);
     clearTimeout(watchDebounce);
     unwatchFn?.();
