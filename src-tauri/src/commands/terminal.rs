@@ -54,13 +54,10 @@ pub fn open_in_terminal(
         return Err("command rejected: expected '<provider> <flag> <session_id>'".to_string());
     }
 
-    const ALLOWED_PROVIDERS: &[&str] = &[
-        "claude", "codex", "gemini", "cursor", "agent", "opencode", "kimi",
-    ];
-
     let cmd_name = parts[0];
-    // Security: only allow known CLI commands. Update when adding a new provider.
-    let is_allowed = ALLOWED_PROVIDERS.contains(&cmd_name) || is_known_cc_mirror_variant(cmd_name);
+    // Security: only allow known CLI commands or discovered cc-mirror variants.
+    let is_allowed =
+        Provider::cli_commands().contains(&cmd_name) || is_known_cc_mirror_variant(cmd_name);
 
     if !is_allowed {
         return Err(format!("command rejected: unknown provider '{cmd_name}'"));

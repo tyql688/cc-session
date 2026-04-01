@@ -86,20 +86,10 @@ impl Indexer {
         let mut tree = Vec::new();
 
         for (display_key, projects) in &provider_map {
-            let (provider_enum, label) =
-                if let Some(variant_name) = display_key.strip_prefix("cc-mirror:") {
-                    (Provider::CcMirror, variant_name.to_string())
-                } else if display_key == "cc-mirror" {
-                    (Provider::CcMirror, "CC-Mirror".to_string())
-                } else {
-                    match Provider::parse(display_key) {
-                        Some(p) => {
-                            let l = p.label().to_string();
-                            (p, l)
-                        }
-                        None => continue,
-                    }
-                };
+            let (provider_enum, label) = match Provider::parse_display_key(display_key) {
+                Some(pair) => pair,
+                None => continue,
+            };
 
             let mut sorted_projects: Vec<_> = projects.iter().collect();
             sorted_projects.sort_by(|a, b| {
