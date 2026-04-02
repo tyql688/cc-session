@@ -6,7 +6,7 @@ use serde::Deserialize;
 
 use crate::models::{Message, Provider, SessionMeta};
 use crate::provider::{
-    ChildPlan, DeletionPlan, FileAction, ParsedSession, ProviderError, SessionProvider,
+    DeletionPlan, ParsedSession, ProviderError, SessionProvider,
 };
 use crate::providers::claude::parser;
 
@@ -207,40 +207,7 @@ impl SessionProvider for CcMirrorProvider {
     }
 
     fn deletion_plan(&self, meta: &SessionMeta, children: &[SessionMeta]) -> DeletionPlan {
-        if meta.parent_id.is_some() {
-            // Child session (subagent): each has its own .jsonl file
-            return DeletionPlan {
-                file_action: FileAction::Remove,
-                child_plans: Vec::new(),
-                cleanup_dirs: Vec::new(),
-            };
-        }
-
-        // Parent session: remove own file + all children
-        let child_plans = children
-            .iter()
-            .map(|c| ChildPlan {
-                id: c.id.clone(),
-                source_path: c.source_path.clone(),
-                title: c.title.clone(),
-                file_action: FileAction::Remove,
-            })
-            .collect();
-
-        // Subagents dir: /path/to/{session_id}/subagents/
-        let source = PathBuf::from(&meta.source_path);
-        let subagents_dir = source.with_extension("").join("subagents");
-        let cleanup_dirs = if subagents_dir.is_dir() {
-            vec![subagents_dir]
-        } else {
-            Vec::new()
-        };
-
-        DeletionPlan {
-            file_action: FileAction::Remove,
-            child_plans,
-            cleanup_dirs,
-        }
+        crate::provider::jsonl_subagents_deletion_plan(meta, children)
     }
 
     fn load_messages(

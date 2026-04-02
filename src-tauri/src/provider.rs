@@ -209,9 +209,7 @@ pub fn execute_restore(
                 let _ = std::fs::remove_file(&src);
             } else {
                 std::fs::rename(&src, dest)
-                    .or_else(|_| {
-                        std::fs::copy(&src, dest).and_then(|_| std::fs::remove_file(&src))
-                    })
+                    .or_else(|_| std::fs::copy(&src, dest).and_then(|_| std::fs::remove_file(&src)))
                     .map_err(|e| format!("failed to restore file: {e}"))?;
             }
 
@@ -222,6 +220,47 @@ pub fn execute_restore(
             Ok(true)
         }
         RestoreAction::Noop => Ok(false),
+    }
+}
+
+/// Shared deletion plan for JSONL providers with subagent directories
+/// (Claude, CC-Mirror, and similar).
+/// - Parent: Remove file + Remove children + cleanup session dir
+/// - Child: Remove own file only
+pub fn jsonl_subagents_deletion_plan(
+    meta: &SessionMeta,
+    children: &[SessionMeta],
+) -> DeletionPlan {
+    if meta.parent_id.is_some() {
+        return DeletionPlan {
+            file_action: FileAction::Remove,
+            child_plans: Vec::new(),
+            cleanup_dirs: Vec::new(),
+        };
+    }
+
+    let child_plans = children
+        .iter()
+        .map(|c| ChildPlan {
+            id: c.id.clone(),
+            source_path: c.source_path.clone(),
+            title: c.title.clone(),
+            file_action: FileAction::Remove,
+        })
+        .collect();
+
+    // Session dir: /path/to/{session_id}/ (contains subagents/)
+    let source = PathBuf::from(&meta.source_path);
+    let session_dir = source.with_extension("");
+    let mut cleanup_dirs = Vec::new();
+    if session_dir.join("subagents").is_dir() {
+        cleanup_dirs.push(session_dir);
+    }
+
+    DeletionPlan {
+        file_action: FileAction::Remove,
+        child_plans,
+        cleanup_dirs,
     }
 }
 
