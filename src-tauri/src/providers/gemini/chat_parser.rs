@@ -32,12 +32,16 @@ impl GeminiProvider {
             Err(_) => return Vec::new(),
         };
 
-        // Skip subagent files -- their data comes from parent toolCalls
-        if chat.kind.as_deref() == Some("subagent") {
-            return Vec::new();
-        }
+        let is_subagent = chat.kind.as_deref() == Some("subagent");
 
-        let session_id = chat.session_id.clone();
+        // Subagent files: use filename stem as ID (sessionId is shared with parent)
+        let session_id = if is_subagent {
+            path.file_stem()
+                .map(|s| s.to_string_lossy().to_string())
+                .unwrap_or_else(|| chat.session_id.clone())
+        } else {
+            chat.session_id.clone()
+        };
 
         let project_path = project_map
             .get(project_id)
@@ -50,7 +54,6 @@ impl GeminiProvider {
         let mut first_user_message: Option<String> = None;
         let mut content_parts: Vec<String> = Vec::new();
         let mut model: Option<String> = None;
-        let mut subagent_sessions: Vec<ParsedSession> = Vec::new();
 
         for msg in &chat.messages {
             let role = match msg.msg_type.as_deref() {
@@ -307,97 +310,6 @@ impl GeminiProvider {
                         model: None,
                     });
 
-                    // Extract completed Agent tool calls as child subagent sessions
-                    let is_completed = tc
-                        .get("status")
-                        .and_then(|s| s.as_str())
-                        .is_some_and(|s| s == "success");
-                    if is_agent && is_completed {
-                        let objective = tc
-                            .get("args")
-                            .and_then(|a| a.get("objective"))
-                            .and_then(|o| o.as_str())
-                            .unwrap_or("")
-                            .to_string();
-
-                        let result_output = tc
-                            .get("result")
-                            .and_then(|r| r.as_array())
-                            .and_then(|arr| arr.first())
-                            .and_then(|item| item.get("functionResponse"))
-                            .and_then(|fr| fr.get("response"))
-                            .and_then(|resp| resp.get("output"))
-                            .and_then(|o| o.as_str())
-                            .unwrap_or("")
-                            .to_string();
-
-                        let tool_description = description;
-                        let tool_display_name = tc
-                            .get("displayName")
-                            .and_then(|d| d.as_str())
-                            .unwrap_or("Agent");
-                        let tool_id = tc.get("id").and_then(|id| id.as_str()).unwrap_or("unknown");
-                        let tool_ts = tc
-                            .get("timestamp")
-                            .and_then(|t| t.as_str())
-                            .map(String::from);
-
-                        let title = if !tool_description.is_empty() {
-                            tool_description.to_string()
-                        } else {
-                            tool_display_name.to_string()
-                        };
-
-                        let mut child_messages = Vec::new();
-                        if !objective.is_empty() {
-                            child_messages.push(Message {
-                                role: MessageRole::User,
-                                content: objective.clone(),
-                                timestamp: tool_ts.clone().or_else(|| msg.timestamp.clone()),
-                                tool_name: None,
-                                tool_input: None,
-                                token_usage: None,
-                                model: None,
-                            });
-                        }
-                        if !result_output.is_empty() {
-                            child_messages.push(Message {
-                                role: MessageRole::Assistant,
-                                content: result_output.clone(),
-                                timestamp: tool_ts.clone(),
-                                tool_name: None,
-                                tool_input: None,
-                                token_usage: None,
-                                model: None,
-                            });
-                        }
-
-                        if !child_messages.is_empty() {
-                            let child_content = format!("{objective}\n{result_output}");
-                            subagent_sessions.push(ParsedSession {
-                                meta: SessionMeta {
-                                    id: tool_id.to_string(),
-                                    provider: Provider::Gemini,
-                                    title,
-                                    project_path: project_path.clone(),
-                                    project_name: project_name.clone(),
-                                    created_at: parse_rfc3339_timestamp(tool_ts.as_deref()),
-                                    updated_at: parse_rfc3339_timestamp(tool_ts.as_deref()),
-                                    message_count: child_messages.len() as u32,
-                                    file_size_bytes: 0,
-                                    source_path: path.to_string_lossy().to_string(),
-                                    is_sidechain: true,
-                                    variant_name: None,
-                                    model: None,
-                                    cc_version: None,
-                                    git_branch: None,
-                                    parent_id: Some(session_id.clone()),
-                                },
-                                messages: child_messages,
-                                content_text: truncate_to_bytes(&child_content, FTS_CONTENT_LIMIT),
-                            });
-                        }
-                    }
                 }
             }
         }
@@ -422,12 +334,16 @@ impl GeminiProvider {
             message_count: messages.len() as u32,
             file_size_bytes: file_size,
             source_path: path.to_string_lossy().to_string(),
-            is_sidechain: false,
+            is_sidechain: is_subagent,
             variant_name: None,
             model,
             cc_version: None,
             git_branch: None,
-            parent_id: None,
+            parent_id: if is_subagent {
+                Some(chat.session_id.clone())
+            } else {
+                None
+            },
         };
 
         let main_session = ParsedSession {
@@ -436,8 +352,6 @@ impl GeminiProvider {
             content_text,
         };
 
-        let mut results = vec![main_session];
-        results.extend(subagent_sessions);
-        results
+        vec![main_session]
     }
 }
