@@ -172,7 +172,11 @@ impl Database {
             match row {
                 Ok(meta) => sessions.push(meta),
                 Err(e) => {
-                    log::warn!("failed to map child session row for parent {}: {}", parent_id, e);
+                    log::warn!(
+                        "failed to map child session row for parent {}: {}",
+                        parent_id,
+                        e
+                    );
                 }
             }
         }

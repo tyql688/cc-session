@@ -152,20 +152,13 @@ impl SessionProvider for KimiProvider {
             })
             .collect();
 
-        // session_dir is source_path's parent (wire.jsonl -> session UUID dir)
-        let source = PathBuf::from(&meta.source_path);
-        let mut cleanup_dirs = Vec::new();
-        if let Some(session_dir) = source.parent() {
-            let subagents_dir = session_dir.join("subagents");
-            if subagents_dir.is_dir() {
-                cleanup_dirs.push(subagents_dir);
-            }
-        }
-
+        // Don't include subagents/ in cleanup_dirs — it contains meta.json
+        // files needed for title restoration. permanent_delete_trash and
+        // empty_trash handle subagent directory cleanup separately.
         DeletionPlan {
             file_action: FileAction::Remove,
             child_plans,
-            cleanup_dirs,
+            cleanup_dirs: Vec::new(),
         }
     }
 

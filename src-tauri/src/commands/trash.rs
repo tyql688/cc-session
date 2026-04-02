@@ -138,13 +138,33 @@ pub fn restore_session(trash_id: String, state: State<AppState>) -> Result<(), S
         .map_err(|_| "trash meta lock poisoned".to_string())?;
 
     let entries = read_trash_meta(&meta_path);
-    let entry = entries
-        .iter()
-        .find(|e| e.id == trash_id)
-        .ok_or_else(|| format!("trash entry not found: {trash_id}"))?
-        .clone();
+    let entry = match entries.iter().find(|e| e.id == trash_id) {
+        Some(e) => e.clone(),
+        None => {
+            // Already restored (e.g. parent restore removed embedded children)
+            drop(lock);
+            return Ok(());
+        }
+    };
 
-    let remaining: Vec<TrashMeta> = entries.into_iter().filter(|e| e.id != trash_id).collect();
+    // Remove the entry itself AND any embedded children (same original_path, empty trash_file)
+    let remaining: Vec<TrashMeta> = entries
+        .into_iter()
+        .filter(|e| {
+            if e.id == trash_id {
+                return false;
+            }
+            // Embedded children share the same original_path and have no trash file
+            if e.trash_file.is_empty()
+                && !entry.trash_file.is_empty()
+                && e.original_path == entry.original_path
+                && e.provider == entry.provider
+            {
+                return false;
+            }
+            true
+        })
+        .collect();
 
     // Provider decides how to restore
     let provider_enum = crate::models::Provider::parse(&entry.provider);
