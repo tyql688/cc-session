@@ -7,8 +7,10 @@ use std::path::PathBuf;
 use rayon::prelude::*;
 use walkdir::WalkDir;
 
-use crate::models::{Message, Provider};
-use crate::provider::{ParsedSession, ProviderError, SessionProvider};
+use crate::models::{Message, Provider, SessionMeta};
+use crate::provider::{
+    ChildPlan, DeletionPlan, FileAction, ParsedSession, ProviderError, SessionProvider,
+};
 
 pub struct Descriptor;
 impl crate::provider::ProviderDescriptor for Descriptor {
@@ -129,6 +131,44 @@ impl SessionProvider for KimiProvider {
         Ok(self.parse_session_with_subagents(&path, &project_map))
     }
 
+    fn deletion_plan(&self, meta: &SessionMeta, children: &[SessionMeta]) -> DeletionPlan {
+        if meta.parent_id.is_some() {
+            // Child session (subagent): embedded in parent wire.jsonl
+            return DeletionPlan {
+                file_action: FileAction::Skip,
+                child_plans: Vec::new(),
+                cleanup_dirs: Vec::new(),
+            };
+        }
+
+        // Parent session: remove own file, children are embedded (Skip)
+        let child_plans = children
+            .iter()
+            .map(|c| ChildPlan {
+                id: c.id.clone(),
+                source_path: c.source_path.clone(),
+                title: c.title.clone(),
+                file_action: FileAction::Skip,
+            })
+            .collect();
+
+        // session_dir is source_path's parent (wire.jsonl -> session UUID dir)
+        let source = PathBuf::from(&meta.source_path);
+        let mut cleanup_dirs = Vec::new();
+        if let Some(session_dir) = source.parent() {
+            let subagents_dir = session_dir.join("subagents");
+            if subagents_dir.is_dir() {
+                cleanup_dirs.push(subagents_dir);
+            }
+        }
+
+        DeletionPlan {
+            file_action: FileAction::Remove,
+            child_plans,
+            cleanup_dirs,
+        }
+    }
+
     fn load_messages(
         &self,
         session_id: &str,
@@ -143,10 +183,7 @@ impl SessionProvider for KimiProvider {
             .into_iter()
             .find(|s| s.meta.id == session_id)
             .ok_or_else(|| {
-                ProviderError::Parse(format!(
-                    "session {session_id} not found in {}",
-                    source_path
-                ))
+                ProviderError::Parse(format!("session {session_id} not found in {}", source_path))
             })?;
 
         Ok(parsed.messages)
