@@ -566,6 +566,76 @@ fn kimi_session_id_from_parent_directory() {
 }
 
 // ---------------------------------------------------------------------------
+// Kimi subagent tests (extracted from SubagentEvent in parent wire.jsonl)
+// ---------------------------------------------------------------------------
+
+fn kimi_parent_with_subagents() -> Vec<cc_session_lib::provider::ParsedSession> {
+    let provider = KimiProvider::new().expect("home dir must be available");
+    let path = fixtures_dir()
+        .join("kimi")
+        .join("abc123def456")
+        .join("session-uuid-0001")
+        .join("wire.jsonl");
+    let project_map = HashMap::new();
+    provider.parse_session_with_subagents(&path, &project_map)
+}
+
+#[test]
+fn kimi_subagent_extracted_from_parent() {
+    let sessions = kimi_parent_with_subagents();
+    assert_eq!(
+        sessions.len(),
+        2,
+        "expected 2 sessions (parent + 1 subagent), got {}",
+        sessions.len()
+    );
+}
+
+#[test]
+fn kimi_subagent_is_sidechain() {
+    let sessions = kimi_parent_with_subagents();
+    let sub = sessions.iter().find(|s| s.meta.is_sidechain).expect("expected a sidechain session");
+
+    assert_eq!(sub.meta.id, "a1b2c3d4e");
+    assert_eq!(
+        sub.meta.parent_id.as_deref(),
+        Some("session-uuid-0001"),
+        "parent_id must be the parent session UUID"
+    );
+}
+
+#[test]
+fn kimi_subagent_title_from_meta() {
+    let sessions = kimi_parent_with_subagents();
+    let sub = sessions.iter().find(|s| s.meta.is_sidechain).expect("expected a sidechain session");
+
+    // When meta.json exists, title comes from description.
+    // Without meta.json, falls back to first user message.
+    assert_eq!(
+        sub.meta.title, "Analyze the project structure of this repo",
+        "subagent title must fall back to first user message when meta.json is absent"
+    );
+}
+
+#[test]
+fn kimi_subagent_messages_parsed() {
+    let sessions = kimi_parent_with_subagents();
+    let sub = sessions.iter().find(|s| s.meta.is_sidechain).expect("expected a sidechain session");
+
+    // Expected: User, System(thinking), Tool(Bash), Assistant
+    assert_eq!(
+        sub.messages.len(),
+        4,
+        "expected 4 messages in subagent, got: {:#?}",
+        sub.messages
+    );
+    assert_eq!(sub.messages[0].role, MessageRole::User);
+    assert_eq!(sub.messages[1].role, MessageRole::System); // thinking
+    assert_eq!(sub.messages[2].role, MessageRole::Tool);
+    assert_eq!(sub.messages[3].role, MessageRole::Assistant);
+}
+
+// ---------------------------------------------------------------------------
 // Gemini chat parser tests
 // ---------------------------------------------------------------------------
 
