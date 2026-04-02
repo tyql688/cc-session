@@ -5,6 +5,37 @@ All notable changes to this project will be documented in this file.
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 versioned with [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.1] - 2026-04-03
+
+### Added
+
+- **Kimi CLI subagent support** — 从父 wire.jsonl 的 `SubagentEvent` 解析子代理会话，支持树形嵌套、"Open" 跳转、meta.json 标题提取
+- **Cursor CLI JSONL transcript parser** — 全新解析器，从 `agent-transcripts/*.jsonl` 读取会话内容，替代旧 store.db blob 方式
+- **Cursor CLI subagent support** — 解析 `subagents/*.jsonl`，全文匹配描述（避免前缀碰撞），按 Task 顺序排列
+- **Provider deletion lifecycle** — `DeletionPlan` + `RestoreAction` + `cleanup_on_permanent_delete` 完整回收站生命周期
+- **`TrashMeta.parent_id`** — 链接子会话到父会话，恢复时自动恢复所有子文件
+- **Trash lifecycle integration test** — `trash_lifecycle_test.rs` 使用真实本地数据测试 4 个 provider 的完整 trash→restore→delete 流程
+- **Agent "Open" button improvements** — 支持 `agentId` 匹配（Kimi）、正则回退提取截断 JSON 中的 description
+
+### Fixed
+
+- **Kimi 回收站恢复丢失子会话标题** — 不再在 trash 时删除 `subagents/` 目录（含 meta.json），仅在永久删除时清理
+- **Kimi 树视图"乱跳"** — subagent HashMap 迭代顺序不确定 → 改为排序后迭代
+- **Cursor store.db 永久删除时未清理** — 新增 `cleanup_on_permanent_delete` 钩子
+- **Cursor `[REDACTED]`** — 从 assistant 文本中静默剥除
+- **Cursor 子代理标题碰撞** — 120 字符前缀匹配 → 全文匹配
+- **所有 provider 恢复子会话** — Codex 等平目录结构通过 `parent_id` 可靠关联
+- **永久删除残留文件** — `cleanup_session_dir` 同时尝试 `with_extension("")`（Claude）和 `parent()`（Kimi/Cursor）；`is_session_dir()` 防误删共享目录
+- **Gemini `chats/` 误删** — `remove_dir_all` 仅对包含 session 特征文件的目录执行
+- **Claude/Codex/CC-Mirror 无子代理时残留目录** — `jsonl_subagents_deletion_plan` 改为检查 `session_dir.is_dir()` 而非仅 `subagents/`
+
+### Changed
+
+- Cursor CLI 数据源从 `store.db` (SQLite) 改为 `agent-transcripts/*.jsonl` (JSONL + FS events)
+- Gemini 移除 `logs_parser.rs`、`orphan.rs`，精简为仅 chat 文件解析
+- `lib.rs` 导出 `commands`、`db`、`indexer`、`trash_state` 模块以支持集成测试
+- CLAUDE.md 全面更新：精简冗余内容、更新过时描述、移除隐私信息
+
 ## [0.3.0] - 2026-04-02
 
 ### Added
