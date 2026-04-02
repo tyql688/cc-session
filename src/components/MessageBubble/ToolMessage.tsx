@@ -50,6 +50,12 @@ function toolSummary(name: string, inputJson: string): string {
       }
     }
   } catch {
+    // Kimi CLI may truncate parallel Agent ToolCall arguments.
+    // Try to extract description from partial JSON like: {"description":"xxx","
+    if (name === "Agent") {
+      const m = inputJson.match(/"description"\s*:\s*"([^"]+)"/);
+      if (m) return m[1];
+    }
     return "";
   }
 }
@@ -199,10 +205,16 @@ function toolIcon(name: string): string {
   return TOOL_ICONS[name] || "⚙";
 }
 
-/** Dispatch a custom event to open a subagent session by description or nickname match. */
-function openSubagent(description: string, nickname?: string) {
+/** Dispatch a custom event to open a subagent session by description, nickname, or agent ID. */
+function openSubagent(
+  description: string,
+  nickname?: string,
+  agentId?: string,
+) {
   window.dispatchEvent(
-    new CustomEvent("open-subagent", { detail: { description, nickname } }),
+    new CustomEvent("open-subagent", {
+      detail: { description, nickname, agentId },
+    }),
   );
 }
 
@@ -239,6 +251,12 @@ export function ToolMessage(props: { message: Message }) {
       return undefined;
     }
   });
+  /** Extract agent_id from Agent tool output (Kimi: "agent_id: xxx\n...") */
+  const agentId = createMemo(() => {
+    if (name() !== "Agent" || !hasOutput()) return undefined;
+    const m = props.message.content.match(/^agent_id:\s*(\S+)/m);
+    return m ? m[1] : undefined;
+  });
 
   return (
     <div class={`msg-tool${expanded() ? " expanded" : ""}`}>
@@ -251,12 +269,16 @@ export function ToolMessage(props: { message: Message }) {
         <Show when={summary()}>
           <span class="msg-tool-summary">{summary()}</span>
         </Show>
-        <Show when={name() === "Agent" && (summary() || agentNickname())}>
+        <Show
+          when={
+            name() === "Agent" && (summary() || agentNickname() || agentId())
+          }
+        >
           <button
             class="msg-tool-subagent-link"
             onClick={(e) => {
               e.stopPropagation();
-              openSubagent(summary(), agentNickname());
+              openSubagent(summary(), agentNickname(), agentId());
             }}
             title="Open subagent session"
           >

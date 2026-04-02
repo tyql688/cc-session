@@ -428,19 +428,24 @@ impl KimiProvider {
                 .push((ts, inner_event));
         }
 
-        // Parse each agent's events into a ParsedSession
+        // Sort agent_ids for deterministic iteration order
+        let mut sorted_ids: Vec<String> = agent_events.keys().cloned().collect();
+        sorted_ids.sort();
+
         let mut results = Vec::new();
-        for (agent_id, events) in agent_events {
-            if let Some(session) = self.parse_subagent_events(
-                &agent_id,
-                &events,
-                parent_session_id,
-                project_path,
-                project_name,
-                source_path,
-                session_dir,
-            ) {
-                results.push(session);
+        for agent_id in sorted_ids {
+            if let Some(events) = agent_events.get(&agent_id) {
+                if let Some(session) = self.parse_subagent_events(
+                    &agent_id,
+                    events,
+                    parent_session_id,
+                    project_path,
+                    project_name,
+                    source_path,
+                    session_dir,
+                ) {
+                    results.push(session);
+                }
             }
         }
         results
