@@ -10,8 +10,8 @@ use std::path::PathBuf;
 
 use serde::Deserialize;
 
-use crate::models::{Message, Provider};
-use crate::provider::{ParsedSession, ProviderError, SessionProvider};
+use crate::models::{Message, Provider, SessionMeta};
+use crate::provider::{DeletionPlan, FileAction, ParsedSession, ProviderError, SessionProvider};
 use crate::trash_state::active_shared_deletions_by_source;
 
 pub struct Descriptor;
@@ -30,9 +30,6 @@ impl crate::provider::ProviderDescriptor for Descriptor {
     }
     fn color(&self) -> &'static str {
         "#f59e0b"
-    }
-    fn is_shared_file(&self, source_path: &str) -> bool {
-        source_path.ends_with("/logs.json")
     }
     fn cli_command(&self) -> &'static str {
         "gemini"
@@ -345,26 +342,25 @@ impl SessionProvider for GeminiProvider {
         Ok(session.messages)
     }
 
-    fn delete_from_source(
+    fn deletion_plan(&self, meta: &SessionMeta, _children: &[SessionMeta]) -> DeletionPlan {
+        let is_shared = meta.source_path.ends_with("/logs.json");
+        DeletionPlan {
+            file_action: if is_shared {
+                FileAction::Shared
+            } else {
+                FileAction::Remove
+            },
+            child_plans: Vec::new(),
+            cleanup_dirs: Vec::new(),
+        }
+    }
+
+    fn purge_from_source(
         &self,
         _source_path: &str,
         _session_id: &str,
     ) -> Result<(), ProviderError> {
         // Gemini logs.json: session removal is handled by shared_deletions mechanism
         Ok(())
-    }
-
-    fn trash_session(
-        &self,
-        source_path: &std::path::Path,
-        trash_dir: &std::path::Path,
-        timestamp: i64,
-    ) -> Result<crate::provider::TrashResult, ProviderError> {
-        // logs.json is shared (contains multiple sessions) — soft delete only
-        if source_path.file_name().is_some_and(|f| f == "logs.json") {
-            return Ok(crate::provider::TrashResult::SoftDeleted);
-        }
-        // Individual chat JSON files — physically move to trash
-        crate::provider::move_to_trash(source_path, trash_dir, timestamp)
     }
 }

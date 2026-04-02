@@ -594,7 +594,10 @@ fn kimi_subagent_extracted_from_parent() {
 #[test]
 fn kimi_subagent_is_sidechain() {
     let sessions = kimi_parent_with_subagents();
-    let sub = sessions.iter().find(|s| s.meta.is_sidechain).expect("expected a sidechain session");
+    let sub = sessions
+        .iter()
+        .find(|s| s.meta.is_sidechain)
+        .expect("expected a sidechain session");
 
     assert_eq!(sub.meta.id, "a1b2c3d4e");
     assert_eq!(
@@ -607,7 +610,10 @@ fn kimi_subagent_is_sidechain() {
 #[test]
 fn kimi_subagent_title_from_meta() {
     let sessions = kimi_parent_with_subagents();
-    let sub = sessions.iter().find(|s| s.meta.is_sidechain).expect("expected a sidechain session");
+    let sub = sessions
+        .iter()
+        .find(|s| s.meta.is_sidechain)
+        .expect("expected a sidechain session");
 
     // When meta.json exists, title comes from description.
     // Without meta.json, falls back to first user message.
@@ -620,7 +626,10 @@ fn kimi_subagent_title_from_meta() {
 #[test]
 fn kimi_subagent_messages_parsed() {
     let sessions = kimi_parent_with_subagents();
-    let sub = sessions.iter().find(|s| s.meta.is_sidechain).expect("expected a sidechain session");
+    let sub = sessions
+        .iter()
+        .find(|s| s.meta.is_sidechain)
+        .expect("expected a sidechain session");
 
     // Expected: User, System(thinking), Tool(Bash), Assistant
     assert_eq!(

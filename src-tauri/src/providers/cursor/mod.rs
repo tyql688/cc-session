@@ -9,8 +9,8 @@ use rusqlite::Connection;
 use serde_json::Value;
 use walkdir::WalkDir;
 
-use crate::models::{Message, MessageRole, Provider};
-use crate::provider::{ParsedSession, ProviderError, SessionProvider};
+use crate::models::{Message, MessageRole, Provider, SessionMeta};
+use crate::provider::{DeletionPlan, FileAction, ParsedSession, ProviderError, SessionProvider};
 
 use tools::*;
 
@@ -119,6 +119,14 @@ impl SessionProvider for CursorProvider {
             .collect();
 
         Ok(sessions)
+    }
+
+    fn deletion_plan(&self, _meta: &SessionMeta, _children: &[SessionMeta]) -> DeletionPlan {
+        DeletionPlan {
+            file_action: FileAction::Remove,
+            child_plans: Vec::new(),
+            cleanup_dirs: Vec::new(),
+        }
     }
 
     fn load_messages(

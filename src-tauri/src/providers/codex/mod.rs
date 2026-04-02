@@ -6,8 +6,8 @@ use std::path::PathBuf;
 use rayon::prelude::*;
 use walkdir::WalkDir;
 
-use crate::models::{Message, Provider};
-use crate::provider::{ParsedSession, ProviderError, SessionProvider};
+use crate::models::{Message, Provider, SessionMeta};
+use crate::provider::{DeletionPlan, FileAction, ParsedSession, ProviderError, SessionProvider};
 
 pub struct Descriptor;
 impl crate::provider::ProviderDescriptor for Descriptor {
@@ -98,6 +98,14 @@ impl SessionProvider for CodexProvider {
     fn scan_source(&self, source_path: &str) -> Result<Vec<ParsedSession>, ProviderError> {
         let path = PathBuf::from(source_path);
         Ok(self.parse_session_file(&path).into_iter().collect())
+    }
+
+    fn deletion_plan(&self, _meta: &SessionMeta, _children: &[SessionMeta]) -> DeletionPlan {
+        DeletionPlan {
+            file_action: FileAction::Remove,
+            child_plans: Vec::new(),
+            cleanup_dirs: Vec::new(),
+        }
     }
 
     fn load_messages(

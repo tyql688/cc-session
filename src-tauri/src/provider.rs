@@ -2,14 +2,165 @@ use std::path::{Path, PathBuf};
 
 use thiserror::Error;
 
-use crate::models::{Message, Provider, SessionMeta};
+use crate::models::{Message, Provider, SessionMeta, TrashMeta};
 
-/// Result of trashing a session.
-pub enum TrashResult {
-    /// File was moved to the trash directory.
+// ---------------------------------------------------------------------------
+// Deletion plan types — provider returns a plan, command layer executes it
+// ---------------------------------------------------------------------------
+
+/// What to do with a session's source file during deletion.
+#[derive(Debug, Clone, PartialEq)]
+pub enum FileAction {
+    /// Move/delete the source file (dedicated file per session).
+    Remove,
+    /// Shared source — don't touch the file.
+    /// On permanent delete, call `purge_from_source()`.
+    Shared,
+    /// Don't touch the file and no purge needed
+    /// (e.g. child session embedded in parent's file).
+    Skip,
+}
+
+/// Plan for deleting a child session.
+#[derive(Debug, Clone)]
+pub struct ChildPlan {
+    pub id: String,
+    pub source_path: String,
+    pub title: String,
+    pub file_action: FileAction,
+}
+
+/// Complete deletion plan returned by provider.
+/// Command layer executes this mechanically — zero provider logic.
+#[derive(Debug, Clone)]
+pub struct DeletionPlan {
+    pub file_action: FileAction,
+    pub child_plans: Vec<ChildPlan>,
+    /// Extra directories to remove after file operations.
+    pub cleanup_dirs: Vec<PathBuf>,
+}
+
+// ---------------------------------------------------------------------------
+// Deletion plan execution — shared by trash_session, delete_session, batch
+// ---------------------------------------------------------------------------
+
+/// Execute a trash operation: move files to trash dir, return metadata records.
+pub fn execute_trash(
+    plan: &DeletionPlan,
+    meta: &SessionMeta,
+    provider_key: &str,
+    trash_dir: &Path,
+    ts: i64,
+) -> Vec<TrashMeta> {
+    let mut records = Vec::new();
+
+    // Main session
+    let trash_file = match plan.file_action {
+        FileAction::Remove => {
+            let src = Path::new(&meta.source_path);
+            if src.exists() {
+                match move_to_trash(src, trash_dir, ts) {
+                    Ok(TrashResult::Moved { trash_file }) => trash_file,
+                    _ => String::new(),
+                }
+            } else {
+                String::new()
+            }
+        }
+        FileAction::Shared | FileAction::Skip => String::new(),
+    };
+    records.push(TrashMeta {
+        id: meta.id.clone(),
+        provider: provider_key.to_string(),
+        title: meta.title.clone(),
+        original_path: meta.source_path.clone(),
+        trashed_at: ts,
+        trash_file,
+        project_name: meta.project_name.clone(),
+    });
+
+    // Children
+    for child in &plan.child_plans {
+        let child_trash_file = match child.file_action {
+            FileAction::Remove => {
+                let src = Path::new(&child.source_path);
+                if src.exists() {
+                    match move_to_trash(src, trash_dir, ts) {
+                        Ok(TrashResult::Moved { trash_file }) => trash_file,
+                        _ => String::new(),
+                    }
+                } else {
+                    String::new()
+                }
+            }
+            FileAction::Shared | FileAction::Skip => String::new(),
+        };
+        records.push(TrashMeta {
+            id: child.id.clone(),
+            provider: provider_key.to_string(),
+            title: child.title.clone(),
+            original_path: child.source_path.clone(),
+            trashed_at: ts,
+            trash_file: child_trash_file,
+            project_name: meta.project_name.clone(),
+        });
+    }
+
+    // Cleanup directories
+    for dir in &plan.cleanup_dirs {
+        if dir.is_dir() {
+            let _ = std::fs::remove_dir_all(dir);
+        }
+    }
+
+    records
+}
+
+/// Execute a permanent delete: remove files or purge from shared source.
+pub fn execute_purge(plan: &DeletionPlan, provider: &dyn SessionProvider, meta: &SessionMeta) {
+    match plan.file_action {
+        FileAction::Remove => {
+            let src = Path::new(&meta.source_path);
+            if src.exists() {
+                let _ = std::fs::remove_file(src);
+            }
+        }
+        FileAction::Shared => {
+            let _ = provider.purge_from_source(&meta.source_path, &meta.id);
+        }
+        FileAction::Skip => {}
+    }
+
+    for child in &plan.child_plans {
+        match child.file_action {
+            FileAction::Remove => {
+                let src = Path::new(&child.source_path);
+                if src.exists() {
+                    let _ = std::fs::remove_file(src);
+                }
+                // Also try .meta.json (Claude subagents)
+                let meta_path = src.with_extension("meta.json");
+                if meta_path.exists() {
+                    let _ = std::fs::remove_file(&meta_path);
+                }
+            }
+            FileAction::Shared => {
+                let _ = provider.purge_from_source(&child.source_path, &child.id);
+            }
+            FileAction::Skip => {}
+        }
+    }
+
+    for dir in &plan.cleanup_dirs {
+        if dir.is_dir() {
+            let _ = std::fs::remove_dir_all(dir);
+        }
+    }
+}
+
+/// Result of trashing a session (internal, used by move_to_trash).
+enum TrashResult {
     Moved { trash_file: String },
-    /// Shared source — session soft-deleted (no file moved).
-    SoftDeleted,
 }
 
 #[derive(Error, Debug)]
@@ -32,12 +183,6 @@ pub struct ParsedSession {
 /// Static metadata for a provider. Implemented by zero-sized descriptor structs
 /// in each provider module. Accessed via `Provider::descriptor()`.
 pub trait ProviderDescriptor: Send + Sync {
-    /// Whether a specific source file is shared (contains multiple sessions).
-    /// Providers with mixed storage (e.g. Gemini) should override.
-    fn is_shared_file(&self, _source_path: &str) -> bool {
-        false
-    }
-
     /// Check if a source file path belongs to this provider.
     fn owns_source_path(&self, source_path: &str) -> bool;
 
@@ -111,7 +256,7 @@ impl Provider {
 }
 
 /// Generate a trash-safe filename by sanitizing and inserting a timestamp.
-pub fn trash_file_name(source_path: &Path, timestamp: i64) -> String {
+fn trash_file_name(source_path: &Path, timestamp: i64) -> String {
     let base_name = source_path.file_name().map_or_else(
         || "session".to_string(),
         |f| f.to_string_lossy().to_string(),
@@ -127,7 +272,7 @@ pub fn trash_file_name(source_path: &Path, timestamp: i64) -> String {
 }
 
 /// Move a source file to the trash directory. Shared helper for `trash_session` implementations.
-pub fn move_to_trash(
+fn move_to_trash(
     source_path: &Path,
     trash_dir: &Path,
     timestamp: i64,
@@ -186,25 +331,19 @@ pub trait SessionProvider: Send + Sync {
         source_path: &str,
     ) -> Result<Vec<Message>, ProviderError>;
 
-    /// Delete a session's data from its shared source file.
-    /// Only called for providers where `descriptor().is_shared_file()` returns true.
-    fn delete_from_source(
+    /// Return a deletion plan for this session.
+    /// Provider decides all file actions; command layer executes mechanically.
+    fn deletion_plan(&self, meta: &SessionMeta, children: &[SessionMeta]) -> DeletionPlan;
+
+    /// Permanently remove session data from a shared source (DB/file).
+    /// Called by `execute_purge` when `FileAction::Shared`.
+    /// Default: no-op (dedicated-file providers don't need this).
+    fn purge_from_source(
         &self,
         _source_path: &str,
         _session_id: &str,
     ) -> Result<(), ProviderError> {
         Ok(())
-    }
-
-    /// Trash a session's source file. Default: move file to trash directory.
-    /// Shared-source providers should override to return `SoftDeleted`.
-    fn trash_session(
-        &self,
-        source_path: &Path,
-        trash_dir: &Path,
-        timestamp: i64,
-    ) -> Result<TrashResult, ProviderError> {
-        move_to_trash(source_path, trash_dir, timestamp)
     }
 }
 

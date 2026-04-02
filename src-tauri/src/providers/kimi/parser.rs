@@ -16,7 +16,10 @@ use super::KimiProvider;
 
 /// Read subagent description from meta.json in the subagents directory.
 fn subagent_title_from_meta(session_dir: &std::path::Path, agent_id: &str) -> Option<String> {
-    let meta_path = session_dir.join("subagents").join(agent_id).join("meta.json");
+    let meta_path = session_dir
+        .join("subagents")
+        .join(agent_id)
+        .join("meta.json");
     let content = fs::read_to_string(&meta_path).ok()?;
     let json: Value = serde_json::from_str(&content).ok()?;
     json.get("description")
@@ -24,7 +27,6 @@ fn subagent_title_from_meta(session_dir: &std::path::Path, agent_id: &str) -> Op
         .filter(|s| !s.is_empty())
         .map(|s| s.to_string())
 }
-
 
 impl KimiProvider {
     /// Parse a wire.jsonl file and return the main session plus any embedded subagent sessions.
@@ -397,7 +399,10 @@ impl KimiProvider {
                 Ok(v) => v,
                 Err(_) => continue,
             };
-            let ts = entry.get("timestamp").and_then(|v| v.as_f64()).unwrap_or(0.0);
+            let ts = entry
+                .get("timestamp")
+                .and_then(|v| v.as_f64())
+                .unwrap_or(0.0);
             let message = match entry.get("message") {
                 Some(m) => m,
                 None => continue,
@@ -485,9 +490,9 @@ impl KimiProvider {
             match msg_type {
                 "TurnBegin" => {
                     if let Some(Value::Array(parts)) = payload.get("user_input") {
-                        let has_image = parts.iter().any(|p| {
-                            p.get("type").and_then(|t| t.as_str()) == Some("image_url")
-                        });
+                        let has_image = parts
+                            .iter()
+                            .any(|p| p.get("type").and_then(|t| t.as_str()) == Some("image_url"));
                         let mut text_parts = Vec::new();
                         for part in parts {
                             let part_type =
