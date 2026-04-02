@@ -3,7 +3,7 @@
 //!
 //! Run: cd src-tauri && cargo test --test trash_lifecycle_test -- --nocapture
 
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::sync::Arc;
 
 use cc_session_lib::db::Database;
