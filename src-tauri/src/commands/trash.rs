@@ -146,54 +146,30 @@ pub fn restore_session(trash_id: String, state: State<AppState>) -> Result<(), S
 
     let remaining: Vec<TrashMeta> = entries.into_iter().filter(|e| e.id != trash_id).collect();
 
-    if entry.trash_file.is_empty() {
-        // SOFT-DELETE (shared file): file was never moved.
-        atomic_write_json(&meta_path, &remaining)?;
+    // Provider decides how to restore
+    let provider_enum = crate::models::Provider::parse(&entry.provider);
+    let provider_impl = provider_enum
+        .as_ref()
+        .and_then(crate::provider::make_provider);
+    let action = provider_impl
+        .as_ref()
+        .map(|p| p.restore_action(&entry))
+        .unwrap_or(crate::provider::RestoreAction::MoveBack);
+
+    let needs_sync =
+        crate::provider::execute_restore(&action, &entry, &trash_dir, &remaining)?;
+
+    // For shared deletions, also clean up the tracking file
+    if action == crate::provider::RestoreAction::UndoSharedDeletion {
         remove_shared_deletion(&shared_deletions_path, &entry.id, &entry.original_path)?;
-        drop(lock);
-        sync_source(&entry.provider, &entry.original_path, &state)?;
-        return Ok(());
-    }
-
-    // DEDICATED FILE: move file back
-    let src = trash_dir.join(&entry.trash_file);
-    let dest = std::path::Path::new(&entry.original_path);
-
-    if !src.exists() {
-        // Already restored or deleted externally
-        atomic_write_json(&meta_path, &remaining)?;
-        drop(lock);
-        sync_source(&entry.provider, &entry.original_path, &state)?;
-        return Ok(());
-    }
-
-    if let Some(parent) = dest.parent() {
-        std::fs::create_dir_all(parent)
-            .map_err(|e| format!("failed to create parent directory: {e}"))?;
-    }
-
-    // Check if other trash entries reference the same file
-    let others_use_same_file = remaining.iter().any(|e| e.trash_file == entry.trash_file);
-
-    if others_use_same_file {
-        // Copy back, keep trash file for other entries
-        if !dest.exists() {
-            std::fs::copy(&src, dest).map_err(|e| format!("failed to copy file back: {e}"))?;
-        }
-    } else {
-        // Last reference: move back
-        if dest.exists() {
-            let _ = std::fs::remove_file(&src);
-        } else {
-            std::fs::rename(&src, dest)
-                .or_else(|_| std::fs::copy(&src, dest).and_then(|_| std::fs::remove_file(&src)))
-                .map_err(|e| format!("failed to restore file: {e}"))?;
-        }
     }
 
     atomic_write_json(&meta_path, &remaining)?;
     drop(lock);
-    sync_source(&entry.provider, &entry.original_path, &state)?;
+
+    if needs_sync {
+        sync_source(&entry.provider, &entry.original_path, &state)?;
+    }
 
     Ok(())
 }

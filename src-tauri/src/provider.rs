@@ -21,6 +21,17 @@ pub enum FileAction {
     Skip,
 }
 
+/// How to restore a trashed session.
+#[derive(Debug, Clone, PartialEq)]
+pub enum RestoreAction {
+    /// Move the trash file back to original_path.
+    MoveBack,
+    /// Remove from shared_deletions tracking, then re-sync source.
+    UndoSharedDeletion,
+    /// Nothing to restore (embedded child — parent restore handles it).
+    Noop,
+}
+
 /// Plan for deleting a child session.
 #[derive(Debug, Clone)]
 pub struct ChildPlan {
@@ -155,6 +166,62 @@ pub fn execute_purge(plan: &DeletionPlan, provider: &dyn SessionProvider, meta: 
         if dir.is_dir() {
             let _ = std::fs::remove_dir_all(dir);
         }
+    }
+}
+
+/// Execute a restore: move file back or undo shared deletion.
+/// Returns `true` if a source sync is needed after restore.
+pub fn execute_restore(
+    action: &RestoreAction,
+    entry: &TrashMeta,
+    trash_dir: &Path,
+    all_entries: &[TrashMeta],
+) -> Result<bool, String> {
+    match action {
+        RestoreAction::MoveBack => {
+            if entry.trash_file.is_empty() {
+                return Ok(false);
+            }
+            let src = trash_dir.join(&entry.trash_file);
+            let dest = Path::new(&entry.original_path);
+
+            if !src.exists() {
+                // Already restored or deleted externally
+                return Ok(true);
+            }
+
+            if let Some(parent) = dest.parent() {
+                std::fs::create_dir_all(parent)
+                    .map_err(|e| format!("failed to create parent directory: {e}"))?;
+            }
+
+            // Check if other trash entries reference the same trash file
+            let others_use_same_file = all_entries
+                .iter()
+                .any(|e| e.id != entry.id && e.trash_file == entry.trash_file);
+
+            if others_use_same_file {
+                if !dest.exists() {
+                    std::fs::copy(&src, dest)
+                        .map_err(|e| format!("failed to copy file back: {e}"))?;
+                }
+            } else if dest.exists() {
+                let _ = std::fs::remove_file(&src);
+            } else {
+                std::fs::rename(&src, dest)
+                    .or_else(|_| {
+                        std::fs::copy(&src, dest).and_then(|_| std::fs::remove_file(&src))
+                    })
+                    .map_err(|e| format!("failed to restore file: {e}"))?;
+            }
+
+            Ok(true)
+        }
+        RestoreAction::UndoSharedDeletion => {
+            // Caller handles remove_shared_deletion + sync_source
+            Ok(true)
+        }
+        RestoreAction::Noop => Ok(false),
     }
 }
 
@@ -334,6 +401,16 @@ pub trait SessionProvider: Send + Sync {
     /// Return a deletion plan for this session.
     /// Provider decides all file actions; command layer executes mechanically.
     fn deletion_plan(&self, meta: &SessionMeta, children: &[SessionMeta]) -> DeletionPlan;
+
+    /// Determine how to restore a trashed session.
+    /// Default: MoveBack for dedicated files, UndoSharedDeletion for shared.
+    fn restore_action(&self, entry: &TrashMeta) -> RestoreAction {
+        if entry.trash_file.is_empty() {
+            RestoreAction::UndoSharedDeletion
+        } else {
+            RestoreAction::MoveBack
+        }
+    }
 
     /// Permanently remove session data from a shared source (DB/file).
     /// Called by `execute_purge` when `FileAction::Shared`.
