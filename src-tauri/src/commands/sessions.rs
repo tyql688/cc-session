@@ -85,7 +85,7 @@ pub fn delete_session(
 
     let children = state.db.get_child_sessions(&session_id).unwrap_or_default();
     let plan = provider_impl.deletion_plan(&meta, &children);
-    crate::provider::execute_purge(&plan, provider_impl.as_ref(), &meta);
+    crate::provider::execute_purge(&plan, provider_impl.as_ref(), &meta)?;
 
     state
         .db
@@ -124,7 +124,7 @@ pub async fn delete_sessions_batch(
 
             let children = state.db.get_child_sessions(session_id).unwrap_or_default();
             let plan = provider_impl.deletion_plan(&meta, &children);
-            crate::provider::execute_purge(&plan, provider_impl.as_ref(), &meta);
+            crate::provider::execute_purge(&plan, provider_impl.as_ref(), &meta)?;
 
             state
                 .db
