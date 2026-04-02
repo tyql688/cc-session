@@ -92,7 +92,7 @@ pub fn trash_session(
     let provider_key = crate::db::provider_to_str_pub(&provider_enum);
 
     let mut entries = read_trash_meta(&meta_path);
-    let records = crate::provider::execute_trash(&plan, &meta, provider_key, &trash_dir, now_ts);
+    let records = crate::provider::execute_trash(&plan, &meta, provider_key, &trash_dir, now_ts)?;
     entries.extend(records);
 
     // Track shared deletions for shared-file sessions
@@ -154,7 +154,7 @@ pub fn restore_session(trash_id: String, state: State<AppState>) -> Result<(), S
     let action = provider_impl
         .as_ref()
         .map(|p| p.restore_action(&entry))
-        .unwrap_or(crate::provider::RestoreAction::MoveBack);
+        .unwrap_or(crate::provider::RestoreAction::Noop);
 
     let needs_sync = crate::provider::execute_restore(&action, &entry, &trash_dir, &remaining)?;
 

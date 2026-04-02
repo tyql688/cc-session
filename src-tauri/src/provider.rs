@@ -62,7 +62,7 @@ pub fn execute_trash(
     provider_key: &str,
     trash_dir: &Path,
     ts: i64,
-) -> Vec<TrashMeta> {
+) -> Result<Vec<TrashMeta>, String> {
     let mut records = Vec::new();
 
     // Main session
@@ -72,7 +72,7 @@ pub fn execute_trash(
             if src.exists() {
                 match move_to_trash(src, trash_dir, ts) {
                     Ok(TrashResult::Moved { trash_file }) => trash_file,
-                    _ => String::new(),
+                    Err(e) => return Err(format!("failed to move parent to trash: {e}")),
                 }
             } else {
                 String::new()
@@ -98,7 +98,9 @@ pub fn execute_trash(
                 if src.exists() {
                     match move_to_trash(src, trash_dir, ts) {
                         Ok(TrashResult::Moved { trash_file }) => trash_file,
-                        _ => String::new(),
+                        Err(e) => {
+                            return Err(format!("failed to move child {} to trash: {e}", child.id))
+                        }
                     }
                 } else {
                     String::new()
@@ -120,24 +122,33 @@ pub fn execute_trash(
     // Cleanup directories
     for dir in &plan.cleanup_dirs {
         if dir.is_dir() {
-            let _ = std::fs::remove_dir_all(dir);
+            std::fs::remove_dir_all(dir)
+                .map_err(|e| format!("failed to remove cleanup directory {}: {e}", dir.display()))?;
         }
     }
 
-    records
+    Ok(records)
 }
 
 /// Execute a permanent delete: remove files or purge from shared source.
-pub fn execute_purge(plan: &DeletionPlan, provider: &dyn SessionProvider, meta: &SessionMeta) {
+pub fn execute_purge(
+    plan: &DeletionPlan,
+    provider: &dyn SessionProvider,
+    meta: &SessionMeta,
+) -> Result<(), String> {
     match plan.file_action {
         FileAction::Remove => {
             let src = Path::new(&meta.source_path);
             if src.exists() {
-                let _ = std::fs::remove_file(src);
+                std::fs::remove_file(src).map_err(|e| {
+                    format!("failed to remove parent source file {}: {e}", src.display())
+                })?;
             }
         }
         FileAction::Shared => {
-            let _ = provider.purge_from_source(&meta.source_path, &meta.id);
+            provider
+                .purge_from_source(&meta.source_path, &meta.id)
+                .map_err(|e| format!("failed to purge parent from shared source: {e}"))?;
         }
         FileAction::Skip => {}
     }
@@ -147,16 +158,25 @@ pub fn execute_purge(plan: &DeletionPlan, provider: &dyn SessionProvider, meta: 
             FileAction::Remove => {
                 let src = Path::new(&child.source_path);
                 if src.exists() {
-                    let _ = std::fs::remove_file(src);
+                    std::fs::remove_file(src).map_err(|e| {
+                        format!("failed to remove child source file {}: {e}", src.display())
+                    })?;
                 }
                 // Also try .meta.json (Claude subagents)
                 let meta_path = src.with_extension("meta.json");
                 if meta_path.exists() {
-                    let _ = std::fs::remove_file(&meta_path);
+                    std::fs::remove_file(&meta_path).map_err(|e| {
+                        format!(
+                            "failed to remove child metadata file {}: {e}",
+                            meta_path.display()
+                        )
+                    })?;
                 }
             }
             FileAction::Shared => {
-                let _ = provider.purge_from_source(&child.source_path, &child.id);
+                provider
+                    .purge_from_source(&child.source_path, &child.id)
+                    .map_err(|e| format!("failed to purge child {} from shared source: {e}", child.id))?;
             }
             FileAction::Skip => {}
         }
@@ -164,9 +184,11 @@ pub fn execute_purge(plan: &DeletionPlan, provider: &dyn SessionProvider, meta: 
 
     for dir in &plan.cleanup_dirs {
         if dir.is_dir() {
-            let _ = std::fs::remove_dir_all(dir);
+            std::fs::remove_dir_all(dir)
+                .map_err(|e| format!("failed to remove cleanup directory {}: {e}", dir.display()))?;
         }
     }
+    Ok(())
 }
 
 /// Execute a restore: move file back or undo shared deletion.
@@ -440,11 +462,14 @@ pub trait SessionProvider: Send + Sync {
 
     /// Determine how to restore a trashed session.
     /// Default: MoveBack for dedicated files, UndoSharedDeletion for shared.
+    /// If neither applies (e.g. failed move before metadata write), do no-op.
     fn restore_action(&self, entry: &TrashMeta) -> RestoreAction {
-        if entry.trash_file.is_empty() {
+        if !entry.trash_file.is_empty() {
+            RestoreAction::MoveBack
+        } else if is_shared_source_path(&entry.original_path) {
             RestoreAction::UndoSharedDeletion
         } else {
-            RestoreAction::MoveBack
+            RestoreAction::Noop
         }
     }
 
@@ -460,9 +485,50 @@ pub trait SessionProvider: Send + Sync {
     }
 }
 
+fn is_shared_source_path(path: &str) -> bool {
+    let normalized = path.replace('\\', "/");
+    normalized.ends_with(".db") || normalized.ends_with("/logs.json")
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::path::PathBuf;
+
+    struct DummyProvider;
+
+    impl SessionProvider for DummyProvider {
+        fn provider(&self) -> Provider {
+            Provider::Claude
+        }
+        fn watch_paths(&self) -> Vec<PathBuf> {
+            Vec::new()
+        }
+        fn scan_all(&self) -> Result<Vec<ParsedSession>, ProviderError> {
+            Ok(Vec::new())
+        }
+        fn load_messages(
+            &self,
+            _session_id: &str,
+            _source_path: &str,
+        ) -> Result<Vec<Message>, ProviderError> {
+            Ok(Vec::new())
+        }
+        fn deletion_plan(&self, _meta: &SessionMeta, _children: &[SessionMeta]) -> DeletionPlan {
+            DeletionPlan {
+                file_action: FileAction::Skip,
+                child_plans: Vec::new(),
+                cleanup_dirs: Vec::new(),
+            }
+        }
+        fn purge_from_source(
+            &self,
+            _source_path: &str,
+            _session_id: &str,
+        ) -> Result<(), ProviderError> {
+            Err(ProviderError::Parse("boom".to_string()))
+        }
+    }
 
     #[test]
     fn test_from_source_path() {
@@ -566,5 +632,69 @@ mod tests {
             Provider::all().len(),
             "sort_order values must be unique"
         );
+    }
+
+    #[test]
+    fn test_default_restore_action_noop_for_empty_trash_file_on_dedicated_source() {
+        let provider = DummyProvider;
+        let entry = TrashMeta {
+            id: "s1".to_string(),
+            provider: "claude".to_string(),
+            title: "t".to_string(),
+            original_path: "/tmp/session.jsonl".to_string(),
+            trashed_at: 0,
+            trash_file: String::new(),
+            project_name: String::new(),
+        };
+        assert_eq!(provider.restore_action(&entry), RestoreAction::Noop);
+    }
+
+    #[test]
+    fn test_default_restore_action_shared_for_db_source() {
+        let provider = DummyProvider;
+        let entry = TrashMeta {
+            id: "s1".to_string(),
+            provider: "cursor".to_string(),
+            title: "t".to_string(),
+            original_path: "/tmp/store.db".to_string(),
+            trashed_at: 0,
+            trash_file: String::new(),
+            project_name: String::new(),
+        };
+        assert_eq!(
+            provider.restore_action(&entry),
+            RestoreAction::UndoSharedDeletion
+        );
+    }
+
+    #[test]
+    fn test_execute_purge_propagates_shared_purge_errors() {
+        let provider = DummyProvider;
+        let plan = DeletionPlan {
+            file_action: FileAction::Shared,
+            child_plans: Vec::new(),
+            cleanup_dirs: Vec::new(),
+        };
+        let meta = SessionMeta {
+            id: "s1".to_string(),
+            provider: Provider::Claude,
+            title: "t".to_string(),
+            project_path: String::new(),
+            project_name: String::new(),
+            created_at: 0,
+            updated_at: 0,
+            message_count: 0,
+            file_size_bytes: 0,
+            source_path: "/tmp/store.db".to_string(),
+            is_sidechain: false,
+            variant_name: None,
+            model: None,
+            cc_version: None,
+            git_branch: None,
+            parent_id: None,
+        };
+
+        let err = execute_purge(&plan, &provider, &meta).expect_err("should propagate purge error");
+        assert!(err.contains("boom"));
     }
 }

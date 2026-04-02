@@ -7,6 +7,22 @@ function shortPath(p: string): string {
   return p?.split("/").slice(-2).join("/") || "";
 }
 
+function extractPatchedFiles(patchText: string): string[] {
+  const files = patchText
+    .split("\n")
+    .map((line) => {
+      if (line.startsWith("*** Update File: ")) {
+        return line.slice("*** Update File: ".length).trim();
+      }
+      if (line.startsWith("*** Add File: ")) {
+        return line.slice("*** Add File: ".length).trim();
+      }
+      return "";
+    })
+    .filter((s) => s.length > 0);
+  return [...new Set(files)];
+}
+
 /** Extract a human-readable summary from tool input JSON. */
 function toolSummary(name: string, inputJson: string): string {
   try {
@@ -122,6 +138,17 @@ function formatToolInput(
         };
     }
   } catch {
+    if (name === "Apply_patch" && inputJson.includes("*** Begin Patch")) {
+      const files = extractPatchedFiles(inputJson);
+      return {
+        lines: [
+          ...(files.length > 0
+            ? [{ label: "files", value: files.join("\n") }]
+            : []),
+          { label: "patch", value: inputJson },
+        ],
+      };
+    }
     return { lines: [{ label: "raw", value: inputJson }] };
   }
 }

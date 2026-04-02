@@ -167,7 +167,16 @@ impl Database {
              ORDER BY created_at",
         )?;
         let rows = stmt.query_map(params![parent_id], row_to_session_meta)?;
-        Ok(rows.filter_map(|r| r.ok()).collect())
+        let mut sessions = Vec::new();
+        for row in rows {
+            match row {
+                Ok(meta) => sessions.push(meta),
+                Err(e) => {
+                    log::warn!("failed to map child session row for parent {}: {}", parent_id, e);
+                }
+            }
+        }
+        Ok(sessions)
     }
 
     pub fn add_favorite(&self, session_id: &str) -> Result<(), rusqlite::Error> {
