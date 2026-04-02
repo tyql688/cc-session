@@ -480,7 +480,11 @@ mod tests {
                 Some(Provider::Gemini),
             ),
             (
-                "/home/user/.cursor/chats/uuid/store.db",
+                "/home/user/.cursor/projects/slug/agent-transcripts/parent-id/parent-id.jsonl",
+                Some(Provider::Cursor),
+            ),
+            (
+                "/home/user/.cursor/projects/slug/agent-transcripts/parent-id/subagents/child-id.jsonl",
                 Some(Provider::Cursor),
             ),
             (

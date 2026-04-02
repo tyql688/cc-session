@@ -10,9 +10,7 @@ use serde::Deserialize;
 use walkdir::WalkDir;
 
 use crate::models::{Message, Provider, SessionMeta};
-use crate::provider::{
-    DeletionPlan, FileAction, ParsedSession, ProviderError, SessionProvider,
-};
+use crate::provider::{DeletionPlan, FileAction, ParsedSession, ProviderError, SessionProvider};
 
 pub struct Descriptor;
 impl crate::provider::ProviderDescriptor for Descriptor {

@@ -50,6 +50,14 @@ function formatToolInput(
     const obj = JSON.parse(inputJson);
     switch (name) {
       case "Edit":
+        if (obj.patch) {
+          return {
+            lines: [
+              { label: "file", value: obj.file_path || "" },
+              { label: "patch", value: obj.patch },
+            ],
+          };
+        }
         return {
           lines: [{ label: "file", value: obj.file_path || "" }],
           diff: { old: obj.old_string || "", new: obj.new_string || "" },
@@ -114,19 +122,6 @@ function formatToolInput(
         };
     }
   } catch {
-    // apply_patch: raw patch text, extract file path from header
-    if (name === "Apply_patch" && inputJson.includes("*** Begin Patch")) {
-      const fileMatch = inputJson.match(
-        /\*\*\* (?:Add|Update|Delete) File:\s*(.+)/,
-      );
-      const filePath = fileMatch ? fileMatch[1].trim() : "";
-      return {
-        lines: [
-          ...(filePath ? [{ label: "file", value: filePath }] : []),
-          { label: "patch", value: inputJson },
-        ],
-      };
-    }
     return { lines: [{ label: "raw", value: inputJson }] };
   }
 }
