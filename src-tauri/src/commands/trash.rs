@@ -147,15 +147,7 @@ pub fn restore_session(trash_id: String, state: State<AppState>) -> Result<(), S
         }
     };
 
-    // Session directory prefix: children's source_path lives under the parent's session dir.
-    // e.g. parent: ~/.codex/sessions/abc.jsonl → session dir: ~/.codex/sessions/abc/
-    let session_dir_prefix = {
-        let p = std::path::Path::new(&entry.original_path);
-        let dir = p.with_extension("");
-        format!("{}/", dir.display())
-    };
-
-    // Collect children to also restore (own files under session dir, or embedded with same path)
+    // Collect children to also restore alongside this parent.
     let mut child_entries: Vec<TrashMeta> = Vec::new();
     let remaining: Vec<TrashMeta> = entries
         .into_iter()
@@ -163,20 +155,23 @@ pub fn restore_session(trash_id: String, state: State<AppState>) -> Result<(), S
             if e.id == trash_id {
                 return false;
             }
-            // Embedded children: same original_path, empty trash_file (Kimi)
+            // Match children by parent_id (set during execute_trash)
+            if e.parent_id.as_deref() == Some(&trash_id) {
+                if e.trash_file.is_empty() {
+                    // Embedded child (Kimi): just remove from metadata
+                    return false;
+                }
+                // File-based child: collect for restore
+                child_entries.push(e.clone());
+                return false;
+            }
+            // Legacy: embedded children without parent_id (same path, empty trash_file)
             if e.trash_file.is_empty()
                 && !entry.trash_file.is_empty()
                 && e.original_path == entry.original_path
                 && e.provider == entry.provider
+                && e.parent_id.is_none()
             {
-                return false;
-            }
-            // File-based children: source path under parent's session dir (Codex, Cursor, Claude)
-            if !e.trash_file.is_empty()
-                && e.provider == entry.provider
-                && e.original_path.starts_with(&session_dir_prefix)
-            {
-                child_entries.push(e.clone());
                 return false;
             }
             true

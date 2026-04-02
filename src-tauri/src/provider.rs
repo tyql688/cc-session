@@ -88,6 +88,7 @@ pub fn execute_trash(
         trashed_at: ts,
         trash_file,
         project_name: meta.project_name.clone(),
+        parent_id: None,
     });
 
     // Children
@@ -116,6 +117,7 @@ pub fn execute_trash(
             trashed_at: ts,
             trash_file: child_trash_file,
             project_name: meta.project_name.clone(),
+            parent_id: Some(meta.id.clone()),
         });
     }
 

@@ -50,8 +50,7 @@ fn do_trash(db: &Database, session_id: &str, provider_str: &str) -> Result<(), S
 
     let provider_enum =
         Provider::parse(provider_str).ok_or_else(|| format!("bad provider: {provider_str}"))?;
-    let provider_impl =
-        make_provider(&provider_enum).ok_or("cannot create provider")?;
+    let provider_impl = make_provider(&provider_enum).ok_or("cannot create provider")?;
 
     let db_children = db.get_child_sessions(session_id).unwrap_or_default();
     let plan = provider_impl.deletion_plan(&meta, &db_children);
@@ -84,13 +83,6 @@ fn do_restore(db: &Database, trash_id: &str) -> Result<(), String> {
         None => return Ok(()), // already restored
     };
 
-    // Session directory prefix for matching file-based children
-    let session_dir_prefix = {
-        let p = std::path::Path::new(&entry.original_path);
-        let dir = p.with_extension("");
-        format!("{}/", dir.display())
-    };
-
     let mut child_entries = Vec::new();
     let remaining: Vec<_> = entries
         .into_iter()
@@ -98,20 +90,21 @@ fn do_restore(db: &Database, trash_id: &str) -> Result<(), String> {
             if e.id == trash_id {
                 return false;
             }
-            // Embedded children (Kimi)
+            // Match children by parent_id
+            if e.parent_id.as_deref() == Some(trash_id) {
+                if e.trash_file.is_empty() {
+                    return false; // embedded child
+                }
+                child_entries.push(e.clone());
+                return false;
+            }
+            // Legacy: embedded children without parent_id
             if e.trash_file.is_empty()
                 && !entry.trash_file.is_empty()
                 && e.original_path == entry.original_path
                 && e.provider == entry.provider
+                && e.parent_id.is_none()
             {
-                return false;
-            }
-            // File-based children (Codex, Cursor, Claude)
-            if !e.trash_file.is_empty()
-                && e.provider == entry.provider
-                && e.original_path.starts_with(&session_dir_prefix)
-            {
-                child_entries.push(e.clone());
                 return false;
             }
             true
@@ -145,8 +138,16 @@ fn do_restore(db: &Database, trash_id: &str) -> Result<(), String> {
     if needs_sync {
         if let Some(prov) = &provider_enum {
             if let Some(p) = make_provider(prov) {
+                // Sync parent source
                 let sessions = p.scan_source(&entry.original_path).unwrap_or_default();
                 let _ = db.sync_source_snapshot(prov, &entry.original_path, &sessions);
+                // Sync each restored child source (may differ from parent, e.g. Codex)
+                for child in &child_entries {
+                    if child.original_path != entry.original_path {
+                        let cs = p.scan_source(&child.original_path).unwrap_or_default();
+                        let _ = db.sync_source_snapshot(prov, &child.original_path, &cs);
+                    }
+                }
             }
         }
     }
@@ -200,7 +201,23 @@ fn cursor_store_dirs() -> Vec<PathBuf> {
 #[test]
 fn lifecycle_trash_restore_delete() {
     let db = db();
-    let test_providers = [Provider::Kimi, Provider::Codex, Provider::Cursor, Provider::OpenCode];
+    let test_providers = [
+        Provider::Kimi,
+        Provider::Codex,
+        Provider::Cursor,
+        Provider::OpenCode,
+    ];
+
+    // Ensure all providers are indexed before testing
+    println!("\n===== PHASE 0: Reindex =====");
+    for prov in &test_providers {
+        if let Some(p) = make_provider(prov) {
+            if let Ok(sessions) = p.scan_all() {
+                let _ = db.sync_provider_snapshot(prov, &sessions);
+                println!("  {}: indexed {} sessions", prov.key(), sessions.len());
+            }
+        }
+    }
 
     // ── PHASE 1: Initial state ──────────────────────────────────────────────
     println!("\n===== PHASE 1: Initial State =====");
@@ -224,9 +241,16 @@ fn lifecycle_trash_restore_delete() {
             .collect();
         println!(
             "  {}: {} parents, {} children, {} source files on disk",
-            prov.key(), p.len(), c.len(), srcs.len()
+            prov.key(),
+            p.len(),
+            c.len(),
+            srcs.len()
         );
-        assert!(!p.is_empty(), "{}: no parent sessions — generate data first", prov.key());
+        assert!(
+            !p.is_empty(),
+            "{}: no parent sessions — generate data first",
+            prov.key()
+        );
         snaps.push(Snap {
             provider_key: prov.key().to_string(),
             parent_ids: p.iter().map(|s| s.id.clone()).collect(),
@@ -246,7 +270,11 @@ fn lifecycle_trash_restore_delete() {
     }
     for prov in &test_providers {
         let sess = query_sessions(&db, prov);
-        assert!(sess.is_empty(), "{}: DB should be empty after trash", prov.key());
+        assert!(
+            sess.is_empty(),
+            "{}: DB should be empty after trash",
+            prov.key()
+        );
         println!("  {}: DB empty ✓", prov.key());
     }
 
@@ -265,14 +293,25 @@ fn lifecycle_trash_restore_delete() {
         let snap = &snaps[i];
 
         assert_eq!(
-            p.len(), snap.parent_ids.len(),
-            "{}: parent count mismatch after restore", prov.key()
+            p.len(),
+            snap.parent_ids.len(),
+            "{}: parent count mismatch after restore",
+            prov.key()
         );
         assert_eq!(
-            c.len(), snap.child_count,
-            "{}: child count mismatch after restore ({} vs {})", prov.key(), c.len(), snap.child_count
+            c.len(),
+            snap.child_count,
+            "{}: child count mismatch after restore ({} vs {})",
+            prov.key(),
+            c.len(),
+            snap.child_count
         );
-        println!("  {}: {} parents, {} children ✓", prov.key(), p.len(), c.len());
+        println!(
+            "  {}: {} parents, {} children ✓",
+            prov.key(),
+            p.len(),
+            c.len()
+        );
 
         // Verify child titles preserved (especially Kimi subagent names from meta.json)
         if *prov == Provider::Kimi {
@@ -290,7 +329,12 @@ fn lifecycle_trash_restore_delete() {
 
         // Verify source files still exist
         for f in &snap.source_files {
-            assert!(f.exists(), "{}: source file gone after restore: {}", prov.key(), f.display());
+            assert!(
+                f.exists(),
+                "{}: source file gone after restore: {}",
+                prov.key(),
+                f.display()
+            );
         }
         println!("  {}: source files intact ✓", prov.key());
     }
@@ -312,7 +356,11 @@ fn lifecycle_trash_restore_delete() {
 
     for prov in &test_providers {
         let sess = query_sessions(&db, prov);
-        assert!(sess.is_empty(), "{}: DB not empty after empty_trash", prov.key());
+        assert!(
+            sess.is_empty(),
+            "{}: DB not empty after empty_trash",
+            prov.key()
+        );
         println!("  {}: DB clean ✓", prov.key());
     }
 
@@ -323,7 +371,11 @@ fn lifecycle_trash_restore_delete() {
 
     // Cursor: no store.db directories
     let cursor_stores = cursor_store_dirs();
-    assert!(cursor_stores.is_empty(), "Cursor store.db dirs: {:?}", cursor_stores);
+    assert!(
+        cursor_stores.is_empty(),
+        "Cursor store.db dirs: {:?}",
+        cursor_stores
+    );
     println!("  Cursor: no store.db dirs ✓");
 
     // File-based providers: source files should be gone
@@ -335,20 +387,26 @@ fn lifecycle_trash_restore_delete() {
             assert!(
                 !f.exists(),
                 "{}: source file still exists: {}",
-                snap.provider_key, f.display()
+                snap.provider_key,
+                f.display()
             );
         }
         println!("  {}: source files cleaned ✓", snap.provider_key);
     }
 
     // OpenCode: sessions purged from opencode.db
-    let oc_db = dirs::home_dir().unwrap().join(".local/share/opencode/opencode.db");
+    let oc_db = dirs::home_dir()
+        .unwrap()
+        .join(".local/share/opencode/opencode.db");
     if oc_db.exists() {
         let conn = rusqlite::Connection::open(&oc_db).unwrap();
         let count: u64 = conn
             .query_row("SELECT COUNT(*) FROM session", [], |row| row.get(0))
             .unwrap_or(0);
-        println!("  OpenCode: {} sessions in opencode.db (should be 0)", count);
+        println!(
+            "  OpenCode: {} sessions in opencode.db (should be 0)",
+            count
+        );
         assert_eq!(count, 0, "OpenCode sessions not purged from opencode.db");
         println!("  OpenCode: opencode.db clean ✓");
     }
@@ -357,7 +415,11 @@ fn lifecycle_trash_restore_delete() {
     let trash_dir = trash_state::trash_dir().unwrap();
     let meta_path = trash_state::trash_meta_path(&trash_dir);
     let remaining = trash_state::read_trash_meta(&meta_path);
-    assert!(remaining.is_empty(), "Trash metadata not empty: {} entries", remaining.len());
+    assert!(
+        remaining.is_empty(),
+        "Trash metadata not empty: {} entries",
+        remaining.len()
+    );
     println!("  Trash metadata empty ✓");
 
     println!("\n===== ALL TESTS PASSED =====\n");
