@@ -237,7 +237,7 @@ impl CursorProvider {
 
     /// Derive workspace path from the projects directory name.
     /// Path structure: ~/.cursor/projects/<ProjectKey>/agent-transcripts/<id>/<id>.jsonl
-    /// ProjectKey format: Users-john-Documents-drama-aitool (dashes replace path separators)
+    /// ProjectKey format: Users-john-Documents-myproject (dashes replace path separators)
     ///
     /// We try to find a real directory matching the decoded path.
     fn derive_project_path_from_transcript(&self, path: &Path) -> String {
@@ -261,7 +261,7 @@ impl CursorProvider {
 }
 
 /// Decode a Cursor projects directory name back to a filesystem path.
-/// e.g. "Users-john-Documents-drama-aitool" → "/Users/john/Documents/drama/aitool"
+/// e.g. "Users-john-Documents-myproject" → "/Users/john/Documents/myproject"
 ///
 /// Strategy: greedily reconstruct the longest valid path by trying dash positions
 /// as potential path separators.

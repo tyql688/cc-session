@@ -35,7 +35,7 @@ src-tauri/src/
   providers/
     claude/                # mod.rs, parser.rs, images.rs
     codex/                 # mod.rs, parser.rs, tools.rs
-    gemini/                # mod.rs, logs_parser.rs, chat_parser.rs, orphan.rs, images.rs, tools.rs
+    gemini/                # mod.rs, chat_parser.rs, images.rs, tools.rs
     kimi/                  # mod.rs, parser.rs, tools.rs
     cursor/                # mod.rs, parser.rs, tools.rs
     opencode/              # mod.rs, parser.rs
@@ -71,8 +71,8 @@ for static metadata (color, sort order, resume command, path ownership, etc.).
 Instance operations (scan, load, trash, delete) use the `SessionProvider` trait
 via `make_provider()`. This separation means static queries have zero overhead.
 
-File-based (Claude, Codex, Gemini, Kimi CLI, CC-Mirror): FS event watching via `notify` crate.
-SQLite-based (Cursor CLI, OpenCode): 2s polling in frontend when live watch enabled. Opened with `SQLITE_OPEN_READ_WRITE` to read WAL data.
+File-based (Claude, Codex, Gemini, Kimi CLI, Cursor CLI, CC-Mirror): FS event watching via `notify` crate.
+SQLite-based (OpenCode): 2s polling in frontend when live watch enabled. Opened with `SQLITE_OPEN_READ_WRITE` to read WAL data.
 
 CC-Mirror is a special provider that aggregates multiple Claude Code-like variants under `~/.cc-mirror/`. Each variant subdirectory contains a `variant.json` metadata file and `config/projects/` directory with JSONL sessions (same format as Claude Code). Variant names are sanitized (alphanumeric, hyphens, underscores) for safe shell usage. Sessions are grouped by variant in the UI. Resume commands use variant names as command prefixes (e.g., `mycczai --resume session-id`).
 
@@ -87,7 +87,7 @@ Tool names are mapped to canonical names per provider (e.g. Codex `exec_command`
 | Claude Code | `~/.claude/projects/**/*.jsonl`        | JSONL  |
 | Codex       | `~/.codex/sessions/**/*.jsonl`         | JSONL  |
 | Gemini      | `~/.gemini/tmp/*/chats/*.json`         | JSON   |
-| Kimi CLI    | `~/.kimi/sessions/**/*.jsonl`          | JSONL  |
+| Kimi CLI    | `~/.kimi/sessions/**/wire.jsonl`       | JSONL  |
 | Cursor CLI  | `~/.cursor/projects/*/agent-transcripts/**/*.jsonl` | JSONL |
 | OpenCode    | `~/.local/share/opencode/opencode.db`  | SQLite |
 | CC-Mirror   | `~/.cc-mirror/{variant}/config/projects/**/*.jsonl` | JSONL |
@@ -101,7 +101,7 @@ WAL mode enables concurrent reads during writes.
 ## Testing
 
 - **Rust**: `cd src-tauri && cargo test`
-  - 21 golden tests in `tests/parser_tests.rs` covering Claude, Codex, Kimi parsers
+  - 49 golden tests in `tests/parser_tests.rs` covering Claude, Codex, Kimi, Cursor, OpenCode parsers
   - Trash lifecycle test in `tests/trash_lifecycle_test.rs`: full trash → restore → trash → empty-trash cycle for Kimi, Codex, Cursor, OpenCode using **real local data** (requires sessions to exist on disk)
   - Provider unit tests in `src/provider.rs` (path matching, display key roundtrip)
   - Test fixtures in `tests/fixtures/`
@@ -125,11 +125,9 @@ Three-platform matrix (macOS, Windows, Linux) with:
 
 ## Lessons Learned (Pitfalls to Avoid)
 
-### SQLite Providers (Cursor CLI, OpenCode)
+### SQLite Providers (OpenCode)
 
-- **SQLITE_OPEN_READ_ONLY cannot read WAL data.** Cursor and OpenCode use WAL mode. During active sessions, data lives in the WAL file. `READ_ONLY` connections only see checkpointed data. Must use `SQLITE_OPEN_READ_WRITE` even though we only read.
-- **Cursor CLI store.db uses BLOB column type**, not TEXT. `row.get::<_, String>(0)` silently fails. Must use `row.get::<_, Vec<u8>>(0)` then `String::from_utf8_lossy`.
-- **Cursor CLI content is JSON-array-as-string.** The `content` field in blobs is stored as a JSON string `"[{\"type\":\"text\",...}]"`, not a native JSON array. Need double-parse: first serde gives `Value::String`, then parse the string as `Vec<Value>`.
+- **SQLITE_OPEN_READ_ONLY cannot read WAL data.** OpenCode uses WAL mode. During active sessions, data lives in the WAL file. `READ_ONLY` connections only see checkpointed data. Must use `SQLITE_OPEN_READ_WRITE` even though we only read.
 - **FSEvents unreliable for SQLite WAL changes.** macOS file system events don't reliably fire for WAL writes. Solution: use 2-second polling in frontend for DB-based providers, keep FS events only for JSONL/JSON providers.
 - **OpenCode uses XDG path, not macOS standard.** `dirs::data_local_dir()` returns `~/Library/Application Support` on macOS, but OpenCode stores data in `~/.local/share/opencode/`. Must manually construct `$HOME/.local/share/opencode`.
 - **OpenCode "global" project has worktree="/".** Prefer session's `directory` field over project's `worktree` for path resolution.
@@ -200,7 +198,6 @@ Three-platform matrix (macOS, Windows, Linux) with:
 - **Resume commands vary per provider.** Claude: `claude --resume ID`, Codex: `codex resume ID`, Gemini: `gemini --resume ID`, Kimi CLI: `kimi --session ID`, Cursor CLI: `agent --resume=ID`, OpenCode: `opencode -s ID`, CC-Mirror: `{variant-name} --resume ID`.
 - **FTS content is intentionally truncated** to 2000 bytes via `truncate_to_bytes`. This is for index size, not display. Display content is never truncated.
 - **Timestamps.** Claude/Codex/Gemini have per-message timestamps. Cursor CLI has none (use file metadata). OpenCode uses epoch milliseconds (convert with `ms / 1000`).
-- **Cursor CLI has no token usage data.** store.db blobs only contain `role`, `content`, `id` — no usage/token fields. Token billing is tracked server-side only.
 
 ## Conventions
 
