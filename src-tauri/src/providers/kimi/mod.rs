@@ -117,7 +117,7 @@ impl SessionProvider for KimiProvider {
 
         let sessions: Vec<ParsedSession> = files
             .par_iter()
-            .filter_map(|path| self.parse_session_file(path, &project_map))
+            .flat_map(|path| self.parse_session_with_subagents(path, &project_map))
             .collect();
 
         Ok(sessions)
@@ -126,23 +126,28 @@ impl SessionProvider for KimiProvider {
     fn scan_source(&self, source_path: &str) -> Result<Vec<ParsedSession>, ProviderError> {
         let path = PathBuf::from(source_path);
         let project_map = self.build_project_map();
-        Ok(self
-            .parse_session_file(&path, &project_map)
-            .into_iter()
-            .collect())
+        Ok(self.parse_session_with_subagents(&path, &project_map))
     }
 
     fn load_messages(
         &self,
-        _session_id: &str,
+        session_id: &str,
         source_path: &str,
     ) -> Result<Vec<Message>, ProviderError> {
         let path = PathBuf::from(source_path);
         let project_map = self.build_project_map();
 
-        let parsed = self
-            .parse_session_file(&path, &project_map)
-            .ok_or_else(|| ProviderError::Parse("failed to parse kimi session file".to_string()))?;
+        // Parse parent + subagents, find the one matching session_id
+        let sessions = self.parse_session_with_subagents(&path, &project_map);
+        let parsed = sessions
+            .into_iter()
+            .find(|s| s.meta.id == session_id)
+            .ok_or_else(|| {
+                ProviderError::Parse(format!(
+                    "session {session_id} not found in {}",
+                    source_path
+                ))
+            })?;
 
         Ok(parsed.messages)
     }
