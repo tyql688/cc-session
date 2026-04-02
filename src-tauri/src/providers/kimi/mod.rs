@@ -169,6 +169,15 @@ impl SessionProvider for KimiProvider {
         }
     }
 
+    fn restore_action(&self, entry: &crate::models::TrashMeta) -> crate::provider::RestoreAction {
+        if entry.trash_file.is_empty() {
+            // Embedded child — parent file handles it
+            crate::provider::RestoreAction::Noop
+        } else {
+            crate::provider::RestoreAction::MoveBack
+        }
+    }
+
     fn load_messages(
         &self,
         session_id: &str,

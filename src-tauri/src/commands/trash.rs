@@ -156,8 +156,7 @@ pub fn restore_session(trash_id: String, state: State<AppState>) -> Result<(), S
         .map(|p| p.restore_action(&entry))
         .unwrap_or(crate::provider::RestoreAction::MoveBack);
 
-    let needs_sync =
-        crate::provider::execute_restore(&action, &entry, &trash_dir, &remaining)?;
+    let needs_sync = crate::provider::execute_restore(&action, &entry, &trash_dir, &remaining)?;
 
     // For shared deletions, also clean up the tracking file
     if action == crate::provider::RestoreAction::UndoSharedDeletion {

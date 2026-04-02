@@ -281,10 +281,7 @@ impl GeminiProvider {
                         });
 
                     // For Agent-type tools, prepend description to result content
-                    let description = tc
-                        .get("description")
-                        .and_then(|d| d.as_str())
-                        .unwrap_or("");
+                    let description = tc.get("description").and_then(|d| d.as_str()).unwrap_or("");
                     let content = if !description.is_empty() && name == "Agent" {
                         if result_text.is_empty() {
                             description.to_string()
