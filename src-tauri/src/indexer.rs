@@ -45,7 +45,7 @@ impl Indexer {
 
             let count = sessions.len();
             self.db
-                .sync_provider_snapshot(&provider_kind, &sessions)
+                .sync_provider_snapshot(&provider_kind, &sessions, true)
                 .map_err(|e| format!("failed to sync {} provider: {}", provider_kind.key(), e))?;
             total += count;
         }
