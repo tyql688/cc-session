@@ -21,10 +21,20 @@ impl Indexer {
     }
 
     pub fn reindex(&self) -> Result<usize, String> {
-        self.reindex_providers(None)
+        self.reindex_filtered(None, true)
     }
 
     pub fn reindex_providers(&self, filter: Option<&[Provider]>) -> Result<usize, String> {
+        // Background/polling reindex uses protective sync (aggressive=false)
+        // to avoid deleting sessions on transient scan failures.
+        self.reindex_filtered(filter, false)
+    }
+
+    fn reindex_filtered(
+        &self,
+        filter: Option<&[Provider]>,
+        aggressive: bool,
+    ) -> Result<usize, String> {
         let start = Instant::now();
         let mut total = 0usize;
 
@@ -55,7 +65,7 @@ impl Indexer {
 
             let count = sessions.len();
             self.db
-                .sync_provider_snapshot(&provider_kind, &sessions, true)
+                .sync_provider_snapshot(&provider_kind, &sessions, aggressive)
                 .map_err(|e| format!("failed to sync {} provider: {}", provider_kind.key(), e))?;
             total += count;
         }

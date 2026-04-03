@@ -78,20 +78,49 @@ export function createSyncManager(callbacks: SyncCallbacks) {
     }
   }
 
+  let pendingPoll = false;
+
+  /** Poll sync — serialized with FS-event sync via syncInFlight guard. */
+  async function pollSync(providers: string[]) {
+    if (syncInFlight) {
+      pendingPoll = true;
+      return;
+    }
+
+    syncInFlight = true;
+    try {
+      await reindexProviders(providers);
+      await refreshTree();
+    } catch (e) {
+      // Polling failures are transient — log for diagnosis, don't toast
+      console.debug("poll sync failed:", e);
+    } finally {
+      syncInFlight = false;
+      // Drain pending work (FS events queued during poll take priority)
+      if (pendingFullSync) {
+        pendingFullSync = false;
+        pendingChangedPaths.clear();
+        pendingPoll = false;
+        void syncFromDisk();
+      } else if (pendingChangedPaths.size > 0) {
+        const queuedPaths = [...pendingChangedPaths];
+        pendingChangedPaths.clear();
+        pendingPoll = false;
+        void syncFromDisk({ changedPaths: queuedPaths });
+      }
+      // Don't re-trigger poll here — next interval tick handles it
+      pendingPoll = false;
+    }
+  }
+
   function startPolling() {
     const pollProviders = allProviders()
       .filter((p) => p.watchStrategy === "poll")
       .map((p) => p.key);
     if (pollProviders.length === 0) return;
 
-    pollTimer = setInterval(async () => {
-      if (syncInFlight) return;
-      try {
-        await reindexProviders(pollProviders);
-        await refreshTree();
-      } catch {
-        // Silent — polling failures are transient
-      }
+    pollTimer = setInterval(() => {
+      void pollSync(pollProviders);
     }, 5000);
   }
 
