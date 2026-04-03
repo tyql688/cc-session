@@ -40,6 +40,7 @@ export default function App() {
   const [activeTabId, setActiveTabId] = createSignal<string | null>(null);
   const [isLoading, setIsLoading] = createSignal(true);
   const [showKeyboardOverlay, setShowKeyboardOverlay] = createSignal(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = createSignal(false);
 
   const debouncedChangedPaths = new Set<string>();
 
@@ -188,6 +189,7 @@ export default function App() {
     return v !== "settings" && v !== "trash";
   });
   const showExplorerTree = createMemo(() => {
+    if (sidebarCollapsed()) return false;
     const v = activeView();
     return (
       v !== "settings" && v !== "trash" && v !== "favorites" && v !== "blocked"
@@ -311,7 +313,13 @@ export default function App() {
           </Show>
         </div>
         <div class="main-layout">
-          <ActivityBar activeView={activeView()} onViewChange={setActiveView} />
+          <ActivityBar
+            activeView={activeView()}
+            onViewChange={(v) => {
+              setActiveView(v);
+              if (v === "explorer") setSidebarCollapsed(false);
+            }}
+          />
           <Show when={showExplorerTree()}>
             <Explorer
               tree={filteredTree()}
@@ -319,6 +327,7 @@ export default function App() {
               activeSessionId={activeTabId()}
               onOpenSession={openSession}
               onRefreshTree={sync.refreshTree}
+              onCollapse={() => setSidebarCollapsed(true)}
               onDeleteSession={async (id: string) => {
                 try {
                   await trashSession(id, "", "", "");

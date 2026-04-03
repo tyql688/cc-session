@@ -67,6 +67,7 @@ export function Explorer(props: {
   onDeleteSession?: (id: string) => void;
   onExportSession?: (id: string) => void;
   onRefreshTree?: () => void;
+  onCollapse?: () => void;
   isLoading?: boolean;
 }) {
   const { t } = useI18n();
@@ -105,15 +106,12 @@ export function Explorer(props: {
     }
   });
 
-  // Reveal active session: expand ancestor nodes and scroll into view.
-  // Must search displayTree (not props.tree) because time grouping inserts
-  // intermediate nodes with different IDs.
-  createEffect(() => {
+  // Reveal active session on demand: expand ancestors and scroll into view.
+  function revealActiveSession() {
     const sessionId = props.activeSessionId;
     const tree = displayTree();
     if (!sessionId || tree.length === 0) return;
 
-    // DFS: find the path of ancestor node IDs leading to the target session
     function findPath(nodes: TreeNode[], target: string): string[] | null {
       for (const node of nodes) {
         if (node.id === target) return [];
@@ -135,7 +133,7 @@ export function Explorer(props: {
       const el = document.querySelector(`[data-session-id="${sessionId}"]`);
       el?.scrollIntoView({ block: "nearest", behavior: "smooth" });
     });
-  });
+  }
 
   function toggleExpanded(nodeId: string) {
     setExpandedIds((prev) => {
@@ -400,8 +398,37 @@ export function Explorer(props: {
     });
   }
 
+  // Drag-to-resize handle
+  let explorerRef: HTMLDivElement | undefined;
+
+  function onResizeStart(e: MouseEvent) {
+    e.preventDefault();
+    const el = explorerRef;
+    if (!el) return;
+    const startX = e.clientX;
+    const startW = el.offsetWidth;
+    const handle = e.currentTarget as HTMLElement;
+    handle.classList.add("active");
+
+    function onMove(ev: MouseEvent) {
+      const w = Math.max(
+        160,
+        Math.min(startW + ev.clientX - startX, window.innerWidth * 0.5),
+      );
+      el!.style.width = `${w}px`;
+    }
+    function onUp() {
+      handle.classList.remove("active");
+      document.removeEventListener("mousemove", onMove);
+      document.removeEventListener("mouseup", onUp);
+    }
+    document.addEventListener("mousemove", onMove);
+    document.addEventListener("mouseup", onUp);
+  }
+
   return (
-    <div class="explorer">
+    <div class="explorer" ref={explorerRef}>
+      <div class="explorer-resize-handle" onMouseDown={onResizeStart} />
       <div class="explorer-header">
         <span>{t("explorer.title")}</span>
         <Show when={selectionCount() > 0}>
@@ -409,6 +436,26 @@ export function Explorer(props: {
             {selectionCount()} {t("explorer.selected")}
           </span>
         </Show>
+        <span class="explorer-header-actions">
+          <Show when={props.activeSessionId}>
+            <button
+              class="explorer-header-btn"
+              title={t("explorer.locateSession")}
+              onClick={revealActiveSession}
+            >
+              {"\u2316"}
+            </button>
+          </Show>
+          <Show when={props.onCollapse}>
+            <button
+              class="explorer-header-btn"
+              title={t("explorer.hideExplorer")}
+              onClick={() => props.onCollapse?.()}
+            >
+              {"\u2190"}
+            </button>
+          </Show>
+        </span>
       </div>
       <div class="explorer-tree">
         <Show when={props.isLoading && props.tree.length === 0}>
