@@ -12,6 +12,7 @@ impl Database {
         &self,
         provider: &Provider,
         sessions: &[ParsedSession],
+        aggressive: bool,
     ) -> Result<(), rusqlite::Error> {
         let provider_key = provider.key().to_string();
         let mut ids_by_source: HashMap<String, HashSet<String>> = HashMap::new();
@@ -32,7 +33,15 @@ impl Database {
 
         let current_count = self.count_sessions_for_provider(&provider_key)?;
         let scan_count = sessions.len() as u64;
-        let should_delete = if scan_count == 0 {
+        let should_delete = if aggressive {
+            if scan_count == 0 {
+                log::info!(
+                    "provider {:?} aggressive reindex: scan returned 0 sessions, clearing stale entries",
+                    provider
+                );
+            }
+            true
+        } else if scan_count == 0 {
             log::warn!(
                 "provider {:?} scan returned 0 sessions, skipping deletion to protect index",
                 provider

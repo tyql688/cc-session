@@ -16,6 +16,26 @@ pub async fn reindex(state: State<'_, AppState>) -> Result<usize, String> {
 }
 
 #[tauri::command]
+pub async fn reindex_providers(
+    providers: Vec<String>,
+    state: State<'_, AppState>,
+) -> Result<usize, String> {
+    let state = state.inner().clone();
+    tokio::task::spawn_blocking(move || {
+        let filter: Vec<crate::models::Provider> = providers
+            .iter()
+            .filter_map(|s| crate::models::Provider::parse(s))
+            .collect();
+        if filter.is_empty() {
+            return Ok(0);
+        }
+        state.indexer.reindex_providers(Some(&filter))
+    })
+    .await
+    .map_err(|e| format!("task join error: {e}"))?
+}
+
+#[tauri::command]
 pub async fn sync_sources(paths: Vec<String>, state: State<'_, AppState>) -> Result<usize, String> {
     let state = state.inner().clone();
     tokio::task::spawn_blocking(move || {
@@ -97,6 +117,8 @@ pub fn delete_session(
     Ok(())
 }
 
+// TODO: return per-item results when frontend uses this command.
+// Currently, partial failure stops the loop and already-deleted items are not reported.
 #[tauri::command]
 pub async fn delete_sessions_batch(
     items: Vec<(String, String)>,
@@ -246,9 +268,15 @@ pub(crate) fn sync_source_for_provider(
     let provider_impl = crate::provider::make_provider(&provider)
         .ok_or_else(|| "cannot resolve HOME directory — provider unavailable".to_string())?;
 
-    let sessions = provider_impl
+    let mut sessions = provider_impl
         .scan_source(source_path)
         .map_err(|e| format!("failed to scan source: {e}"))?;
+
+    // Filter out sessions that are in the trash (shared-source providers)
+    let excluded = crate::trash_state::shared_deleted_ids();
+    if !excluded.is_empty() {
+        sessions.retain(|s| !excluded.contains(&s.meta.id));
+    }
 
     db.sync_source_snapshot(&provider, source_path, &sessions)
         .map_err(|e| format!("failed to sync source snapshot: {e}"))

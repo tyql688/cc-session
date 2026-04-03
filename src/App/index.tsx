@@ -25,7 +25,7 @@ import { isMac, isWindows } from "../lib/platform";
 import { disabledProviders } from "../stores/settings";
 import { toastError } from "../stores/toast";
 import { checkForUpdate } from "../stores/updater";
-import type { TreeNode, SessionMeta, Provider } from "../lib/types";
+import type { TreeNode, SessionRef, Provider } from "../lib/types";
 import { useI18n } from "../i18n";
 import { createKeyboardHandler } from "./KeyboardShortcuts";
 import { createSyncManager } from "./SyncManager";
@@ -36,10 +36,11 @@ export default function App() {
   const [tree, setTree] = createSignal<TreeNode[]>([]);
   const [sessionCount, setSessionCount] = createSignal(0);
   const [activeView, setActiveView] = createSignal("explorer");
-  const [openTabs, setOpenTabs] = createSignal<SessionMeta[]>([]);
+  const [openTabs, setOpenTabs] = createSignal<SessionRef[]>([]);
   const [activeTabId, setActiveTabId] = createSignal<string | null>(null);
   const [isLoading, setIsLoading] = createSignal(true);
   const [showKeyboardOverlay, setShowKeyboardOverlay] = createSignal(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = createSignal(false);
 
   const debouncedChangedPaths = new Set<string>();
 
@@ -74,7 +75,7 @@ export default function App() {
     syncTabsWithTree,
   });
 
-  function openSession(session: SessionMeta) {
+  function openSession(session: SessionRef) {
     const tabs = openTabs();
     if (!tabs.find((t) => t.id === session.id)) {
       setOpenTabs([...tabs, session]);
@@ -188,6 +189,7 @@ export default function App() {
     return v !== "settings" && v !== "trash";
   });
   const showExplorerTree = createMemo(() => {
+    if (sidebarCollapsed()) return false;
     const v = activeView();
     return (
       v !== "settings" && v !== "trash" && v !== "favorites" && v !== "blocked"
@@ -311,7 +313,13 @@ export default function App() {
           </Show>
         </div>
         <div class="main-layout">
-          <ActivityBar activeView={activeView()} onViewChange={setActiveView} />
+          <ActivityBar
+            activeView={activeView()}
+            onViewChange={(v) => {
+              setActiveView(v);
+              if (v === "explorer") setSidebarCollapsed(false);
+            }}
+          />
           <Show when={showExplorerTree()}>
             <Explorer
               tree={filteredTree()}
@@ -319,6 +327,7 @@ export default function App() {
               activeSessionId={activeTabId()}
               onOpenSession={openSession}
               onRefreshTree={sync.refreshTree}
+              onCollapse={() => setSidebarCollapsed(true)}
               onDeleteSession={async (id: string) => {
                 try {
                   await trashSession(id, "", "", "");

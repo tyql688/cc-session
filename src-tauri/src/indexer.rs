@@ -21,6 +21,20 @@ impl Indexer {
     }
 
     pub fn reindex(&self) -> Result<usize, String> {
+        self.reindex_filtered(None, true)
+    }
+
+    pub fn reindex_providers(&self, filter: Option<&[Provider]>) -> Result<usize, String> {
+        // Background/polling reindex uses protective sync (aggressive=false)
+        // to avoid deleting sessions on transient scan failures.
+        self.reindex_filtered(filter, false)
+    }
+
+    fn reindex_filtered(
+        &self,
+        filter: Option<&[Provider]>,
+        aggressive: bool,
+    ) -> Result<usize, String> {
         let start = Instant::now();
         let mut total = 0usize;
 
@@ -29,22 +43,39 @@ impl Indexer {
             .map(|d| d.as_millis() as i64)
             .unwrap_or(0);
 
+        let excluded = crate::trash_state::shared_deleted_ids();
+
         for provider in self.providers.iter() {
             let provider_kind = provider.provider();
-            let sessions = provider
+
+            // Skip providers not in the filter (if filter is set)
+            if let Some(allowed) = filter {
+                if !allowed.contains(&provider_kind) {
+                    continue;
+                }
+            }
+
+            let mut sessions = provider
                 .scan_all()
                 .map_err(|e| format!("failed to scan {} provider: {}", provider_kind.key(), e))?;
 
+            if !excluded.is_empty() {
+                sessions.retain(|s| !excluded.contains(&s.meta.id));
+            }
+
             let count = sessions.len();
             self.db
-                .sync_provider_snapshot(&provider_kind, &sessions)
+                .sync_provider_snapshot(&provider_kind, &sessions, aggressive)
                 .map_err(|e| format!("failed to sync {} provider: {}", provider_kind.key(), e))?;
             total += count;
         }
 
-        self.db
-            .set_meta("last_index_time", &now_millis.to_string())
-            .map_err(|e| format!("failed to store last_index_time: {e}"))?;
+        // Only update last_index_time for full reindex
+        if filter.is_none() {
+            self.db
+                .set_meta("last_index_time", &now_millis.to_string())
+                .map_err(|e| format!("failed to store last_index_time: {e}"))?;
+        }
 
         let elapsed = start.elapsed();
         log::info!(

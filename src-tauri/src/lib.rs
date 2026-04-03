@@ -12,10 +12,59 @@ mod watcher;
 
 use std::sync::Arc;
 
+/// Test helpers — exposes private functions for integration tests.
+#[doc(hidden)]
+pub mod exporter_test_helpers {
+    pub fn render_tool_detail_pub(tool_name: &str, tool_input: &str) -> String {
+        crate::exporter::html::render_tool_detail(tool_name, tool_input)
+    }
+}
+
 use commands::AppState;
 use db::Database;
 use indexer::Indexer;
 use tauri::Manager;
+
+/// Detect and fix inconsistencies left by interrupted trash operations.
+/// Called once at app startup, after DB is opened.
+fn audit_trash_consistency(db: &db::Database) {
+    let Ok(trash_dir) = trash_state::trash_dir() else {
+        return;
+    };
+    let meta_path = trash_state::trash_meta_path(&trash_dir);
+    let entries = trash_state::read_trash_meta(&meta_path);
+    if entries.is_empty() {
+        return;
+    }
+
+    for entry in &entries {
+        // Auto-fix: session in both trash_meta AND DB → complete interrupted trash
+        if db.get_session(&entry.id).ok().flatten().is_some() {
+            log::warn!(
+                "trash audit: session {} found in both trash and DB — completing interrupted trash",
+                entry.id
+            );
+            if let Err(e) = db.delete_session(&entry.id) {
+                log::warn!(
+                    "trash audit: failed to delete session {} from DB: {e}",
+                    entry.id
+                );
+            }
+        }
+
+        // Log: trash file referenced but missing
+        if !entry.trash_file.is_empty() {
+            let trash_file_path = trash_dir.join(&entry.trash_file);
+            if !trash_file_path.exists() {
+                log::warn!(
+                    "trash audit: session {} references missing trash file: {}",
+                    entry.id,
+                    entry.trash_file
+                );
+            }
+        }
+    }
+}
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -40,6 +89,8 @@ pub fn run() {
         }
     };
 
+    audit_trash_consistency(&db);
+
     let providers = provider::all_providers();
 
     let indexer = Indexer::new(Arc::clone(&db), providers);
@@ -58,6 +109,7 @@ pub fn run() {
         .manage(state)
         .invoke_handler(tauri::generate_handler![
             commands::reindex,
+            commands::reindex_providers,
             commands::sync_sources,
             commands::get_tree,
             commands::get_session_detail,

@@ -214,7 +214,7 @@ fn lifecycle_trash_restore_delete() {
     for prov in &test_providers {
         if let Some(p) = make_provider(prov) {
             if let Ok(sessions) = p.scan_all() {
-                let _ = db.sync_provider_snapshot(prov, &sessions);
+                let _ = db.sync_provider_snapshot(prov, &sessions, true);
                 println!("  {}: indexed {} sessions", prov.key(), sessions.len());
             }
         }

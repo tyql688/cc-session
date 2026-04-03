@@ -1,6 +1,13 @@
 import type { TreeNode } from "../lib/types";
-import { reindex, syncSources, getTree, getSessionCount } from "../lib/tauri";
+import {
+  reindex,
+  syncSources,
+  getTree,
+  getSessionCount,
+  reindexProviders,
+} from "../lib/tauri";
 import { toastError } from "../stores/toast";
+import { allProviders } from "../lib/provider-registry";
 
 export interface SyncCallbacks {
   setTree: (tree: TreeNode[]) => void;
@@ -13,6 +20,7 @@ export function createSyncManager(callbacks: SyncCallbacks) {
   let syncInFlight = false;
   let pendingFullSync = false;
   const pendingChangedPaths = new Set<string>();
+  let pollTimer: ReturnType<typeof setInterval> | undefined;
 
   async function refreshTree() {
     const [treeData, count] = await Promise.all([getTree(), getSessionCount()]);
@@ -70,28 +78,78 @@ export function createSyncManager(callbacks: SyncCallbacks) {
     }
   }
 
+  /** Poll sync — serialized with FS-event sync via syncInFlight guard. */
+  async function pollSync(providers: string[]) {
+    if (syncInFlight) return;
+
+    syncInFlight = true;
+    try {
+      await reindexProviders(providers);
+      await refreshTree();
+    } catch (e) {
+      // Polling failures are transient — log for diagnosis, don't toast
+      console.debug("poll sync failed:", e);
+    } finally {
+      syncInFlight = false;
+      // Drain pending work (FS events queued during poll take priority)
+      if (pendingFullSync) {
+        pendingFullSync = false;
+        pendingChangedPaths.clear();
+        void syncFromDisk();
+      } else if (pendingChangedPaths.size > 0) {
+        const queuedPaths = [...pendingChangedPaths];
+        pendingChangedPaths.clear();
+        void syncFromDisk({ changedPaths: queuedPaths });
+      }
+    }
+  }
+
+  function startPolling() {
+    const pollProviders = allProviders()
+      .filter((p) => p.watchStrategy === "poll")
+      .map((p) => p.key);
+    if (pollProviders.length === 0) return;
+
+    pollTimer = setInterval(() => {
+      void pollSync(pollProviders);
+    }, 5000);
+  }
+
+  function stopPolling() {
+    clearInterval(pollTimer);
+    pollTimer = undefined;
+  }
+
   /** Load cached tree immediately, then reindex in background. */
   async function coldStart() {
     // Show cached data instantly so the user doesn't stare at a spinner
+    let cacheHit = false;
     try {
       await refreshTree();
+      cacheHit = true;
     } catch {
       // No cached index yet — will be populated by reindex below
     }
-    callbacks.setIsLoading(false);
+    // Only dismiss spinner early on cache hit; keep it up on cache miss
+    if (cacheHit) callbacks.setIsLoading(false);
 
-    // Reindex in background (no spinner)
+    // Reindex in background
     try {
       await reindex();
       await refreshTree();
     } catch (e) {
       toastError(String(e));
+    } finally {
+      if (!cacheHit) callbacks.setIsLoading(false);
     }
+
+    startPolling();
   }
 
   return {
     syncFromDisk,
     refreshTree,
     coldStart,
+    stopPolling,
   };
 }

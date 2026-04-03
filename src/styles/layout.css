@@ -158,7 +158,23 @@ body {
   border-right: 0.5px solid var(--border);
   flex-shrink: 0;
   overflow: hidden;
-  resize: horizontal;
+  position: relative;
+}
+
+.explorer-resize-handle {
+  position: absolute;
+  top: 0;
+  right: -2px;
+  width: 5px;
+  height: 100%;
+  cursor: col-resize;
+  z-index: 10;
+}
+
+.explorer-resize-handle:hover,
+.explorer-resize-handle.active {
+  background: var(--accent);
+  opacity: 0.4;
 }
 
 .explorer-header {
@@ -170,6 +186,35 @@ body {
   color: var(--text-secondary);
   border-bottom: 0.5px solid var(--border-subtle);
   flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.explorer-header-actions {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.explorer-header-btn {
+  background: none;
+  border: none;
+  color: var(--text-tertiary);
+  cursor: pointer;
+  font-size: 15px;
+  line-height: 1;
+  padding: 3px 5px;
+  border-radius: 4px;
+  transition:
+    color 0.15s,
+    background 0.15s;
+}
+
+.explorer-header-btn:hover {
+  color: var(--text-primary);
+  background: var(--bg-hover);
 }
 
 .explorer-tree {
