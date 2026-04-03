@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 versioned with [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.3] - 2026-04-03
+
+### Fixed
+
+- **更新检查状态反馈** — 版本已是最新时显示「已是最新」提示（3s），不再静默回到初始状态
+- **定时器竞态** — 修复 error 阶段的 setTimeout 可能覆盖后续 available 状态的问题
+- **下载失败错误详情** — 下载/安装失败时也捕获并展示具体错误信息（tooltip）
+
 ## [0.3.2] - 2026-04-03
 
 ### Added
