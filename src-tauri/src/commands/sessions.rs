@@ -97,6 +97,8 @@ pub fn delete_session(
     Ok(())
 }
 
+// TODO: return per-item results when frontend uses this command.
+// Currently, partial failure stops the loop and already-deleted items are not reported.
 #[tauri::command]
 pub async fn delete_sessions_batch(
     items: Vec<(String, String)>,

@@ -165,13 +165,21 @@ pub fn restore_session(trash_id: String, state: State<AppState>) -> Result<(), S
                 child_entries.push(e.clone());
                 return false;
             }
-            // Legacy: embedded children without parent_id (same path, empty trash_file)
+            // Legacy: embedded children without parent_id (same path, empty trash_file).
+            // DEPRECATED: new trash operations always set parent_id. This path only
+            // fires for entries created before the parent_id field was introduced.
             if e.trash_file.is_empty()
                 && !entry.trash_file.is_empty()
                 && e.original_path == entry.original_path
                 && e.provider == entry.provider
                 && e.parent_id.is_none()
             {
+                log::debug!(
+                    "restore: legacy child match for session {} (provider={}, path={})",
+                    e.id,
+                    e.provider,
+                    e.original_path
+                );
                 return false;
             }
             true
