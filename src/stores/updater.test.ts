@@ -34,14 +34,18 @@ describe("updater store", () => {
     expect(availableVersion()).toBe("1.0.0");
   });
 
-  it("returns to idle when already up to date", async () => {
+  it("shows upToDate then resets to idle when already up to date", async () => {
+    vi.useFakeTimers();
     const { check } = await import("@tauri-apps/plugin-updater");
     vi.mocked(check).mockResolvedValue(null);
 
     const { checkForUpdate, phase } = await import("./updater");
     await checkForUpdate();
 
+    expect(phase()).toBe("upToDate");
+    vi.advanceTimersByTime(3000);
     expect(phase()).toBe("idle");
+    vi.useRealTimers();
   });
 
   it("sets error phase on check failure, then resets to idle", async () => {
@@ -49,12 +53,64 @@ describe("updater store", () => {
     const { check } = await import("@tauri-apps/plugin-updater");
     vi.mocked(check).mockRejectedValue(new Error("network error"));
 
-    const { checkForUpdate, phase } = await import("./updater");
+    const { checkForUpdate, phase, errorDetail } = await import("./updater");
     await checkForUpdate();
 
     expect(phase()).toBe("error");
+    expect(errorDetail()).toBe("network error");
     vi.advanceTimersByTime(3000);
     expect(phase()).toBe("idle");
+    vi.useRealTimers();
+  });
+
+  it("stale timer does not clobber available state", async () => {
+    vi.useFakeTimers();
+    const { check } = await import("@tauri-apps/plugin-updater");
+
+    // First call: error → schedules reset to idle in 3s
+    vi.mocked(check).mockRejectedValueOnce(new Error("timeout"));
+    const { checkForUpdate, phase } = await import("./updater");
+    await checkForUpdate();
+    expect(phase()).toBe("error");
+
+    // Second call before timer fires: succeeds with update
+    vi.mocked(check).mockResolvedValueOnce({
+      version: "2.0.0",
+      downloadAndInstall: vi.fn(),
+    } as unknown as Awaited<ReturnType<typeof check>>);
+    await checkForUpdate();
+    expect(phase()).toBe("available");
+
+    // Old timer fires — should NOT clobber available
+    vi.advanceTimersByTime(3000);
+    expect(phase()).toBe("available");
+    vi.useRealTimers();
+  });
+
+  it("sets errorDetail on download failure", async () => {
+    vi.useFakeTimers();
+    const { check } = await import("@tauri-apps/plugin-updater");
+    const mockUpdate = {
+      version: "2.0.0",
+      downloadAndInstall: vi
+        .fn()
+        .mockRejectedValue(new Error("signature mismatch")),
+    };
+    vi.mocked(check).mockResolvedValue(
+      mockUpdate as unknown as Awaited<ReturnType<typeof check>>,
+    );
+
+    const { checkForUpdate, downloadAndInstall, phase, errorDetail } =
+      await import("./updater");
+    await checkForUpdate();
+    expect(phase()).toBe("available");
+
+    await downloadAndInstall();
+    expect(phase()).toBe("error");
+    expect(errorDetail()).toBe("signature mismatch");
+
+    vi.advanceTimersByTime(3000);
+    expect(phase()).toBe("available");
     vi.useRealTimers();
   });
 });

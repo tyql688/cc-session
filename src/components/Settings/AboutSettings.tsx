@@ -5,6 +5,7 @@ import { useI18n } from "../../i18n/index";
 import {
   phase,
   availableVersion,
+  errorDetail,
   checkForUpdate,
   downloadAndInstall,
 } from "../../stores/updater";
@@ -26,6 +27,8 @@ export function AboutSettings() {
     switch (phase()) {
       case "checking":
         return "...";
+      case "upToDate":
+        return t("settings.upToDate");
       case "available":
         return `↑ v${availableVersion()}`;
       case "downloading":
@@ -40,6 +43,7 @@ export function AboutSettings() {
 
   const isDisabled = () =>
     phase() === "checking" ||
+    phase() === "upToDate" ||
     phase() === "downloading" ||
     phase() === "installing";
 
@@ -63,6 +67,7 @@ export function AboutSettings() {
             class="settings-btn"
             disabled={isDisabled()}
             onClick={handleClick}
+            title={phase() === "error" ? (errorDetail() ?? "") : ""}
           >
             {buttonLabel()}
           </button>
