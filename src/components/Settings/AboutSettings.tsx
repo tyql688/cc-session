@@ -1,14 +1,17 @@
-import { createSignal, onMount } from "solid-js";
+import { onMount } from "solid-js";
 import { invoke } from "@tauri-apps/api/core";
+import { createSignal } from "solid-js";
 import { useI18n } from "../../i18n/index";
-import { check } from "@tauri-apps/plugin-updater";
-import { relaunch } from "@tauri-apps/plugin-process";
+import {
+  phase,
+  availableVersion,
+  checkForUpdate,
+  downloadAndInstall,
+} from "../../stores/updater";
 
 export function AboutSettings() {
   const { t } = useI18n();
   const [version, setVersion] = createSignal("0.1.0");
-  const [updateChecking, setUpdateChecking] = createSignal(false);
-  const [updateStatus, setUpdateStatus] = createSignal<string | null>(null);
 
   onMount(async () => {
     try {
@@ -19,32 +22,32 @@ export function AboutSettings() {
     }
   });
 
-  async function handleCheckUpdate() {
-    setUpdateChecking(true);
-    setUpdateStatus(null);
-    try {
-      const update = await check();
-      if (update) {
-        const yes = confirm(
-          `${t("settings.updateAvailable")}: v${update.version}\n\n${t("settings.updateConfirm")}`,
-        );
-        if (yes) {
-          setUpdateStatus(t("settings.updating"));
-          await update.downloadAndInstall();
-          await relaunch();
-        } else {
-          setUpdateStatus(`v${update.version} ${t("settings.updateReady")}`);
-        }
-      } else {
-        setUpdateStatus(t("settings.upToDate"));
-        setTimeout(() => setUpdateStatus(null), 3000);
-      }
-    } catch (e) {
-      setUpdateStatus(t("settings.updateFailed"));
-      console.warn("Update check failed:", e);
-      setTimeout(() => setUpdateStatus(null), 3000);
-    } finally {
-      setUpdateChecking(false);
+  const buttonLabel = () => {
+    switch (phase()) {
+      case "checking":
+        return "...";
+      case "available":
+        return `↑ v${availableVersion()}`;
+      case "downloading":
+      case "installing":
+        return t("settings.updating");
+      case "error":
+        return t("settings.updateFailed");
+      default:
+        return t("settings.checkUpdate");
+    }
+  };
+
+  const isDisabled = () =>
+    phase() === "checking" ||
+    phase() === "downloading" ||
+    phase() === "installing";
+
+  function handleClick() {
+    if (phase() === "available") {
+      void downloadAndInstall();
+    } else if (phase() === "idle" || phase() === "error") {
+      void checkForUpdate();
     }
   }
 
@@ -58,12 +61,10 @@ export function AboutSettings() {
           <span class="settings-stat">{version()}</span>
           <button
             class="settings-btn"
-            disabled={updateChecking()}
-            onClick={handleCheckUpdate}
+            disabled={isDisabled()}
+            onClick={handleClick}
           >
-            {updateChecking()
-              ? "..."
-              : updateStatus() || t("settings.checkUpdate")}
+            {buttonLabel()}
           </button>
         </div>
       </div>
