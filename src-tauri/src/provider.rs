@@ -8,6 +8,14 @@ use crate::models::{Message, Provider, SessionMeta, TrashMeta};
 // Deletion plan types — provider returns a plan, command layer executes it
 // ---------------------------------------------------------------------------
 
+/// How the frontend should watch for changes from this provider.
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum WatchStrategy {
+    Fs,
+    Poll,
+}
+
 /// What to do with a session's source file during deletion.
 #[derive(Debug, Clone, PartialEq)]
 pub enum FileAction {
@@ -343,6 +351,11 @@ pub trait ProviderDescriptor: Send + Sync {
     /// SVG icon for HTML export. Returns a complete `<svg>` element or empty string.
     fn avatar_svg(&self) -> &'static str {
         ""
+    }
+
+    /// How the frontend should watch for session changes from this provider.
+    fn watch_strategy(&self) -> WatchStrategy {
+        WatchStrategy::Fs
     }
 }
 

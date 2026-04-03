@@ -78,6 +78,7 @@ pub fn get_provider_paths(state: State<AppState>) -> Result<Vec<ProviderInfo>, S
             path: path_str,
             exists,
             session_count,
+            watch_strategy: provider_kind.descriptor().watch_strategy(),
         });
     }
 
