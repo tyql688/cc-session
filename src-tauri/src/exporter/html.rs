@@ -134,14 +134,10 @@ fn render_content(raw: &str) -> String {
     // Exception: IMG_PLACEHOLDER comments must pass as Html so Phase 4
     // can find and replace them with actual <img> tags.
     let safe_parser = parser.map(|event| match event {
-        pulldown_cmark::Event::Html(ref html)
-            if !html.contains("IMG_PLACEHOLDER_") =>
-        {
+        pulldown_cmark::Event::Html(ref html) if !html.contains("IMG_PLACEHOLDER_") => {
             pulldown_cmark::Event::Text(html.clone())
         }
-        pulldown_cmark::Event::InlineHtml(html) => {
-            pulldown_cmark::Event::Text(html)
-        }
+        pulldown_cmark::Event::InlineHtml(html) => pulldown_cmark::Event::Text(html),
         other => other,
     });
     let mut md_html = String::new();
@@ -489,22 +485,21 @@ pub fn render(detail: &SessionDetail) -> String {
     let project_path = detail.meta.project_path.as_str();
 
     // Aggregate token totals
-    let (total_input, total_output, total_cache_read, total_cache_write) =
-        detail
-            .messages
-            .iter()
-            .fold((0u64, 0u64, 0u64, 0u64), |(inp, out, cr, cw), msg| {
-                if let Some(u) = &msg.token_usage {
-                    (
-                        inp + u.input_tokens as u64,
-                        out + u.output_tokens as u64,
-                        cr + u.cache_read_input_tokens as u64,
-                        cw + u.cache_creation_input_tokens as u64,
-                    )
-                } else {
-                    (inp, out, cr, cw)
-                }
-            });
+    let (total_input, total_output, total_cache_read, total_cache_write) = detail
+        .messages
+        .iter()
+        .fold((0u64, 0u64, 0u64, 0u64), |(inp, out, cr, cw), msg| {
+            if let Some(u) = &msg.token_usage {
+                (
+                    inp + u.input_tokens as u64,
+                    out + u.output_tokens as u64,
+                    cr + u.cache_read_input_tokens as u64,
+                    cw + u.cache_creation_input_tokens as u64,
+                )
+            } else {
+                (inp, out, cr, cw)
+            }
+        });
     let has_tokens = total_input > 0 || total_output > 0;
 
     let user_svg = user_avatar_svg();
@@ -546,9 +541,7 @@ pub fn render(detail: &SessionDetail) -> String {
                         fmt_k(u.input_tokens as u64),
                         fmt_k(u.output_tokens as u64)
                     );
-                    if u.cache_creation_input_tokens > 0
-                        || u.cache_read_input_tokens > 0
-                    {
+                    if u.cache_creation_input_tokens > 0 || u.cache_read_input_tokens > 0 {
                         s.push_str(&format!(
                             r#" · <span class="cache-read">cache_read {}</span> · cache_write {}"#,
                             fmt_k(u.cache_read_input_tokens as u64),
