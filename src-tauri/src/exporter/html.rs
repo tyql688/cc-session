@@ -89,7 +89,14 @@ fn render_content(raw: &str) -> String {
     let mut preprocessed = String::with_capacity(raw.len());
     let mut rest = raw;
     while let Some(start) = rest.find("[Image") {
-        if let Some(src_off) = rest[start..].find("source: ") {
+        // Find closing bracket first to bound the search
+        let Some(bracket_end) = rest[start..].find(']') else {
+            preprocessed.push_str(&rest[..start + 6]);
+            rest = &rest[start + 6..];
+            continue;
+        };
+        let marker = &rest[start..start + bracket_end + 1];
+        if let Some(src_off) = marker.find("source: ") {
             let path_begin = start + src_off + 8;
             if let Some(end) = rest[path_begin..].find(']') {
                 let abs_end = path_begin + end;
@@ -124,6 +131,8 @@ fn render_content(raw: &str) -> String {
     let parser = pulldown_cmark::Parser::new_ext(&preprocessed, opts);
     // Escape raw HTML in content (e.g. JSX tags like <Show>, <Explorer>)
     // to prevent them from breaking the bubble DOM structure.
+    // Exception: IMG_PLACEHOLDER comments must pass as Html so Phase 4
+    // can find and replace them with actual <img> tags.
     let safe_parser = parser.map(|event| match event {
         pulldown_cmark::Event::Html(ref html)
             if !html.contains("IMG_PLACEHOLDER_") =>
@@ -476,7 +485,8 @@ pub fn render(detail: &SessionDetail) -> String {
     let model = detail.meta.model.as_deref().unwrap_or("");
     let cc_version = detail.meta.cc_version.as_deref().unwrap_or("");
     let git_branch = detail.meta.git_branch.as_deref().unwrap_or("");
-    let project_path = super::redact_home_path(&detail.meta.project_path);
+    // Don't redact here — export_html applies redact_home_path on the full output
+    let project_path = detail.meta.project_path.as_str();
 
     // Aggregate token totals
     let (total_input, total_output, total_cache_read, total_cache_write) =
@@ -676,7 +686,7 @@ pub fn render(detail: &SessionDetail) -> String {
         format!("<span>⎇ {}</span>", html_escape(git_branch))
     };
     let path_html = if !project_path.is_empty() {
-        format!("<span>📂 {}</span>", html_escape(&project_path))
+        format!("<span>📂 {}</span>", html_escape(project_path))
     } else if !project.is_empty() {
         format!("<span>📁 {}</span>", project)
     } else {

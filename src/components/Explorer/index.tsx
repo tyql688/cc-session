@@ -377,12 +377,13 @@ export function Explorer(props: {
   function collapseAllChildren(node: TreeNode) {
     setExpandedIds((prev) => {
       const next = new Set(prev);
-      for (const child of node.children) {
-        next.delete(child.id);
-        for (const grandchild of child.children) {
-          next.delete(grandchild.id);
+      function removeAll(n: TreeNode) {
+        for (const child of n.children) {
+          next.delete(child.id);
+          removeAll(child);
         }
       }
+      removeAll(node);
       return next;
     });
   }
