@@ -1,3 +1,5 @@
+use std::path::Path;
+
 use tauri::State;
 
 use crate::db::Database;
@@ -341,37 +343,80 @@ fn str_to_provider(s: &str) -> Result<Provider, String> {
     Provider::parse(s).ok_or_else(|| format!("unknown provider: '{s}'"))
 }
 
+/// Session images must live under the user home or system temp (same policy as HTML export).
+fn read_image_canonical_allowed(canonical: &Path) -> bool {
+    let Some(home) = dirs::home_dir() else {
+        return tmp_dir_allows_image(canonical);
+    };
+    if canonical_under_home(canonical, &home) {
+        return true;
+    }
+    tmp_dir_allows_image(canonical)
+}
+
+/// Whether `canonical` lies under the user's profile directory.
+#[cfg(windows)]
+fn canonical_under_home(canonical: &Path, home: &Path) -> bool {
+    if canonical.starts_with(home) {
+        return true;
+    }
+    if let Ok(home_canon) = home.canonicalize() {
+        if canonical.starts_with(&home_canon) {
+            return true;
+        }
+    }
+    // Last resort: compare prefix after stripping Windows verbatim `\\?\` and ignoring case.
+    // Covers edge cases where `starts_with` disagrees on prefix form between paths.
+    fn lossy_norm(p: &Path) -> String {
+        p.to_string_lossy()
+            .trim_start_matches(r"\\?\")
+            .to_ascii_lowercase()
+    }
+    let c = lossy_norm(canonical);
+    let h = lossy_norm(home).trim_end_matches('\\').to_string();
+    c == h || c.starts_with(&format!("{h}\\"))
+}
+
+#[cfg(not(windows))]
+fn canonical_under_home(canonical: &Path, home: &Path) -> bool {
+    canonical.starts_with(home)
+}
+
+#[cfg(not(target_os = "windows"))]
+fn tmp_dir_allows_image(canonical: &Path) -> bool {
+    let s = canonical.to_string_lossy();
+    s.starts_with("/tmp/") || s.starts_with("/private/tmp/") || s.starts_with("/var/folders/")
+}
+
+#[cfg(target_os = "windows")]
+fn tmp_dir_allows_image(canonical: &Path) -> bool {
+    ["TEMP", "TMP"].iter().any(|key| {
+        std::env::var(key).ok().is_some_and(|raw| {
+            let base = Path::new(raw.trim());
+            match base.canonicalize() {
+                Ok(c) => canonical.starts_with(&c),
+                Err(_) => canonical.starts_with(base),
+            }
+        })
+    })
+}
+
 #[tauri::command]
 pub fn read_image_base64(path: String) -> Result<String, String> {
     use base64::{engine::general_purpose::STANDARD, Engine};
 
-    let p = std::path::Path::new(&path);
+    let path = path.trim().trim_start_matches('\u{feff}').to_string();
+    let p = Path::new(&path);
     if !p.exists() {
         return Err(format!("image not found: {path}"));
     }
 
-    // Validate path is within allowed directories (home, tmp)
     if let Ok(canonical) = p.canonicalize() {
-        let s = canonical.to_string_lossy();
-        let home_ok = dirs::home_dir().is_some_and(|h| s.starts_with(&*h.to_string_lossy()));
-        let tmp_ok = {
-            #[cfg(not(target_os = "windows"))]
-            {
-                s.starts_with("/tmp/")
-                    || s.starts_with("/private/tmp/")
-                    || s.starts_with("/var/folders/")
-            }
-            #[cfg(target_os = "windows")]
-            {
-                std::env::var("TEMP")
-                    .map(|t| s.starts_with(&t))
-                    .unwrap_or(false)
-                    || std::env::var("TMP")
-                        .map(|t| s.starts_with(&t))
-                        .unwrap_or(false)
-            }
-        };
-        if !home_ok && !tmp_ok {
+        if !read_image_canonical_allowed(&canonical) {
+            log::warn!(
+                "read_image_base64 denied (not under home/temp): {}",
+                canonical.display()
+            );
             return Err(format!("image path not allowed: {path}"));
         }
     }
@@ -397,7 +442,7 @@ pub fn read_image_base64(path: String) -> Result<String, String> {
 
 #[tauri::command]
 pub fn open_in_folder(path: String) -> Result<(), String> {
-    let p = std::path::Path::new(&path);
+    let p = Path::new(&path);
     if !p.exists() {
         return Err(format!("path not found: {path}"));
     }
