@@ -78,14 +78,9 @@ export function createSyncManager(callbacks: SyncCallbacks) {
     }
   }
 
-  let pendingPoll = false;
-
   /** Poll sync — serialized with FS-event sync via syncInFlight guard. */
   async function pollSync(providers: string[]) {
-    if (syncInFlight) {
-      pendingPoll = true;
-      return;
-    }
+    if (syncInFlight) return;
 
     syncInFlight = true;
     try {
@@ -100,16 +95,12 @@ export function createSyncManager(callbacks: SyncCallbacks) {
       if (pendingFullSync) {
         pendingFullSync = false;
         pendingChangedPaths.clear();
-        pendingPoll = false;
         void syncFromDisk();
       } else if (pendingChangedPaths.size > 0) {
         const queuedPaths = [...pendingChangedPaths];
         pendingChangedPaths.clear();
-        pendingPoll = false;
         void syncFromDisk({ changedPaths: queuedPaths });
       }
-      // Don't re-trigger poll here — next interval tick handles it
-      pendingPoll = false;
     }
   }
 
@@ -132,19 +123,24 @@ export function createSyncManager(callbacks: SyncCallbacks) {
   /** Load cached tree immediately, then reindex in background. */
   async function coldStart() {
     // Show cached data instantly so the user doesn't stare at a spinner
+    let cacheHit = false;
     try {
       await refreshTree();
+      cacheHit = true;
     } catch {
       // No cached index yet — will be populated by reindex below
     }
-    callbacks.setIsLoading(false);
+    // Only dismiss spinner early on cache hit; keep it up on cache miss
+    if (cacheHit) callbacks.setIsLoading(false);
 
-    // Reindex in background (no spinner)
+    // Reindex in background
     try {
       await reindex();
       await refreshTree();
     } catch (e) {
       toastError(String(e));
+    } finally {
+      if (!cacheHit) callbacks.setIsLoading(false);
     }
 
     startPolling();
