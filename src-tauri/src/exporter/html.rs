@@ -150,7 +150,7 @@ fn render_content(raw: &str) -> String {
             let lang_attr = if lang.is_empty() {
                 String::new()
             } else {
-                format!(r#" class="language-{lang}""#)
+                format!(r#" class="language-{}""#, html_escape(&lang))
             };
             out.push_str(&format!(
                 r#"<pre class="code-block"><code{lang_attr}>{}</code></pre>"#,
@@ -668,4 +668,28 @@ pub fn export_html(detail: &SessionDetail, output_path: &Path) -> Result<(), Str
     let html = super::redact_home_path(&render(detail));
     fs::write(output_path, html).map_err(|e| format!("failed to write file: {e}"))?;
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_render_content_escapes_code_fence_language() {
+        let input = "```\"><script>alert(1)</script>\nmalicious\n```";
+        let html = render_content(input);
+        assert!(
+            !html.contains("<script>"),
+            "lang must be escaped; got: {html}"
+        );
+        assert!(html.contains("&lt;script&gt;"));
+    }
+
+    #[test]
+    fn test_render_content_normal_lang() {
+        let input = "```rust\nlet x = 1;\n```";
+        let html = render_content(input);
+        assert!(html.contains(r#"class="language-rust""#));
+        assert!(html.contains("let x = 1;"));
+    }
 }
