@@ -5,6 +5,18 @@ All notable changes to this project will be documented in this file.
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 versioned with [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.6] - 2026-04-04
+
+### Added
+
+- Qwen Code provider — parse `~/.qwen/projects/*/chats/*.jsonl` sessions (#13)
+- Community standards: CODE_OF_CONDUCT, CONTRIBUTING, SECURITY, issue/PR templates
+
+### Changed
+
+- Provider brand colors realigned to official palettes: Claude terracotta orange, Kimi blue, Qwen blue-violet (#13)
+- Hide subagent "Open" button for providers without separate session files (#13)
+
 ## [0.3.5] - 2026-04-03
 
 ### Added
