@@ -83,11 +83,7 @@ pub fn get_child_sessions(
 }
 
 #[tauri::command]
-pub fn delete_session(
-    session_id: String,
-    _source_path: String,
-    state: State<AppState>,
-) -> Result<(), String> {
+pub fn delete_session(session_id: String, state: State<AppState>) -> Result<(), String> {
     let deletion = resolve_session_deletion(&state.db, &session_id)?;
     crate::provider::execute_purge(&deletion.plan, deletion.provider.as_ref(), &deletion.meta)?;
 
@@ -103,13 +99,13 @@ pub fn delete_session(
 // Currently, partial failure stops the loop and already-deleted items are not reported.
 #[tauri::command]
 pub async fn delete_sessions_batch(
-    items: Vec<(String, String)>,
+    items: Vec<String>,
     state: State<'_, AppState>,
 ) -> Result<u32, String> {
     let state = state.inner().clone();
     tokio::task::spawn_blocking(move || {
         let mut deleted: u32 = 0;
-        for (session_id, _source_path) in &items {
+        for session_id in &items {
             let deletion = resolve_session_deletion(&state.db, session_id)?;
             crate::provider::execute_purge(
                 &deletion.plan,
