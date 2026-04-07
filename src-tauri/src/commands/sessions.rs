@@ -5,7 +5,7 @@ use tauri::State;
 use crate::db::Database;
 use crate::models::{Message, Provider, SessionDetail, SessionMeta};
 
-use super::session_resolution::{load_session_for_mutation, load_session_meta};
+use super::session_resolution::{load_session_meta, resolve_session_deletion};
 use super::AppState;
 
 #[tauri::command]
@@ -88,10 +88,8 @@ pub fn delete_session(
     _source_path: String,
     state: State<AppState>,
 ) -> Result<(), String> {
-    let (meta, children) = load_session_for_mutation(&state.db, &session_id)?;
-    let provider_impl = meta.provider.require_runtime()?;
-    let plan = provider_impl.deletion_plan(&meta, &children);
-    crate::provider::execute_purge(&plan, provider_impl.as_ref(), &meta)?;
+    let deletion = resolve_session_deletion(&state.db, &session_id)?;
+    crate::provider::execute_purge(&deletion.plan, deletion.provider.as_ref(), &deletion.meta)?;
 
     state
         .db
@@ -112,10 +110,12 @@ pub async fn delete_sessions_batch(
     tokio::task::spawn_blocking(move || {
         let mut deleted: u32 = 0;
         for (session_id, _source_path) in &items {
-            let (meta, children) = load_session_for_mutation(&state.db, session_id)?;
-            let provider_impl = meta.provider.require_runtime()?;
-            let plan = provider_impl.deletion_plan(&meta, &children);
-            crate::provider::execute_purge(&plan, provider_impl.as_ref(), &meta)?;
+            let deletion = resolve_session_deletion(&state.db, session_id)?;
+            crate::provider::execute_purge(
+                &deletion.plan,
+                deletion.provider.as_ref(),
+                &deletion.meta,
+            )?;
 
             state
                 .db

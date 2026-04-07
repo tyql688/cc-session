@@ -7,7 +7,7 @@ use crate::trash_state::{
     shared_deletions_path, trash_dir, trash_meta_path,
 };
 
-use super::session_resolution::load_session_for_mutation;
+use super::session_resolution::resolve_session_deletion;
 use super::{sessions::sync_source_for_provider, AppState};
 
 /// Global lock to serialize all trash metadata read-modify-write operations.
@@ -16,7 +16,7 @@ static TRASH_META_LOCK: Mutex<()> = Mutex::new(());
 #[tauri::command]
 pub fn trash_session(session_id: String, state: State<AppState>) -> Result<(), String> {
     let trash_dir = trash_dir()?;
-    let (meta, children) = load_session_for_mutation(&state.db, &session_id)?;
+    let deletion = resolve_session_deletion(&state.db, &session_id)?;
 
     let now_ts = chrono::Utc::now().timestamp();
     let meta_path = trash_meta_path(&trash_dir);
@@ -24,22 +24,26 @@ pub fn trash_session(session_id: String, state: State<AppState>) -> Result<(), S
         .lock()
         .map_err(|_| "trash meta lock poisoned".to_string())?;
 
-    let provider_impl = meta.provider.require_runtime()?;
-    let plan = provider_impl.deletion_plan(&meta, &children);
-    let provider_key = meta.provider.key();
+    let provider_key = deletion.meta.provider.key();
 
     let mut entries = read_trash_meta(&meta_path);
-    let records = crate::provider::execute_trash(&plan, &meta, provider_key, &trash_dir, now_ts)?;
+    let records = crate::provider::execute_trash(
+        &deletion.plan,
+        &deletion.meta,
+        provider_key,
+        &trash_dir,
+        now_ts,
+    )?;
     entries.extend(records);
 
     // Track shared deletions for shared-file sessions
     let shared_deletions_path = shared_deletions_path(&trash_dir);
-    if plan.file_action == crate::provider::FileAction::Shared {
+    if deletion.plan.file_action == crate::provider::FileAction::Shared {
         add_shared_deletion(
             &shared_deletions_path,
-            &meta.id,
+            &deletion.meta.id,
             provider_key,
-            &meta.source_path,
+            &deletion.meta.source_path,
         )?;
     }
 
