@@ -130,8 +130,7 @@ pub fn restore_session(trash_id: String, state: State<AppState>) -> Result<(), S
         .collect();
 
     // Restore parent
-    let provider_enum = crate::models::Provider::parse(&entry.provider);
-    let provider_impl = provider_enum.as_ref().and_then(|p| p.build_runtime());
+    let provider_impl = runtime_for_trash_entry(&entry);
     let action = provider_impl
         .as_ref()
         .map(|p| p.restore_action(&entry))
@@ -177,19 +176,7 @@ pub fn empty_trash() -> Result<(), String> {
 
         for entry in &entries {
             if entry.trash_file.is_empty() && !entry.original_path.is_empty() {
-                if let Some(p) =
-                    crate::models::Provider::parse(&entry.provider).and_then(|p| p.build_runtime())
-                {
-                    if let Err(e) = p.purge_from_source(&entry.original_path, &entry.id) {
-                        log::warn!("failed to purge session {} from source: {e}", entry.id);
-                    }
-                }
-                add_shared_deletion(
-                    &shared_deletions_path,
-                    &entry.id,
-                    &entry.provider,
-                    &entry.original_path,
-                )?;
+                purge_shared_trash_entry(entry, &shared_deletions_path)?;
                 continue;
             }
 
@@ -207,11 +194,7 @@ pub fn empty_trash() -> Result<(), String> {
             }
 
             // Provider-specific cleanup (e.g. Cursor store.db)
-            if let Some(p) =
-                crate::models::Provider::parse(&entry.provider).and_then(|p| p.build_runtime())
-            {
-                p.cleanup_on_permanent_delete(&entry.id);
-            }
+            cleanup_provider_entry(entry);
         }
 
         let empty: Vec<TrashMeta> = Vec::new();
@@ -237,17 +220,7 @@ pub fn permanent_delete_trash(trash_id: String) -> Result<(), String> {
 
     if let Some(entry) = entries.iter().find(|e| e.id == trash_id) {
         if entry.trash_file.is_empty() && !entry.original_path.is_empty() {
-            if let Some(p) =
-                crate::models::Provider::parse(&entry.provider).and_then(|p| p.build_runtime())
-            {
-                let _ = p.purge_from_source(&entry.original_path, &entry.id);
-            }
-            add_shared_deletion(
-                &shared_deletions_path,
-                &entry.id,
-                &entry.provider,
-                &entry.original_path,
-            )?;
+            purge_shared_trash_entry(entry, &shared_deletions_path)?;
         }
 
         if !entry.trash_file.is_empty() {
@@ -272,11 +245,7 @@ pub fn permanent_delete_trash(trash_id: String) -> Result<(), String> {
         }
 
         // Provider-specific cleanup (e.g. Cursor store.db)
-        if let Some(p) =
-            crate::models::Provider::parse(&entry.provider).and_then(|p| p.build_runtime())
-        {
-            p.cleanup_on_permanent_delete(&entry.id);
-        }
+        cleanup_provider_entry(entry);
     }
 
     let remaining: Vec<TrashMeta> = entries.into_iter().filter(|e| e.id != trash_id).collect();
@@ -317,6 +286,34 @@ fn is_session_dir(dir: &std::path::Path) -> bool {
         || dir.join("state.json").is_file()
         || dir.join("wire.jsonl").is_file()
         || dir.join("context.jsonl").is_file()
+}
+
+fn runtime_for_trash_entry(entry: &TrashMeta) -> Option<Box<dyn crate::provider::SessionProvider>> {
+    crate::models::Provider::parse(&entry.provider).and_then(|provider| provider.build_runtime())
+}
+
+fn purge_shared_trash_entry(
+    entry: &TrashMeta,
+    shared_deletions_path: &std::path::Path,
+) -> Result<(), String> {
+    if let Some(provider) = runtime_for_trash_entry(entry) {
+        if let Err(err) = provider.purge_from_source(&entry.original_path, &entry.id) {
+            log::warn!("failed to purge session {} from source: {err}", entry.id);
+        }
+    }
+
+    add_shared_deletion(
+        shared_deletions_path,
+        &entry.id,
+        &entry.provider,
+        &entry.original_path,
+    )
+}
+
+fn cleanup_provider_entry(entry: &TrashMeta) {
+    if let Some(provider) = runtime_for_trash_entry(entry) {
+        provider.cleanup_on_permanent_delete(&entry.id);
+    }
 }
 
 fn sync_source(provider_str: &str, source_path: &str, state: &AppState) -> Result<(), String> {
