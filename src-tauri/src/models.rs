@@ -15,67 +15,6 @@ pub enum Provider {
     Qwen,
 }
 
-impl Provider {
-    pub fn label(&self) -> &'static str {
-        match self {
-            Provider::Claude => "Claude Code",
-            Provider::Codex => "Codex",
-            Provider::Gemini => "Gemini",
-            Provider::Cursor => "Cursor",
-            Provider::OpenCode => "OpenCode",
-            Provider::Kimi => "Kimi CLI",
-            Provider::CcMirror => "CC-Mirror",
-            Provider::Qwen => "Qwen Code",
-        }
-    }
-
-    pub fn key(&self) -> &'static str {
-        match self {
-            Provider::Claude => "claude",
-            Provider::Codex => "codex",
-            Provider::Gemini => "gemini",
-            Provider::Cursor => "cursor",
-            Provider::OpenCode => "opencode",
-            Provider::Kimi => "kimi",
-            Provider::CcMirror => "cc-mirror",
-            Provider::Qwen => "qwen",
-        }
-    }
-
-    pub fn parse(s: &str) -> Option<Provider> {
-        match s {
-            "claude" => Some(Provider::Claude),
-            "codex" => Some(Provider::Codex),
-            "gemini" => Some(Provider::Gemini),
-            "cursor" => Some(Provider::Cursor),
-            "opencode" => Some(Provider::OpenCode),
-            "kimi" => Some(Provider::Kimi),
-            "cc-mirror" => Some(Provider::CcMirror),
-            "qwen" => Some(Provider::Qwen),
-            _ => None,
-        }
-    }
-
-    /// All known providers in display order.
-    /// The compile-time assertion below ensures this list stays in sync with the enum.
-    pub fn all() -> &'static [Provider] {
-        // SAFETY: update EXPECTED_COUNT when adding a new Provider variant.
-        // If they mismatch, this will fail at compile time.
-        const EXPECTED_COUNT: usize = 8;
-        const ALL: [Provider; EXPECTED_COUNT] = [
-            Provider::Claude,
-            Provider::Codex,
-            Provider::Gemini,
-            Provider::Cursor,
-            Provider::OpenCode,
-            Provider::Kimi,
-            Provider::CcMirror,
-            Provider::Qwen,
-        ];
-        &ALL
-    }
-}
-
 impl std::fmt::Display for Provider {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.label())

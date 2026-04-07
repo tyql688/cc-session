@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use rusqlite::{params, Connection};
 
-use crate::models::{Provider, SearchFilters, SearchResult, SessionMeta};
+use crate::models::{SearchFilters, SearchResult, SessionMeta};
 
 use super::row_mapper::row_to_session_meta;
 use super::Database;
@@ -234,10 +234,6 @@ impl Database {
         }
         Ok(sessions)
     }
-}
-
-pub fn provider_to_str_pub(provider: &Provider) -> &'static str {
-    provider.key()
 }
 
 fn list_sessions_from_query<P>(

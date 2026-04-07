@@ -3,26 +3,24 @@ use tauri::State;
 use crate::models::Provider;
 use crate::terminal;
 
+use super::session_resolution::load_session_meta;
 use super::AppState;
 
 #[tauri::command]
 pub fn get_resume_command(
     session_id: String,
-    provider: String,
+    _provider: String,
     state: State<AppState>,
 ) -> Result<String, String> {
     let safe_id = sanitize_session_id(&session_id);
-    let p = Provider::parse(&provider).ok_or_else(|| format!("unknown provider '{provider}'"))?;
+    let session = load_session_meta(&state.db, &session_id)?;
+    let variant_name = session.variant_name.map(|v| sanitize_session_id(&v));
 
-    let session = state.db.get_session(&session_id).ok().flatten();
-
-    let variant_name = session
-        .and_then(|s| s.variant_name)
-        .map(|v| sanitize_session_id(&v));
-
-    p.descriptor()
+    session
+        .provider
+        .descriptor()
         .resume_command(&safe_id, variant_name.as_deref())
-        .ok_or_else(|| format!("{} session missing variant name", provider))
+        .ok_or_else(|| format!("{} session missing variant name", session.provider.key()))
 }
 
 /// Sanitize session ID to prevent shell injection — only allow alnum, hyphens, underscores
@@ -84,32 +82,33 @@ fn is_known_cc_mirror_variant(name: &str) -> bool {
 #[tauri::command]
 pub fn resume_session(
     session_id: String,
-    provider: String,
+    _provider: String,
     terminal_app: String,
     state: State<AppState>,
 ) -> Result<(), String> {
     let safe_id = sanitize_session_id(&session_id);
-    let p = Provider::parse(&provider).ok_or_else(|| format!("unknown provider '{provider}'"))?;
-
-    let session = state.db.get_session(&session_id).ok().flatten();
-
+    let session = load_session_meta(&state.db, &session_id)?;
     let variant_name = session
-        .as_ref()
-        .and_then(|s| s.variant_name.clone())
+        .variant_name
+        .clone()
         .map(|v| sanitize_session_id(&v));
 
-    let cmd = p
+    let cmd = session
+        .provider
         .descriptor()
         .resume_command(&safe_id, variant_name.as_deref())
-        .ok_or_else(|| format!("{} session missing variant name, cannot resume", provider))?;
+        .ok_or_else(|| {
+            format!(
+                "{} session missing variant name, cannot resume",
+                session.provider.key()
+            )
+        })?;
 
-    let cwd = session.and_then(|s| {
-        if s.project_path.is_empty() {
-            None
-        } else {
-            Some(s.project_path)
-        }
-    });
+    let cwd = if session.project_path.is_empty() {
+        None
+    } else {
+        Some(session.project_path)
+    };
 
     terminal::launch_terminal(&terminal_app, &cmd, cwd.as_deref())
 }

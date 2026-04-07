@@ -5,6 +5,7 @@ use tauri::State;
 use crate::db::Database;
 use crate::models::{Message, MessageRole, Provider, SessionDetail, SessionMeta};
 
+use super::session_resolution::load_session_for_mutation;
 use super::AppState;
 
 #[tauri::command]
@@ -86,26 +87,11 @@ pub fn get_child_sessions(
 #[tauri::command]
 pub fn delete_session(
     session_id: String,
-    source_path: String,
+    _source_path: String,
     state: State<AppState>,
 ) -> Result<(), String> {
-    let provider_enum = Provider::from_source_path(&source_path).ok_or_else(|| {
-        format!(
-            "refused to delete '{}': not inside a known provider directory",
-            source_path
-        )
-    })?;
-    let provider_impl = crate::provider::make_provider(&provider_enum)
-        .ok_or_else(|| "cannot resolve HOME directory — provider unavailable".to_string())?;
-
-    let meta = state
-        .db
-        .get_session(&session_id)
-        .ok()
-        .flatten()
-        .unwrap_or_else(|| build_minimal_meta(&session_id, &source_path, &provider_enum));
-
-    let children = state.db.get_child_sessions(&session_id).unwrap_or_default();
+    let (meta, children) = load_session_for_mutation(&state.db, &session_id)?;
+    let provider_impl = meta.provider.require_runtime()?;
     let plan = provider_impl.deletion_plan(&meta, &children);
     crate::provider::execute_purge(&plan, provider_impl.as_ref(), &meta)?;
 
@@ -127,26 +113,9 @@ pub async fn delete_sessions_batch(
     let state = state.inner().clone();
     tokio::task::spawn_blocking(move || {
         let mut deleted: u32 = 0;
-        for (session_id, source_path) in &items {
-            let provider_enum = Provider::from_source_path(source_path).ok_or_else(|| {
-                format!(
-                    "refused to delete '{}': not inside a known provider directory",
-                    source_path
-                )
-            })?;
-            let provider_impl =
-                crate::provider::make_provider(&provider_enum).ok_or_else(|| {
-                    "cannot resolve HOME directory — provider unavailable".to_string()
-                })?;
-
-            let meta = state
-                .db
-                .get_session(session_id)
-                .ok()
-                .flatten()
-                .unwrap_or_else(|| build_minimal_meta(session_id, source_path, &provider_enum));
-
-            let children = state.db.get_child_sessions(session_id).unwrap_or_default();
+        for (session_id, _source_path) in &items {
+            let (meta, children) = load_session_for_mutation(&state.db, session_id)?;
+            let provider_impl = meta.provider.require_runtime()?;
             let plan = provider_impl.deletion_plan(&meta, &children);
             crate::provider::execute_purge(&plan, provider_impl.as_ref(), &meta)?;
 
@@ -238,15 +207,17 @@ pub(crate) fn load_detail(
     provider: &str,
     db: &Database,
 ) -> Result<SessionDetail, String> {
-    let provider_enum = str_to_provider(provider)?;
-
     let db_meta = find_meta_from_db(db, session_id);
+    let provider_enum = if let Some(meta) = db_meta.as_ref() {
+        meta.provider.clone()
+    } else {
+        str_to_provider(provider)?
+    };
 
-    let resolved_source_path = if source_path.is_empty() {
-        db_meta
-            .as_ref()
-            .map(|m| m.source_path.clone())
-            .unwrap_or_default()
+    let resolved_source_path = if let Some(meta) = db_meta.as_ref() {
+        meta.source_path.clone()
+    } else if source_path.is_empty() {
+        String::new()
     } else {
         source_path.to_string()
     };
@@ -265,8 +236,7 @@ pub(crate) fn sync_source_for_provider(
     source_path: &str,
     db: &Database,
 ) -> Result<(), String> {
-    let provider_impl = crate::provider::make_provider(&provider)
-        .ok_or_else(|| "cannot resolve HOME directory — provider unavailable".to_string())?;
+    let provider_impl = provider.require_runtime()?;
 
     let mut sessions = provider_impl
         .scan_source(source_path)
@@ -296,8 +266,8 @@ fn load_messages_from_provider(
     session_id: &str,
     source_path: &str,
 ) -> Result<Vec<Message>, String> {
-    crate::provider::make_provider(provider)
-        .ok_or_else(|| "cannot resolve HOME directory — provider unavailable".to_string())?
+    provider
+        .require_runtime()?
         .load_messages(session_id, source_path)
         .map_err(|e| format!("failed to load messages: {e}"))
 }
@@ -346,29 +316,8 @@ fn build_fallback_meta(
     }
 }
 
-fn build_minimal_meta(session_id: &str, source_path: &str, provider: &Provider) -> SessionMeta {
-    SessionMeta {
-        id: session_id.to_string(),
-        provider: provider.clone(),
-        title: String::new(),
-        project_path: String::new(),
-        project_name: String::new(),
-        created_at: 0,
-        updated_at: 0,
-        message_count: 0,
-        file_size_bytes: 0,
-        source_path: source_path.to_string(),
-        is_sidechain: false,
-        variant_name: None,
-        model: None,
-        cc_version: None,
-        git_branch: None,
-        parent_id: None,
-    }
-}
-
 fn str_to_provider(s: &str) -> Result<Provider, String> {
-    Provider::parse(s).ok_or_else(|| format!("unknown provider: '{s}'"))
+    Provider::parse_strict(s)
 }
 
 /// Session images must live under the user home or system temp (same policy as HTML export).

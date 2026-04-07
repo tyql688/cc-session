@@ -53,7 +53,7 @@ pub fn clear_index(state: State<AppState>) -> Result<(), String> {
 
 #[tauri::command]
 pub fn get_provider_paths(state: State<AppState>) -> Result<Vec<ProviderInfo>, String> {
-    let providers = crate::provider::all_providers();
+    let providers = crate::provider::all_runtimes();
     let counts = state
         .db
         .provider_session_counts()

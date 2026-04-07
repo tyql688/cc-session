@@ -91,7 +91,7 @@ pub fn run() {
 
     audit_trash_consistency(&db);
 
-    let providers = provider::all_providers();
+    let providers = provider::all_runtimes();
 
     let indexer = Indexer::new(Arc::clone(&db), providers);
 
@@ -151,7 +151,7 @@ pub fn run() {
 
             // Provider instances are lightweight (just PathBuf); create a separate
             // set for the watcher since Indexer consumed the first set.
-            let watcher_providers = provider::all_providers();
+            let watcher_providers = provider::all_runtimes();
             match watcher::start_watcher(app.handle().clone(), &watcher_providers) {
                 Ok(fs_watcher) => {
                     app.manage(fs_watcher);
