@@ -1,21 +1,75 @@
-import { describe, expect, it } from "vitest";
-import {
-  getProviderLabel,
-  getProviderSortOrder,
-  getProviderWatchStrategy,
-} from "./providerCatalog";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import type { ProviderCatalogItem } from "../lib/types";
 
-describe("providerCatalog store fallbacks", () => {
-  it("uses fallback label values before catalog loads", () => {
+const getProviderCatalog = vi.fn<() => Promise<ProviderCatalogItem[]>>();
+
+vi.mock("../lib/tauri", () => ({
+  getProviderCatalog,
+}));
+
+async function loadStore() {
+  return import("./providerCatalog");
+}
+
+describe("providerCatalog store", () => {
+  beforeEach(() => {
+    vi.resetModules();
+    getProviderCatalog.mockReset();
+  });
+
+  it("uses fallback values before catalog loads", async () => {
+    const {
+      getProviderLabel,
+      getProvidersForWatchStrategy,
+      getProviderSortOrder,
+      getProviderWatchStrategy,
+    } = await loadStore();
+
     expect(getProviderLabel("claude")).toBe("Claude Code");
     expect(getProviderLabel("cc-mirror", "cczai")).toBe("cczai");
     expect(getProviderLabel("cc-mirror")).toBe("CC-Mirror");
-  });
-
-  it("uses fallback watch strategy and sort order before catalog loads", () => {
     expect(getProviderWatchStrategy("gemini")).toBe("poll");
+    expect(getProvidersForWatchStrategy("poll")).toEqual([
+      "gemini",
+      "opencode",
+    ]);
     expect(getProviderSortOrder("claude")).toBeLessThan(
       getProviderSortOrder("codex"),
     );
+  });
+
+  it("switches watch providers to the loaded catalog", async () => {
+    getProviderCatalog.mockResolvedValue([
+      {
+        key: "claude",
+        label: "Claude Code",
+        color: "var(--claude)",
+        sort_order: 0,
+        watch_strategy: "fs",
+      },
+      {
+        key: "codex",
+        label: "Codex",
+        color: "var(--codex)",
+        sort_order: 1,
+        watch_strategy: "poll",
+      },
+    ]);
+
+    const {
+      getProvidersForWatchStrategy,
+      getProviderCatalogVersion,
+      loadProviderCatalog,
+    } = await loadStore();
+
+    expect(getProvidersForWatchStrategy("poll")).toEqual([
+      "gemini",
+      "opencode",
+    ]);
+
+    await loadProviderCatalog();
+
+    expect(getProviderCatalogVersion()).toBe(1);
+    expect(getProvidersForWatchStrategy("poll")).toEqual(["codex"]);
   });
 });

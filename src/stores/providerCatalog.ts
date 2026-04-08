@@ -8,6 +8,7 @@ type ProviderWatchStrategy = ProviderCatalogItem["watch_strategy"];
 const [providerCatalog, setProviderCatalog] = createSignal<ProviderCatalogMap>(
   {},
 );
+const [providerCatalogVersion, setProviderCatalogVersion] = createSignal(0);
 
 const FALLBACK_PROVIDER_CATALOG: Record<Provider, ProviderCatalogItem> = {
   claude: {
@@ -84,6 +85,7 @@ export async function loadProviderCatalog() {
         next[item.key] = item;
       }
       setProviderCatalog(next);
+      setProviderCatalogVersion((version) => version + 1);
     })
     .catch(() => {})
     .finally(() => {
@@ -91,6 +93,11 @@ export async function loadProviderCatalog() {
     });
 
   return loadPromise;
+}
+
+function activeProviderCatalog(): ProviderCatalogMap {
+  const loaded = providerCatalog();
+  return Object.keys(loaded).length > 0 ? loaded : FALLBACK_PROVIDER_CATALOG;
 }
 
 export function getProviderCatalogItem(provider: Provider) {
@@ -130,9 +137,10 @@ export function getProviderWatchStrategy(
 export function getProvidersForWatchStrategy(
   strategy: ProviderWatchStrategy,
 ): Provider[] {
-  return (Object.keys(FALLBACK_PROVIDER_CATALOG) as Provider[]).filter(
-    (provider) => getProviderWatchStrategy(provider) === strategy,
-  );
+  const catalog = activeProviderCatalog();
+  return (Object.entries(catalog) as [Provider, ProviderCatalogItem][])
+    .filter(([, item]) => item.watch_strategy === strategy)
+    .map(([provider]) => provider);
 }
 
 export function getProviderSortOrder(provider: Provider): number {
@@ -140,4 +148,8 @@ export function getProviderSortOrder(provider: Provider): number {
     getProviderCatalogItem(provider)?.sort_order ??
     FALLBACK_PROVIDER_CATALOG[provider].sort_order
   );
+}
+
+export function getProviderCatalogVersion(): number {
+  return providerCatalogVersion();
 }

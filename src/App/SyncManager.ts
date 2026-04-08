@@ -24,6 +24,7 @@ export function createSyncManager(callbacks: SyncCallbacks) {
   let pendingFullSync = false;
   const pendingChangedPaths = new Set<string>();
   let pollTimer: ReturnType<typeof setInterval> | undefined;
+  let pollConfigToken = 0;
 
   async function refreshTree() {
     const [treeData, count] = await Promise.all([getTree(), getSessionCount()]);
@@ -107,17 +108,39 @@ export function createSyncManager(callbacks: SyncCallbacks) {
     }
   }
 
-  async function startPolling() {
-    await loadProviderCatalog();
-    const pollProviders = getProvidersForWatchStrategy("poll");
-    if (pollProviders.length === 0) return;
+  function applyPolling(providers: string[]) {
+    clearInterval(pollTimer);
+    pollTimer = undefined;
+
+    if (providers.length === 0) return;
 
     pollTimer = setInterval(() => {
-      void pollSync(pollProviders);
+      void pollSync(providers);
     }, 5000);
   }
 
+  function providersKey(providers: string[]): string {
+    return [...providers].sort().join("|");
+  }
+
+  function startPolling() {
+    const token = ++pollConfigToken;
+    let activeProviders = getProvidersForWatchStrategy("poll");
+    applyPolling(activeProviders);
+
+    void loadProviderCatalog().then(() => {
+      if (token !== pollConfigToken) return;
+
+      const nextProviders = getProvidersForWatchStrategy("poll");
+      if (providersKey(nextProviders) === providersKey(activeProviders)) return;
+
+      activeProviders = nextProviders;
+      applyPolling(activeProviders);
+    });
+  }
+
   function stopPolling() {
+    pollConfigToken += 1;
     clearInterval(pollTimer);
     pollTimer = undefined;
   }
@@ -145,7 +168,7 @@ export function createSyncManager(callbacks: SyncCallbacks) {
       if (!cacheHit) callbacks.setIsLoading(false);
     }
 
-    await startPolling();
+    startPolling();
   }
 
   return {

@@ -17,6 +17,7 @@ import type {
 } from "../../lib/types";
 import { getProviderWatchBehavior } from "../../lib/provider-registry";
 import {
+  getProviderCatalogVersion,
   getProviderWatchStrategy,
   loadProviderCatalog,
 } from "../../stores/providerCatalog";
@@ -261,48 +262,60 @@ export function SessionView(props: {
   let pollTimer: ReturnType<typeof setInterval> | undefined;
 
   createEffect(
-    on(watching, async (isWatching) => {
-      // Cleanup previous listener & polling
-      clearTimeout(watchDebounce);
-      clearInterval(pollTimer);
-      pollTimer = undefined;
-      unwatchFn?.();
-      unwatchFn = undefined;
+    on(
+      () =>
+        [
+          watching(),
+          meta().provider,
+          meta().source_path,
+          props.session.source_path,
+          getProviderCatalogVersion(),
+        ] as const,
+      async ([isWatching]) => {
+        // Cleanup previous listener & polling
+        clearTimeout(watchDebounce);
+        clearInterval(pollTimer);
+        pollTimer = undefined;
+        unwatchFn?.();
+        unwatchFn = undefined;
 
-      if (isWatching) {
-        await loadProviderCatalog();
-        if (!watching()) return;
+        if (isWatching) {
+          void loadProviderCatalog();
 
-        const activeSourcePath =
-          meta().source_path || props.session.source_path;
-        const watchBehavior = getProviderWatchBehavior(meta().provider);
-        const watchStrategy = getProviderWatchStrategy(meta().provider);
+          const activeSourcePath =
+            meta().source_path || props.session.source_path;
+          const watchBehavior = getProviderWatchBehavior(meta().provider);
+          const watchStrategy = getProviderWatchStrategy(meta().provider);
 
-        if (watchStrategy === "poll") {
-          pollTimer = setInterval(reloadSession, watchBehavior.debounceMs);
-        } else {
-          // File-based providers: use FS events
-          unwatchFn = await listen<string[]>("sessions-changed", (event) => {
-            const changedPaths = event.payload ?? [];
-            if (!activeSourcePath) return;
+          if (watchStrategy === "poll") {
+            pollTimer = setInterval(reloadSession, watchBehavior.debounceMs);
+          } else {
+            // File-based providers: use FS events
+            unwatchFn = await listen<string[]>("sessions-changed", (event) => {
+              const changedPaths = event.payload ?? [];
+              if (!activeSourcePath) return;
 
-            let matched: boolean;
-            if (watchBehavior.matchPrefix) {
-              // Gemini: match by project directory prefix
-              // (strip last 2 path segments: /chats/session-id.json → project dir)
-              const dir = activeSourcePath.replace(/\/[^/]+\/[^/]+$/, "");
-              matched = changedPaths.some((p) => p.startsWith(dir));
-            } else {
-              matched = changedPaths.includes(activeSourcePath);
-            }
-            if (!matched) return;
+              let matched: boolean;
+              if (watchBehavior.matchPrefix) {
+                // Gemini: match by project directory prefix
+                // (strip last 2 path segments: /chats/session-id.json → project dir)
+                const dir = activeSourcePath.replace(/\/[^/]+\/[^/]+$/, "");
+                matched = changedPaths.some((p) => p.startsWith(dir));
+              } else {
+                matched = changedPaths.includes(activeSourcePath);
+              }
+              if (!matched) return;
 
-            clearTimeout(watchDebounce);
-            watchDebounce = setTimeout(reloadSession, watchBehavior.debounceMs);
-          });
+              clearTimeout(watchDebounce);
+              watchDebounce = setTimeout(
+                reloadSession,
+                watchBehavior.debounceMs,
+              );
+            });
+          }
         }
-      }
-    }),
+      },
+    ),
   );
 
   onCleanup(() => {
