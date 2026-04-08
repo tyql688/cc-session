@@ -23,6 +23,7 @@ import { ToastContainer } from "../components/ToastContainer";
 import { trashSession, getChildSessions } from "../lib/tauri";
 import { isMac, isWindows } from "../lib/platform";
 import { disabledProviders } from "../stores/settings";
+import { loadProviderCatalog } from "../stores/providerCatalog";
 import { toastError } from "../stores/toast";
 import { checkForUpdate } from "../stores/updater";
 import type { TreeNode, SessionRef, Provider } from "../lib/types";
@@ -131,6 +132,7 @@ export default function App() {
       document.documentElement.style.setProperty("--titlebar-inset", "78px");
     }
 
+    void loadProviderCatalog();
     void sync.coldStart();
     setTimeout(() => void checkForUpdate(), 2000);
 

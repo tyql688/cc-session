@@ -104,6 +104,14 @@ export interface ProviderInfo {
   session_count: number;
 }
 
+export interface ProviderCatalogItem {
+  key: Provider;
+  label: string;
+  color: string;
+  sort_order: number;
+  watch_strategy: "fs" | "poll";
+}
+
 export interface TrashMeta {
   id: string;
   provider: string;

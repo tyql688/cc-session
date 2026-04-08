@@ -128,6 +128,15 @@ pub struct ProviderInfo {
     pub watch_strategy: crate::provider::WatchStrategy,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ProviderCatalogItem {
+    pub key: String,
+    pub label: String,
+    pub color: String,
+    pub sort_order: u32,
+    pub watch_strategy: crate::provider::WatchStrategy,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct SearchFilters {
     pub query: String,

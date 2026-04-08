@@ -2,7 +2,7 @@ use tauri::{AppHandle, State};
 use tauri_plugin_opener::OpenerExt;
 
 use crate::exporter;
-use crate::models::{IndexStats, ProviderInfo};
+use crate::models::{IndexStats, ProviderCatalogItem, ProviderInfo};
 
 use super::sessions::load_detail;
 use super::AppState;
@@ -83,6 +83,20 @@ pub fn get_provider_paths(state: State<AppState>) -> Result<Vec<ProviderInfo>, S
     }
 
     Ok(infos)
+}
+
+#[tauri::command]
+pub fn get_provider_catalog() -> Vec<ProviderCatalogItem> {
+    crate::models::Provider::all()
+        .iter()
+        .map(|provider| ProviderCatalogItem {
+            key: provider.key().to_string(),
+            label: provider.label().to_string(),
+            color: provider.descriptor().color().to_string(),
+            sort_order: provider.descriptor().sort_order(),
+            watch_strategy: provider.descriptor().watch_strategy(),
+        })
+        .collect()
 }
 
 #[tauri::command]

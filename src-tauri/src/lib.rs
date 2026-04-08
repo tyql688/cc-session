@@ -124,6 +124,7 @@ pub fn run() {
             commands::rebuild_index,
             commands::clear_index,
             commands::get_provider_paths,
+            commands::get_provider_catalog,
             commands::get_resume_command,
             commands::detect_terminal,
             commands::open_in_terminal,
