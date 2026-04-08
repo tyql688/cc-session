@@ -12,7 +12,7 @@
 
 <p align="center">
   <a href="https://github.com/tyql688/cc-session/releases/latest"><img alt="Latest Release" src="https://img.shields.io/github/v/release/tyql688/cc-session?style=flat-square&color=blue"></a>
-
+  <a href="https://github.com/tyql688/cc-session/actions/workflows/ci.yml"><img alt="CI" src="https://img.shields.io/github/actions/workflow/status/tyql688/cc-session/ci.yml?branch=master&style=flat-square"></a>
   <img alt="Platform" src="https://img.shields.io/badge/platform-macOS%20%7C%20Windows%20%7C%20Linux-lightgrey?style=flat-square">
   <a href="LICENSE"><img alt="License" src="https://img.shields.io/github/license/tyql688/cc-session?style=flat-square"></a>
 </p>
@@ -22,6 +22,10 @@
 ## Why CC Session?
 
 AI coding tools like Claude Code, Codex, Gemini CLI, and Qwen Code store session data locally, but there's no easy way to browse, search, or revisit past conversations. CC Session brings all your sessions together in one unified interface — view full conversation histories, search across all providers with full-text search, export records, and resume any session directly in your terminal.
+
+> **One app for all your local coding sessions**
+>
+> Browse history, search across providers, restore deleted sessions, export clean archives, and jump back into a session with one click.
 
 ## Features
 
@@ -45,7 +49,7 @@ AI coding tools like Claude Code, Codex, Gemini CLI, and Qwen Code store session
 | Claude Code | `~/.claude/projects/**/*.jsonl`       | JSONL  | FS events  |
 | Codex CLI   | `~/.codex/sessions/**/*.jsonl`        | JSONL  | FS events  |
 | Gemini CLI  | `~/.gemini/tmp/*/chats/*.json`        |  JSON  | FS events  |
-| Kimi CLI    | `~/.kimi/sessions/**/*.jsonl`         | JSONL  | FS events  |
+| Kimi CLI    | `~/.kimi/sessions/**/wire.jsonl`      | JSONL  | FS events  |
 | Cursor CLI  | `~/.cursor/projects/*/agent-transcripts/**/*.jsonl` | JSONL  | FS events  |
 | OpenCode    | `~/.local/share/opencode/opencode.db` | SQLite |  Polling   |
 | Qwen Code   | `~/.qwen/projects/*/chats/*.jsonl`    | JSONL  | FS events  |
@@ -66,6 +70,12 @@ Download the latest release from [Releases](https://github.com/tyql688/cc-sessio
 > ```bash
 > xattr -cr /Applications/CC Session.app
 > ```
+
+## Quick Start
+
+1. Install and open CC Session
+2. Let it index supported local provider data
+3. Open a session, search with `⌘K`, or resume with `⇧⌘R`
 
 ## Keyboard Shortcuts
 
@@ -101,7 +111,9 @@ npx tauri build --bundles dmg    # DMG only
 
 ```bash
 npm run tauri dev                # Dev with hot reload
+npm test                         # Frontend tests
 npx tsc --noEmit                 # Type-check frontend
+cd src-tauri && cargo test       # Rust tests
 cd src-tauri && cargo clippy     # Lint Rust
 ```
 

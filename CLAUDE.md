@@ -12,7 +12,7 @@ cd src-tauri && cargo test    # Rust tests
 npx tsc --noEmit              # TS type check
 npm run lint                  # ESLint
 npm run format:check          # Prettier check
-./scripts/release.sh 0.2.0   # Bump, commit, tag, push → triggers CI release
+./scripts/release.sh <version> # Bump, commit, tag, push → triggers CI release
 ```
 
 ## Project Layout
@@ -22,14 +22,17 @@ src/                       # Solid.js frontend (components, stores, i18n, lib, s
 src-tauri/src/
   providers/               # claude/, codex/, gemini/, kimi/, cursor/, opencode/, qwen/, cc_mirror.rs
   commands/                # sessions.rs, settings.rs, trash.rs, terminal.rs
+  services/                # provider_snapshots.rs, session_lifecycle.rs, session_resolution.rs, source_sync.rs
   exporter/                # json.rs, markdown.rs, html.rs, templates.rs
   db/                      # mod.rs, queries.rs, sync.rs, row_mapper.rs
   indexer.rs  watcher.rs  models.rs  provider.rs  provider_utils.rs  trash_state.rs
+src/stores/               # settings, search, selection, providerSnapshots, updater, favorites
+src/lib/                  # tauri.ts, provider-watch.ts, formatters, tree-builders, icons
 ```
 
 ## Provider Architecture
 
-All providers implement `SessionProvider` trait (`scan_all` / `load_messages` / `watch_paths` / `deletion_plan`).
+All providers implement `SessionProvider` trait (`watch_paths` / `scan_all` / `scan_source` / `load_messages` / `deletion_plan` / `restore_action` / `cleanup_on_permanent_delete`).
 Metadata via Bridge pattern: `Provider` enum → `ProviderDescriptor` (zero-sized structs).
 
 | Provider    | Path                                   | Format | Watch |
@@ -48,8 +51,9 @@ Resume: Claude `--resume`, Codex `resume`, Gemini `--resume`, Kimi `--session`, 
 
 ## Testing
 
-- **Rust**: `cd src-tauri && cargo test` — 58 parser golden tests + provider unit tests
+- **Rust**: `cd src-tauri && cargo test` — parser golden tests + provider/unit tests + fixture command interface coverage
 - **Frontend**: `npm test` (vitest)
+- **Manual smoke**: `provider_lifecycle_real_interface.rs` is ignored by default and intended for local/manual real-provider verification
 
 ## Key Patterns
 
@@ -58,6 +62,7 @@ Resume: Claude `--resume`, Codex `resume`, Gemini `--resume`, Kimi `--session`, 
 - **Images**: `[Image: source: ...]` in content
 - **Tool merge**: `call_id` maps pair tool calls with results
 - **Subagents**: `parent_id` links children; "Open" button for providers with separate files (Claude, Codex, Kimi, Cursor, CC-Mirror)
+- **Provider snapshots**: backend derives provider label/color/order/watch strategy/path info; frontend consumes snapshot data
 - **Trash**: `TrashMeta.parent_id` cascades restore/delete; `is_session_dir()` prevents shared dir deletion
 
 ## Pitfalls
