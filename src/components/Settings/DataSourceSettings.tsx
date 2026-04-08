@@ -3,6 +3,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { useI18n } from "../../i18n/index";
 import type { ProviderInfo } from "../../lib/types";
 import { getProviderPaths } from "../../lib/tauri";
+import { getProviderLabel } from "../../stores/providerCatalog";
 import { disabledProviders, toggleProvider } from "../../stores/settings";
 import { toastError } from "../../stores/toast";
 
@@ -29,7 +30,7 @@ export function DataSourceSettings(props: {
           {(info) => (
             <div class="settings-row">
               <div>
-                <div class="settings-label">{info.label}</div>
+                <div class="settings-label">{getProviderLabel(info.key)}</div>
                 <div class="settings-desc flex-center-gap-sm">
                   <span>{info.path}</span>
                   <Show when={info.exists}>

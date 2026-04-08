@@ -121,11 +121,9 @@ pub struct IndexStats {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ProviderInfo {
     pub key: String,
-    pub label: String,
     pub path: String,
     pub exists: bool,
     pub session_count: u64,
-    pub watch_strategy: crate::provider::WatchStrategy,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

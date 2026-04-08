@@ -98,7 +98,6 @@ export interface IndexStats {
 
 export interface ProviderInfo {
   key: Provider;
-  label: string;
   path: string;
   exists: boolean;
   session_count: number;
