@@ -43,6 +43,45 @@ impl Drop for EnvOverride {
     }
 }
 
+fn override_home_env(home: &Path) -> Vec<EnvOverride> {
+    let mut guards = vec![
+        EnvOverride::set("HOME", home),
+        EnvOverride::set("USERPROFILE", home),
+    ];
+
+    if cfg!(windows) {
+        let home_str = home.to_string_lossy().to_string();
+        let mut parts = home_str.splitn(2, ':');
+        if let (Some(drive), Some(rest)) = (parts.next(), parts.next()) {
+            guards.push(EnvOverride {
+                key: "HOMEDRIVE",
+                original: env::var("HOMEDRIVE").ok(),
+            });
+            env::set_var("HOMEDRIVE", format!("{drive}:"));
+
+            guards.push(EnvOverride {
+                key: "HOMEPATH",
+                original: env::var("HOMEPATH").ok(),
+            });
+            env::set_var("HOMEPATH", rest);
+        }
+    }
+
+    guards
+}
+
+fn override_data_env(data_home: &Path) -> Vec<EnvOverride> {
+    vec![
+        EnvOverride::set("XDG_DATA_HOME", data_home),
+        EnvOverride::set("LOCALAPPDATA", data_home),
+        EnvOverride::set("APPDATA", data_home),
+    ]
+}
+
+fn normalized(path: &str) -> String {
+    path.replace('\\', "/")
+}
+
 fn build_app() -> (TempDir, App<MockRuntime>, tauri::WebviewWindow<MockRuntime>) {
     let temp_dir = TempDir::new().expect("temp dir");
     let db = Arc::new(Database::open(temp_dir.path()).expect("open temp db"));
@@ -112,8 +151,8 @@ fn command_interface_uses_fixture_provider_data_without_manual_deletes() {
     let _env_lock = ENV_LOCK.lock().expect("env lock");
     let home = TempDir::new().expect("home temp dir");
     let data_home = TempDir::new().expect("data temp dir");
-    let _home_guard = EnvOverride::set("HOME", home.path());
-    let _xdg_guard = EnvOverride::set("XDG_DATA_HOME", data_home.path());
+    let _home_guards = override_home_env(home.path());
+    let _data_guards = override_data_env(data_home.path());
 
     let source_path = write_claude_fixture(home.path());
     let (_db_dir, _app, webview) = build_app();
@@ -129,7 +168,7 @@ fn command_interface_uses_fixture_provider_data_without_manual_deletes() {
         .expect("claude snapshot");
     assert!(claude_snapshot.exists);
     assert_eq!(claude_snapshot.session_count, 1);
-    assert!(claude_snapshot.path.contains(".claude/projects"));
+    assert!(normalized(&claude_snapshot.path).contains(".claude/projects"));
 
     let recent: Vec<SessionMeta> =
         invoke(&webview, "list_recent_sessions", json!({ "limit": 10 })).expect("list recent");
