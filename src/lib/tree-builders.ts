@@ -1,5 +1,16 @@
 import type { SessionMeta, TrashMeta, TreeNode, Provider } from "./types";
-import { getProviderLabel } from "../stores/providerCatalog";
+import {
+  getProviderLabel,
+  getProviderSortOrder,
+} from "../stores/providerCatalog";
+
+function sortProviders<T>(entries: [string, T][]): [string, T][] {
+  return entries.sort(
+    ([left], [right]) =>
+      getProviderSortOrder(left as Provider) -
+      getProviderSortOrder(right as Provider),
+  );
+}
 
 export function buildFavoritesTree(
   sessions: SessionMeta[],
@@ -25,7 +36,9 @@ export function buildFavoritesTree(
   }
 
   const tree: TreeNode[] = [];
-  for (const [provider, projectMap] of providerMap) {
+  for (const [provider, projectMap] of sortProviders([
+    ...providerMap.entries(),
+  ])) {
     const projectNodes: TreeNode[] = [];
     for (const [projectKey, group] of projectMap) {
       const sessionNodes: TreeNode[] = group.sessions.map((s) => ({
@@ -85,7 +98,9 @@ export function buildTrashTree(
   }
 
   const tree: TreeNode[] = [];
-  for (const [provider, projectMap] of providerMap) {
+  for (const [provider, projectMap] of sortProviders([
+    ...providerMap.entries(),
+  ])) {
     const projectNodes: TreeNode[] = [];
     for (const [project, sessions] of projectMap) {
       const sessionNodes: TreeNode[] = sessions.map((s) => ({

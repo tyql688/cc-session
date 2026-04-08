@@ -74,6 +74,36 @@ describe("buildFavoritesTree", () => {
     expect(codexNode).toBeDefined();
     expect(codexNode!.count).toBe(1);
   });
+
+  it("orders provider groups by provider sort order", () => {
+    const sessions = [
+      makeSession({
+        id: "s1",
+        provider: "qwen",
+        project_name: "proj-q",
+        project_path: "/q",
+      }),
+      makeSession({
+        id: "s2",
+        provider: "claude",
+        project_name: "proj-c",
+        project_path: "/c",
+      }),
+      makeSession({
+        id: "s3",
+        provider: "gemini",
+        project_name: "proj-g",
+        project_path: "/g",
+      }),
+    ];
+
+    const tree = buildFavoritesTree(sessions, "No Project");
+    expect(tree.map((node) => node.provider)).toEqual([
+      "claude",
+      "gemini",
+      "qwen",
+    ]);
+  });
 });
 
 describe("buildTrashTree", () => {

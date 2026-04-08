@@ -80,6 +80,12 @@ pub fn get_provider_paths(state: State<AppState>) -> Result<Vec<ProviderInfo>, S
         });
     }
 
+    infos.sort_by_key(|info| {
+        crate::models::Provider::parse(&info.key)
+            .map(|provider| provider.descriptor().sort_order())
+            .unwrap_or(u32::MAX)
+    });
+
     Ok(infos)
 }
 

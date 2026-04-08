@@ -5,6 +5,7 @@ import { getDisplayLabel as getFallbackDisplayLabel } from "../lib/provider-regi
 
 type ProviderCatalogMap = Partial<Record<Provider, ProviderCatalogItem>>;
 type ProviderWatchStrategy = ProviderCatalogItem["watch_strategy"];
+type ProviderSortOrder = ProviderCatalogItem["sort_order"];
 
 const [providerCatalog, setProviderCatalog] = createSignal<ProviderCatalogMap>(
   {},
@@ -19,6 +20,17 @@ const FALLBACK_WATCH_STRATEGIES: Record<Provider, ProviderWatchStrategy> = {
   kimi: "fs",
   "cc-mirror": "fs",
   qwen: "fs",
+};
+
+const FALLBACK_SORT_ORDERS: Record<Provider, ProviderSortOrder> = {
+  claude: 0,
+  "cc-mirror": 1,
+  codex: 2,
+  gemini: 3,
+  cursor: 4,
+  opencode: 5,
+  kimi: 6,
+  qwen: 7,
 };
 
 let loadPromise: Promise<void> | null = null;
@@ -80,7 +92,14 @@ export function getProviderWatchStrategy(
 export function getProvidersForWatchStrategy(
   strategy: ProviderWatchStrategy,
 ): Provider[] {
-  return (Object.keys(FALLBACK_WATCH_STRATEGIES) as Provider[]).filter(
+  return (Object.keys(FALLBACK_SORT_ORDERS) as Provider[]).filter(
     (provider) => getProviderWatchStrategy(provider) === strategy,
+  );
+}
+
+export function getProviderSortOrder(provider: Provider): ProviderSortOrder {
+  return (
+    getProviderCatalogItem(provider)?.sort_order ??
+    FALLBACK_SORT_ORDERS[provider]
   );
 }
