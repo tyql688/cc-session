@@ -1,7 +1,6 @@
 import { createSignal } from "solid-js";
 import { getProviderCatalog } from "../lib/tauri";
 import type { Provider, ProviderCatalogItem } from "../lib/types";
-import { getDisplayLabel as getFallbackDisplayLabel } from "../lib/provider-registry";
 
 type ProviderCatalogMap = Partial<Record<Provider, ProviderCatalogItem>>;
 type ProviderWatchStrategy = ProviderCatalogItem["watch_strategy"];
@@ -31,6 +30,17 @@ const FALLBACK_SORT_ORDERS: Record<Provider, ProviderSortOrder> = {
   opencode: 5,
   kimi: 6,
   qwen: 7,
+};
+
+const FALLBACK_LABELS: Record<Provider, string> = {
+  claude: "Claude Code",
+  codex: "Codex",
+  gemini: "Gemini",
+  cursor: "Cursor",
+  opencode: "OpenCode",
+  kimi: "Kimi CLI",
+  "cc-mirror": "CC-Mirror",
+  qwen: "Qwen Code",
 };
 
 let loadPromise: Promise<void> | null = null;
@@ -70,10 +80,7 @@ export function getProviderLabel(
     return variantName;
   }
 
-  return (
-    getProviderCatalogItem(provider)?.label ??
-    getFallbackDisplayLabel(provider, variantName)
-  );
+  return getProviderCatalogItem(provider)?.label ?? FALLBACK_LABELS[provider];
 }
 
 export function getProviderColor(provider: Provider): string {

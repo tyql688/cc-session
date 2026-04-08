@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { getDisplayLabel, getProviderWatchBehavior } from "./provider-registry";
+import { getProviderWatchBehavior } from "./provider-registry";
 import type { Provider } from "./types";
 
 const ALL_PROVIDERS: Provider[] = [
@@ -20,11 +20,5 @@ describe("provider-registry", () => {
       expect(watch).toBeDefined();
       expect(watch.debounceMs).toBeGreaterThan(0);
     }
-  });
-
-  it("getDisplayLabel uses variant for cc-mirror", () => {
-    expect(getDisplayLabel("claude")).toBe("Claude Code");
-    expect(getDisplayLabel("cc-mirror", "cczai")).toBe("cczai");
-    expect(getDisplayLabel("cc-mirror")).toBe("CC-Mirror");
   });
 });
