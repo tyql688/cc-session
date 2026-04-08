@@ -24,7 +24,7 @@ fn sanitize_session_id(id: &str) -> Result<String, String> {
 
     if id
         .chars()
-        .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
+        .all(|c| c.is_alphanumeric() || c == '-' || c == '_')
     {
         return Ok(id.to_string());
     }
@@ -181,6 +181,14 @@ mod tests {
     #[test]
     fn sanitize_session_id_accepts_safe_ids() {
         assert_eq!(sanitize_session_id("abc-123_DEF").unwrap(), "abc-123_DEF");
+    }
+
+    #[test]
+    fn sanitize_session_id_accepts_unicode_ids() {
+        assert_eq!(
+            sanitize_session_id("会话-123_变体").unwrap(),
+            "会话-123_变体"
+        );
     }
 
     #[test]

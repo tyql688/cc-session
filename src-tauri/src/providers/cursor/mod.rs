@@ -343,6 +343,7 @@ mod tests {
     use super::CursorProvider;
     use crate::provider::SessionProvider;
     use rusqlite::Connection;
+    use serde_json::json;
 
     fn write_main_transcript(
         home: &std::path::Path,
@@ -377,10 +378,13 @@ mod tests {
             "INSERT INTO blobs (id, data) VALUES (?1, ?2)",
             (
                 "blob1",
-                format!(
-                    "{{\"role\":\"user\",\"content\":\"<user_info>\\nWorkspace Path: {workspace_path}\\n</user_info>\"}}"
-                )
-                .into_bytes(),
+                serde_json::to_vec(&json!({
+                    "role": "user",
+                    "content": format!(
+                        "<user_info>\nWorkspace Path: {workspace_path}\n</user_info>"
+                    ),
+                }))
+                .unwrap(),
             ),
         )
         .unwrap();
