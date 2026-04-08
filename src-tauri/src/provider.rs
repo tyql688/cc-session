@@ -359,19 +359,166 @@ pub trait ProviderDescriptor: Send + Sync {
     }
 }
 
+struct ProviderCatalogEntry {
+    kind: Provider,
+    key: &'static str,
+    label: &'static str,
+    descriptor: &'static dyn ProviderDescriptor,
+    build_runtime: fn() -> Option<Box<dyn SessionProvider>>,
+}
+
+fn build_claude_runtime() -> Option<Box<dyn SessionProvider>> {
+    crate::providers::claude::ClaudeProvider::new().map(|p| Box::new(p) as Box<dyn SessionProvider>)
+}
+
+fn build_codex_runtime() -> Option<Box<dyn SessionProvider>> {
+    crate::providers::codex::CodexProvider::new().map(|p| Box::new(p) as Box<dyn SessionProvider>)
+}
+
+fn build_gemini_runtime() -> Option<Box<dyn SessionProvider>> {
+    crate::providers::gemini::GeminiProvider::new().map(|p| Box::new(p) as Box<dyn SessionProvider>)
+}
+
+fn build_cursor_runtime() -> Option<Box<dyn SessionProvider>> {
+    crate::providers::cursor::CursorProvider::new().map(|p| Box::new(p) as Box<dyn SessionProvider>)
+}
+
+fn build_opencode_runtime() -> Option<Box<dyn SessionProvider>> {
+    crate::providers::opencode::OpenCodeProvider::new()
+        .map(|p| Box::new(p) as Box<dyn SessionProvider>)
+}
+
+fn build_kimi_runtime() -> Option<Box<dyn SessionProvider>> {
+    crate::providers::kimi::KimiProvider::new().map(|p| Box::new(p) as Box<dyn SessionProvider>)
+}
+
+fn build_cc_mirror_runtime() -> Option<Box<dyn SessionProvider>> {
+    crate::providers::cc_mirror::CcMirrorProvider::new()
+        .map(|p| Box::new(p) as Box<dyn SessionProvider>)
+}
+
+fn build_qwen_runtime() -> Option<Box<dyn SessionProvider>> {
+    crate::providers::qwen::QwenProvider::new().map(|p| Box::new(p) as Box<dyn SessionProvider>)
+}
+
+fn provider_catalog() -> &'static [ProviderCatalogEntry] {
+    &PROVIDER_CATALOG
+}
+
+fn provider_entry(provider: &Provider) -> &'static ProviderCatalogEntry {
+    provider_catalog()
+        .iter()
+        .find(|entry| &entry.kind == provider)
+        .expect("provider catalog missing enum variant")
+}
+
+fn provider_entry_for_key(key: &str) -> Option<&'static ProviderCatalogEntry> {
+    provider_catalog().iter().find(|entry| entry.key == key)
+}
+
+static PROVIDER_KINDS: [Provider; 8] = [
+    Provider::Claude,
+    Provider::Codex,
+    Provider::Gemini,
+    Provider::Cursor,
+    Provider::OpenCode,
+    Provider::Kimi,
+    Provider::CcMirror,
+    Provider::Qwen,
+];
+
+static PROVIDER_CATALOG: [ProviderCatalogEntry; 8] = [
+    ProviderCatalogEntry {
+        kind: Provider::Claude,
+        key: "claude",
+        label: "Claude Code",
+        descriptor: &crate::providers::claude::Descriptor,
+        build_runtime: build_claude_runtime,
+    },
+    ProviderCatalogEntry {
+        kind: Provider::Codex,
+        key: "codex",
+        label: "Codex",
+        descriptor: &crate::providers::codex::Descriptor,
+        build_runtime: build_codex_runtime,
+    },
+    ProviderCatalogEntry {
+        kind: Provider::Gemini,
+        key: "gemini",
+        label: "Gemini",
+        descriptor: &crate::providers::gemini::Descriptor,
+        build_runtime: build_gemini_runtime,
+    },
+    ProviderCatalogEntry {
+        kind: Provider::Cursor,
+        key: "cursor",
+        label: "Cursor",
+        descriptor: &crate::providers::cursor::Descriptor,
+        build_runtime: build_cursor_runtime,
+    },
+    ProviderCatalogEntry {
+        kind: Provider::OpenCode,
+        key: "opencode",
+        label: "OpenCode",
+        descriptor: &crate::providers::opencode::Descriptor,
+        build_runtime: build_opencode_runtime,
+    },
+    ProviderCatalogEntry {
+        kind: Provider::Kimi,
+        key: "kimi",
+        label: "Kimi CLI",
+        descriptor: &crate::providers::kimi::Descriptor,
+        build_runtime: build_kimi_runtime,
+    },
+    ProviderCatalogEntry {
+        kind: Provider::CcMirror,
+        key: "cc-mirror",
+        label: "CC-Mirror",
+        descriptor: &crate::providers::cc_mirror::Descriptor,
+        build_runtime: build_cc_mirror_runtime,
+    },
+    ProviderCatalogEntry {
+        kind: Provider::Qwen,
+        key: "qwen",
+        label: "Qwen Code",
+        descriptor: &crate::providers::qwen::Descriptor,
+        build_runtime: build_qwen_runtime,
+    },
+];
+
 impl Provider {
+    pub fn label(&self) -> &'static str {
+        provider_entry(self).label
+    }
+
+    pub fn key(&self) -> &'static str {
+        provider_entry(self).key
+    }
+
+    pub fn parse(s: &str) -> Option<Provider> {
+        provider_entry_for_key(s).map(|entry| entry.kind.clone())
+    }
+
+    pub fn parse_strict(s: &str) -> Result<Provider, String> {
+        Self::parse(s).ok_or_else(|| format!("unknown provider: '{s}'"))
+    }
+
+    pub fn all() -> &'static [Provider] {
+        &PROVIDER_KINDS
+    }
+
     /// Get the descriptor for this provider (static metadata).
     pub fn descriptor(&self) -> &'static dyn ProviderDescriptor {
-        match self {
-            Provider::Claude => &crate::providers::claude::Descriptor,
-            Provider::Codex => &crate::providers::codex::Descriptor,
-            Provider::Gemini => &crate::providers::gemini::Descriptor,
-            Provider::Cursor => &crate::providers::cursor::Descriptor,
-            Provider::OpenCode => &crate::providers::opencode::Descriptor,
-            Provider::Kimi => &crate::providers::kimi::Descriptor,
-            Provider::CcMirror => &crate::providers::cc_mirror::Descriptor,
-            Provider::Qwen => &crate::providers::qwen::Descriptor,
-        }
+        provider_entry(self).descriptor
+    }
+
+    pub fn build_runtime(&self) -> Option<Box<dyn SessionProvider>> {
+        (provider_entry(self).build_runtime)()
+    }
+
+    pub fn require_runtime(&self) -> Result<Box<dyn SessionProvider>, String> {
+        self.build_runtime()
+            .ok_or_else(|| format!("provider unavailable: {}", self.key()))
     }
 
     /// Identify which provider owns a source path.
@@ -436,29 +583,16 @@ fn move_to_trash(
 
 /// Create a provider instance by enum variant. Returns None if HOME is unavailable.
 pub fn make_provider(provider: &Provider) -> Option<Box<dyn SessionProvider>> {
-    match provider {
-        Provider::Claude => crate::providers::claude::ClaudeProvider::new()
-            .map(|p| Box::new(p) as Box<dyn SessionProvider>),
-        Provider::Codex => crate::providers::codex::CodexProvider::new()
-            .map(|p| Box::new(p) as Box<dyn SessionProvider>),
-        Provider::Gemini => crate::providers::gemini::GeminiProvider::new()
-            .map(|p| Box::new(p) as Box<dyn SessionProvider>),
-        Provider::Cursor => crate::providers::cursor::CursorProvider::new()
-            .map(|p| Box::new(p) as Box<dyn SessionProvider>),
-        Provider::OpenCode => crate::providers::opencode::OpenCodeProvider::new()
-            .map(|p| Box::new(p) as Box<dyn SessionProvider>),
-        Provider::Kimi => crate::providers::kimi::KimiProvider::new()
-            .map(|p| Box::new(p) as Box<dyn SessionProvider>),
-        Provider::CcMirror => crate::providers::cc_mirror::CcMirrorProvider::new()
-            .map(|p| Box::new(p) as Box<dyn SessionProvider>),
-        Provider::Qwen => crate::providers::qwen::QwenProvider::new()
-            .map(|p| Box::new(p) as Box<dyn SessionProvider>),
-    }
+    provider.build_runtime()
 }
 
 /// Create all provider instances, silently skipping any that cannot resolve HOME.
 pub fn all_providers() -> Vec<Box<dyn SessionProvider>> {
     Provider::all().iter().filter_map(make_provider).collect()
+}
+
+pub fn all_runtimes() -> Vec<Box<dyn SessionProvider>> {
+    all_providers()
 }
 
 pub trait SessionProvider: Send + Sync {

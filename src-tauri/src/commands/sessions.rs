@@ -3,7 +3,8 @@ use std::path::Path;
 use tauri::State;
 
 use crate::db::Database;
-use crate::models::{Message, MessageRole, Provider, SessionDetail, SessionMeta};
+use crate::models::{Message, Provider, SessionDetail, SessionMeta};
+use crate::services::{load_session_meta, SessionLifecycleService, SourceSyncService};
 
 use super::AppState;
 
@@ -39,6 +40,7 @@ pub async fn reindex_providers(
 pub async fn sync_sources(paths: Vec<String>, state: State<'_, AppState>) -> Result<usize, String> {
     let state = state.inner().clone();
     tokio::task::spawn_blocking(move || {
+        let source_sync = SourceSyncService::new(&state.db);
         let mut unique_paths = std::collections::HashSet::new();
         let mut synced = 0;
 
@@ -46,7 +48,7 @@ pub async fn sync_sources(paths: Vec<String>, state: State<'_, AppState>) -> Res
             if path.is_empty() || !unique_paths.insert(path.clone()) {
                 continue;
             }
-            if sync_source_from_path(&path, &state)? {
+            if source_sync.sync_source_path(&path)? {
                 synced += 1;
             }
         }
@@ -65,11 +67,9 @@ pub fn get_tree(state: State<AppState>) -> Result<Vec<crate::models::TreeNode>, 
 #[tauri::command]
 pub fn get_session_detail(
     session_id: String,
-    source_path: String,
-    provider: String,
     state: State<AppState>,
 ) -> Result<SessionDetail, String> {
-    load_detail(&session_id, &source_path, &provider, &state.db)
+    load_detail(&session_id, &state.db)
 }
 
 #[tauri::command]
@@ -84,79 +84,20 @@ pub fn get_child_sessions(
 }
 
 #[tauri::command]
-pub fn delete_session(
-    session_id: String,
-    source_path: String,
-    state: State<AppState>,
-) -> Result<(), String> {
-    let provider_enum = Provider::from_source_path(&source_path).ok_or_else(|| {
-        format!(
-            "refused to delete '{}': not inside a known provider directory",
-            source_path
-        )
-    })?;
-    let provider_impl = crate::provider::make_provider(&provider_enum)
-        .ok_or_else(|| "cannot resolve HOME directory — provider unavailable".to_string())?;
-
-    let meta = state
-        .db
-        .get_session(&session_id)
-        .ok()
-        .flatten()
-        .unwrap_or_else(|| build_minimal_meta(&session_id, &source_path, &provider_enum));
-
-    let children = state.db.get_child_sessions(&session_id).unwrap_or_default();
-    let plan = provider_impl.deletion_plan(&meta, &children);
-    crate::provider::execute_purge(&plan, provider_impl.as_ref(), &meta)?;
-
-    state
-        .db
-        .delete_session(&session_id)
-        .map_err(|e| format!("failed to delete from db: {e}"))?;
-
-    Ok(())
+pub fn delete_session(session_id: String, state: State<AppState>) -> Result<(), String> {
+    SessionLifecycleService::new(&state.db).purge_session(&session_id)
 }
 
 // TODO: return per-item results when frontend uses this command.
 // Currently, partial failure stops the loop and already-deleted items are not reported.
 #[tauri::command]
 pub async fn delete_sessions_batch(
-    items: Vec<(String, String)>,
+    items: Vec<String>,
     state: State<'_, AppState>,
 ) -> Result<u32, String> {
     let state = state.inner().clone();
     tokio::task::spawn_blocking(move || {
-        let mut deleted: u32 = 0;
-        for (session_id, source_path) in &items {
-            let provider_enum = Provider::from_source_path(source_path).ok_or_else(|| {
-                format!(
-                    "refused to delete '{}': not inside a known provider directory",
-                    source_path
-                )
-            })?;
-            let provider_impl =
-                crate::provider::make_provider(&provider_enum).ok_or_else(|| {
-                    "cannot resolve HOME directory — provider unavailable".to_string()
-                })?;
-
-            let meta = state
-                .db
-                .get_session(session_id)
-                .ok()
-                .flatten()
-                .unwrap_or_else(|| build_minimal_meta(session_id, source_path, &provider_enum));
-
-            let children = state.db.get_child_sessions(session_id).unwrap_or_default();
-            let plan = provider_impl.deletion_plan(&meta, &children);
-            crate::provider::execute_purge(&plan, provider_impl.as_ref(), &meta)?;
-
-            state
-                .db
-                .delete_session(session_id)
-                .map_err(|e| format!("failed to delete session {session_id} from db: {e}"))?;
-            deleted += 1;
-        }
-        Ok(deleted)
+        SessionLifecycleService::new(&state.db).purge_sessions(&items)
     })
     .await
     .map_err(|e| format!("task join error: {e}"))?
@@ -232,63 +173,10 @@ pub fn is_favorite(session_id: String, state: State<AppState>) -> Result<bool, S
         .map_err(|e| format!("failed to check favorite: {e}"))
 }
 
-pub(crate) fn load_detail(
-    session_id: &str,
-    source_path: &str,
-    provider: &str,
-    db: &Database,
-) -> Result<SessionDetail, String> {
-    let provider_enum = str_to_provider(provider)?;
-
-    let db_meta = find_meta_from_db(db, session_id);
-
-    let resolved_source_path = if source_path.is_empty() {
-        db_meta
-            .as_ref()
-            .map(|m| m.source_path.clone())
-            .unwrap_or_default()
-    } else {
-        source_path.to_string()
-    };
-
-    let messages = load_messages_from_provider(&provider_enum, session_id, &resolved_source_path)?;
-
-    let meta = db_meta.unwrap_or_else(|| {
-        build_fallback_meta(session_id, &resolved_source_path, &provider_enum, &messages)
-    });
-
+pub(crate) fn load_detail(session_id: &str, db: &Database) -> Result<SessionDetail, String> {
+    let meta = load_session_meta(db, session_id)?;
+    let messages = load_messages_from_provider(&meta.provider, session_id, &meta.source_path)?;
     Ok(SessionDetail { meta, messages })
-}
-
-pub(crate) fn sync_source_for_provider(
-    provider: Provider,
-    source_path: &str,
-    db: &Database,
-) -> Result<(), String> {
-    let provider_impl = crate::provider::make_provider(&provider)
-        .ok_or_else(|| "cannot resolve HOME directory — provider unavailable".to_string())?;
-
-    let mut sessions = provider_impl
-        .scan_source(source_path)
-        .map_err(|e| format!("failed to scan source: {e}"))?;
-
-    // Filter out sessions that are in the trash (shared-source providers)
-    let excluded = crate::trash_state::shared_deleted_ids();
-    if !excluded.is_empty() {
-        sessions.retain(|s| !excluded.contains(&s.meta.id));
-    }
-
-    db.sync_source_snapshot(&provider, source_path, &sessions)
-        .map_err(|e| format!("failed to sync source snapshot: {e}"))
-}
-
-pub(crate) fn sync_source_from_path(source_path: &str, state: &AppState) -> Result<bool, String> {
-    let Some(provider) = Provider::from_source_path(source_path) else {
-        return Ok(false);
-    };
-
-    sync_source_for_provider(provider, source_path, &state.db)?;
-    Ok(true)
 }
 
 fn load_messages_from_provider(
@@ -296,79 +184,10 @@ fn load_messages_from_provider(
     session_id: &str,
     source_path: &str,
 ) -> Result<Vec<Message>, String> {
-    crate::provider::make_provider(provider)
-        .ok_or_else(|| "cannot resolve HOME directory — provider unavailable".to_string())?
+    provider
+        .require_runtime()?
         .load_messages(session_id, source_path)
         .map_err(|e| format!("failed to load messages: {e}"))
-}
-
-fn find_meta_from_db(db: &Database, session_id: &str) -> Option<SessionMeta> {
-    db.get_session(session_id).ok().flatten()
-}
-
-fn build_fallback_meta(
-    session_id: &str,
-    source_path: &str,
-    provider: &Provider,
-    messages: &[Message],
-) -> SessionMeta {
-    let title = messages
-        .iter()
-        .find(|m| m.role == MessageRole::User && !m.content.is_empty())
-        .map(|m| {
-            if m.content.chars().count() > 100 {
-                let mut t: String = m.content.chars().take(100).collect();
-                t.push_str("...");
-                t
-            } else {
-                m.content.clone()
-            }
-        })
-        .unwrap_or_else(|| "Untitled".to_string());
-
-    SessionMeta {
-        id: session_id.to_string(),
-        provider: provider.clone(),
-        title,
-        project_path: String::new(),
-        project_name: String::new(),
-        created_at: 0,
-        updated_at: 0,
-        message_count: messages.len() as u32,
-        file_size_bytes: 0,
-        source_path: source_path.to_string(),
-        is_sidechain: false,
-        variant_name: None,
-        model: None,
-        cc_version: None,
-        git_branch: None,
-        parent_id: None,
-    }
-}
-
-fn build_minimal_meta(session_id: &str, source_path: &str, provider: &Provider) -> SessionMeta {
-    SessionMeta {
-        id: session_id.to_string(),
-        provider: provider.clone(),
-        title: String::new(),
-        project_path: String::new(),
-        project_name: String::new(),
-        created_at: 0,
-        updated_at: 0,
-        message_count: 0,
-        file_size_bytes: 0,
-        source_path: source_path.to_string(),
-        is_sidechain: false,
-        variant_name: None,
-        model: None,
-        cc_version: None,
-        git_branch: None,
-        parent_id: None,
-    }
-}
-
-fn str_to_provider(s: &str) -> Result<Provider, String> {
-    Provider::parse(s).ok_or_else(|| format!("unknown provider: '{s}'"))
 }
 
 /// Session images must live under the user home or system temp (same policy as HTML export).

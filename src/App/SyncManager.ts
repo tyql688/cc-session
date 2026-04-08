@@ -6,8 +6,11 @@ import {
   getSessionCount,
   reindexProviders,
 } from "../lib/tauri";
+import {
+  getPollWatchProviders,
+  loadProviderWatchSnapshots,
+} from "../lib/provider-watch";
 import { toastError } from "../stores/toast";
-import { allProviders } from "../lib/provider-registry";
 
 export interface SyncCallbacks {
   setTree: (tree: TreeNode[]) => void;
@@ -21,6 +24,7 @@ export function createSyncManager(callbacks: SyncCallbacks) {
   let pendingFullSync = false;
   const pendingChangedPaths = new Set<string>();
   let pollTimer: ReturnType<typeof setInterval> | undefined;
+  let pollConfigToken = 0;
 
   async function refreshTree() {
     const [treeData, count] = await Promise.all([getTree(), getSessionCount()]);
@@ -104,18 +108,40 @@ export function createSyncManager(callbacks: SyncCallbacks) {
     }
   }
 
-  function startPolling() {
-    const pollProviders = allProviders()
-      .filter((p) => p.watchStrategy === "poll")
-      .map((p) => p.key);
-    if (pollProviders.length === 0) return;
+  function applyPolling(providers: string[]) {
+    clearInterval(pollTimer);
+    pollTimer = undefined;
+
+    if (providers.length === 0) return;
 
     pollTimer = setInterval(() => {
-      void pollSync(pollProviders);
+      void pollSync(providers);
     }, 5000);
   }
 
+  function providersKey(providers: string[]): string {
+    return [...providers].sort().join("|");
+  }
+
+  function startPolling() {
+    const token = ++pollConfigToken;
+    let activeProviders = getPollWatchProviders();
+    applyPolling(activeProviders);
+
+    const catalogLoad = loadProviderWatchSnapshots();
+    void catalogLoad?.then(() => {
+      if (token !== pollConfigToken) return;
+
+      const nextProviders = getPollWatchProviders();
+      if (providersKey(nextProviders) === providersKey(activeProviders)) return;
+
+      activeProviders = nextProviders;
+      applyPolling(activeProviders);
+    });
+  }
+
   function stopPolling() {
+    pollConfigToken += 1;
     clearInterval(pollTimer);
     pollTimer = undefined;
   }

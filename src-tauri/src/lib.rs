@@ -6,6 +6,7 @@ pub mod models;
 pub mod provider;
 pub mod provider_utils;
 pub mod providers;
+mod services;
 mod terminal;
 pub mod trash_state;
 mod watcher;
@@ -17,6 +18,42 @@ use std::sync::Arc;
 pub mod exporter_test_helpers {
     pub fn render_tool_detail_pub(tool_name: &str, tool_input: &str) -> String {
         crate::exporter::html::render_tool_detail(tool_name, tool_input)
+    }
+}
+
+#[doc(hidden)]
+pub mod command_test_helpers {
+    use crate::commands::{get_resume_command_for_tests, load_session_detail_for_tests};
+    use crate::db::Database;
+    use crate::models::{ProviderSnapshot, SessionDetail, TrashMeta};
+    use crate::services::{ProviderSnapshotService, SessionLifecycleService};
+
+    pub fn get_session_detail(db: &Database, session_id: &str) -> Result<SessionDetail, String> {
+        load_session_detail_for_tests(db, session_id)
+    }
+
+    pub fn get_provider_snapshots(db: &Database) -> Result<Vec<ProviderSnapshot>, String> {
+        ProviderSnapshotService::new(db).list()
+    }
+
+    pub fn get_resume_command(db: &Database, session_id: &str) -> Result<String, String> {
+        get_resume_command_for_tests(db, session_id)
+    }
+
+    pub fn trash_session(db: &Database, session_id: &str) -> Result<(), String> {
+        SessionLifecycleService::new(db).trash_session(session_id)
+    }
+
+    pub fn list_trash() -> Result<Vec<TrashMeta>, String> {
+        SessionLifecycleService::list_trash()
+    }
+
+    pub fn restore_session(db: &Database, trash_id: &str) -> Result<(), String> {
+        SessionLifecycleService::new(db).restore_session(trash_id)
+    }
+
+    pub fn delete_session(db: &Database, session_id: &str) -> Result<(), String> {
+        SessionLifecycleService::new(db).purge_session(session_id)
     }
 }
 
@@ -91,7 +128,7 @@ pub fn run() {
 
     audit_trash_consistency(&db);
 
-    let providers = provider::all_providers();
+    let providers = provider::all_runtimes();
 
     let indexer = Indexer::new(Arc::clone(&db), providers);
 
@@ -123,7 +160,7 @@ pub fn run() {
             commands::get_index_stats,
             commands::rebuild_index,
             commands::clear_index,
-            commands::get_provider_paths,
+            commands::get_provider_snapshots,
             commands::get_resume_command,
             commands::detect_terminal,
             commands::open_in_terminal,
@@ -151,7 +188,7 @@ pub fn run() {
 
             // Provider instances are lightweight (just PathBuf); create a separate
             // set for the watcher since Indexer consumed the first set.
-            let watcher_providers = provider::all_providers();
+            let watcher_providers = provider::all_runtimes();
             match watcher::start_watcher(app.handle().clone(), &watcher_providers) {
                 Ok(fs_watcher) => {
                     app.manage(fs_watcher);

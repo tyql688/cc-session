@@ -6,16 +6,17 @@
 mod parser;
 mod tools;
 
-use std::collections::HashSet;
-use std::path::PathBuf;
+use std::collections::{HashMap, HashSet};
+use std::path::{Path, PathBuf};
 
-use crate::models::{Message, MessageRole, Provider, SessionMeta};
+use crate::models::{Message, Provider, SessionMeta};
 use crate::provider::{
     ChildPlan, DeletionPlan, FileAction, ParsedSession, ProviderError, SessionProvider,
 };
+use crate::provider_utils::project_name_from_path;
 use rayon::prelude::*;
-
-use tools::*;
+use rusqlite::Connection;
+use serde_json::Value;
 
 pub struct Descriptor;
 impl crate::provider::ProviderDescriptor for Descriptor {
@@ -61,16 +62,16 @@ impl CursorProvider {
         self.home_dir.join(".cursor").join("chats")
     }
 
-    /// Scan ~/.cursor/chats/<hash>/<sessionId>/store.db to collect all session
-    /// IDs that have a store.db file. These are CLI sessions.
-    fn collect_cli_session_ids(&self) -> HashSet<String> {
+    /// Scan ~/.cursor/chats/<hash>/<sessionId>/store.db to collect all CLI
+    /// session IDs and their store.db paths.
+    fn collect_cli_session_stores(&self) -> HashMap<String, PathBuf> {
         let chats_dir = self.chats_dir();
-        let mut ids = HashSet::new();
+        let mut stores = HashMap::new();
         if !chats_dir.exists() {
-            return ids;
+            return stores;
         }
         let Ok(hash_entries) = std::fs::read_dir(&chats_dir) else {
-            return ids;
+            return stores;
         };
         for hash_entry in hash_entries.flatten() {
             let hash_dir = hash_entry.path();
@@ -82,14 +83,15 @@ impl CursorProvider {
             };
             for session_entry in session_entries.flatten() {
                 let session_dir = session_entry.path();
-                if session_dir.is_dir() && session_dir.join("store.db").exists() {
+                let store_db = session_dir.join("store.db");
+                if session_dir.is_dir() && store_db.exists() {
                     if let Some(name) = session_dir.file_name().and_then(|n| n.to_str()) {
-                        ids.insert(name.to_string());
+                        stores.insert(name.to_string(), store_db);
                     }
                 }
             }
         }
-        ids
+        stores
     }
 
     /// Collect all transcript JSONL files under agent-transcripts/.
@@ -155,95 +157,57 @@ impl CursorProvider {
     fn load_transcript_messages(&self, source_path: &str) -> Result<Vec<Message>, ProviderError> {
         let content = std::fs::read_to_string(source_path)
             .map_err(|e| ProviderError::Parse(format!("failed to read transcript: {e}")))?;
-
-        let mut messages = Vec::new();
-
-        crate::providers::cursor::parser::for_each_transcript_entry(
+        Ok(crate::providers::cursor::parser::parse_transcript_messages(
             &content,
-            |role, msg_content| match role {
-                "user" => {
-                    let text = extract_text_from_content(msg_content);
-                    let clean = extract_user_text(&text);
-                    if !clean.is_empty() {
-                        messages.push(Message {
-                            role: MessageRole::User,
-                            content: clean,
-                            timestamp: None,
-                            tool_name: None,
-                            tool_input: None,
-                            token_usage: None,
-                            model: None,
-                        });
+        ))
+    }
+
+    fn extract_workspace_path_from_store_db(&self, store_db_path: &Path) -> Option<String> {
+        let conn = Connection::open(store_db_path).ok()?;
+        let mut stmt = conn.prepare("SELECT data FROM blobs").ok()?;
+        let rows = stmt.query_map([], |row| row.get::<_, Vec<u8>>(0)).ok()?;
+
+        for row in rows.flatten() {
+            if let Ok(value) = serde_json::from_slice::<Value>(&row) {
+                if let Some(content) = value.get("content").and_then(Value::as_str) {
+                    if let Some(path) =
+                        crate::providers::cursor::tools::extract_workspace_path(content)
+                    {
+                        return Some(path);
                     }
                 }
-                "assistant" => {
-                    let raw_text = extract_text_from_content(msg_content);
-                    let text = strip_redacted(&raw_text);
+            }
 
-                    if let Some(thinking) = extract_think_content(&text) {
-                        messages.push(Message {
-                            role: MessageRole::System,
-                            content: format!("[thinking]\n{thinking}"),
-                            timestamp: None,
-                            tool_name: None,
-                            tool_input: None,
-                            token_usage: None,
-                            model: None,
-                        });
-                    }
+            let text = String::from_utf8_lossy(&row);
+            if let Some(path) =
+                crate::providers::cursor::tools::extract_workspace_path(text.as_ref())
+            {
+                return Some(path);
+            }
+        }
 
-                    let after_think = strip_think_tags(&text);
+        None
+    }
 
-                    if let Some(cursor_thinking) = extract_cursor_thinking(&after_think) {
-                        messages.push(Message {
-                            role: MessageRole::System,
-                            content: format!("[thinking]\n{cursor_thinking}"),
-                            timestamp: None,
-                            tool_name: None,
-                            tool_input: None,
-                            token_usage: None,
-                            model: None,
-                        });
-                    }
+    fn apply_store_workspace_path(
+        &self,
+        session: &mut ParsedSession,
+        cli_stores: &HashMap<String, PathBuf>,
+    ) {
+        let store_session_id = session
+            .meta
+            .parent_id
+            .as_deref()
+            .unwrap_or(&session.meta.id);
+        let Some(store_db_path) = cli_stores.get(store_session_id) else {
+            return;
+        };
+        let Some(project_path) = self.extract_workspace_path_from_store_db(store_db_path) else {
+            return;
+        };
 
-                    let visible = strip_cursor_thinking(&after_think);
-                    if !visible.is_empty() {
-                        messages.push(Message {
-                            role: MessageRole::Assistant,
-                            content: visible,
-                            timestamp: None,
-                            tool_name: None,
-                            tool_input: None,
-                            token_usage: None,
-                            model: None,
-                        });
-                    }
-                    let parts = parse_content_array(msg_content);
-                    for part in &parts {
-                        if part.get("type").and_then(|t| t.as_str()) != Some("tool_use") {
-                            continue;
-                        }
-                        let raw_name = part.get("name").and_then(|n| n.as_str()).unwrap_or("tool");
-                        let display_name = map_cursor_tool_name(raw_name);
-                        let args = part.get("input");
-                        let tool_input = args.and_then(|a| remap_tool_args(display_name, a));
-
-                        messages.push(Message {
-                            role: MessageRole::Tool,
-                            content: String::new(),
-                            timestamp: None,
-                            tool_name: Some(display_name.to_string()),
-                            tool_input,
-                            token_usage: None,
-                            model: None,
-                        });
-                    }
-                }
-                _ => {}
-            },
-        );
-
-        Ok(messages)
+        session.meta.project_name = project_name_from_path(&project_path);
+        session.meta.project_path = project_path;
     }
 }
 
@@ -272,17 +236,19 @@ impl SessionProvider for CursorProvider {
     }
 
     fn scan_all(&self) -> Result<Vec<ParsedSession>, ProviderError> {
-        let cli_ids = self.collect_cli_session_ids();
+        let cli_stores = self.collect_cli_session_stores();
+        let cli_ids: HashSet<&str> = cli_stores.keys().map(String::as_str).collect();
         let (main_files, subagent_files) = self.collect_transcript_files();
 
         let mut sessions: Vec<ParsedSession> = main_files
             .par_iter()
             .filter_map(|path| {
-                let s = self.parse_transcript_jsonl(path)?;
-                if !cli_ids.contains(&s.meta.id) {
+                let mut session = self.parse_transcript_jsonl(path)?;
+                if !cli_ids.contains(session.meta.id.as_str()) {
                     return None; // IDE session — skip
                 }
-                Some(s)
+                self.apply_store_workspace_path(&mut session, &cli_stores);
+                Some(session)
             })
             .collect();
 
@@ -291,8 +257,8 @@ impl SessionProvider for CursorProvider {
         let subagent_sessions: Vec<ParsedSession> = subagent_files
             .par_iter()
             .filter_map(|path| {
-                let s = self.parse_transcript_jsonl(path)?;
-                let parent_is_cli = s
+                let mut session = self.parse_transcript_jsonl(path)?;
+                let parent_is_cli = session
                     .meta
                     .parent_id
                     .as_deref()
@@ -300,7 +266,8 @@ impl SessionProvider for CursorProvider {
                 if !parent_is_cli {
                     return None; // parent is IDE — skip subagent too
                 }
-                Some(s)
+                self.apply_store_workspace_path(&mut session, &cli_stores);
+                Some(session)
             })
             .collect();
         sessions.extend(subagent_sessions);
@@ -368,5 +335,98 @@ impl SessionProvider for CursorProvider {
                 let _ = std::fs::remove_dir_all(&candidate);
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::CursorProvider;
+    use crate::provider::SessionProvider;
+    use rusqlite::Connection;
+    use serde_json::json;
+
+    fn write_main_transcript(
+        home: &std::path::Path,
+        project_key: &str,
+        session_id: &str,
+        body: &str,
+    ) -> std::path::PathBuf {
+        let transcript_dir = home
+            .join(".cursor")
+            .join("projects")
+            .join(project_key)
+            .join("agent-transcripts")
+            .join(session_id);
+        std::fs::create_dir_all(&transcript_dir).unwrap();
+        let path = transcript_dir.join(format!("{session_id}.jsonl"));
+        std::fs::write(&path, body).unwrap();
+        path
+    }
+
+    fn write_store_db(home: &std::path::Path, session_id: &str, workspace_path: &str) {
+        let store_dir = home
+            .join(".cursor")
+            .join("chats")
+            .join("hash123")
+            .join(session_id);
+        std::fs::create_dir_all(&store_dir).unwrap();
+        let db_path = store_dir.join("store.db");
+        let conn = Connection::open(&db_path).unwrap();
+        conn.execute("CREATE TABLE blobs (id TEXT PRIMARY KEY, data BLOB)", [])
+            .unwrap();
+        conn.execute(
+            "INSERT INTO blobs (id, data) VALUES (?1, ?2)",
+            (
+                "blob1",
+                serde_json::to_vec(&json!({
+                    "role": "user",
+                    "content": format!(
+                        "<user_info>\nWorkspace Path: {workspace_path}\n</user_info>"
+                    ),
+                }))
+                .unwrap(),
+            ),
+        )
+        .unwrap();
+    }
+
+    #[test]
+    fn scan_all_prefers_workspace_path_from_store_db_for_sanitized_project_keys() {
+        let dir = tempfile::TempDir::new().unwrap();
+        let session_id = "cursor-session-001";
+        let workspace_dir = dir
+            .path()
+            .join("tmp")
+            .join(".hidden-root")
+            .join("ccsession-real-hidden-cursor");
+        std::fs::create_dir_all(&workspace_dir).unwrap();
+
+        write_main_transcript(
+            dir.path(),
+            "private-tmp-ccsession-real-hidden-cursor",
+            session_id,
+            r#"{"role":"user","message":{"content":[{"type":"text","text":"<user_query>Reply with OK only.</user_query>"}]}}
+{"role":"assistant","message":{"content":[{"type":"text","text":"OK"}]}}"#,
+        );
+        write_store_db(
+            dir.path(),
+            session_id,
+            workspace_dir.to_string_lossy().as_ref(),
+        );
+
+        let provider = CursorProvider {
+            home_dir: dir.path().to_path_buf(),
+        };
+
+        let sessions = provider.scan_all().unwrap();
+        assert_eq!(sessions.len(), 1);
+        assert_eq!(
+            sessions[0].meta.project_path,
+            workspace_dir.to_string_lossy().to_string()
+        );
+        assert_eq!(
+            sessions[0].meta.project_name,
+            "ccsession-real-hidden-cursor"
+        );
     }
 }

@@ -15,7 +15,11 @@ import type {
   Message,
   MessageRole,
 } from "../../lib/types";
-import { getProvider } from "../../lib/provider-registry";
+import {
+  getProviderWatchConfig,
+  getProviderWatchVersion,
+  loadProviderWatchSnapshots,
+} from "../../lib/provider-watch";
 import {
   getSessionDetail,
   trashSession,
@@ -113,11 +117,7 @@ export function SessionView(props: {
         setMessages([]);
         setVisibleCount(BATCH_SIZE);
         try {
-          const detail = await getSessionDetail(
-            sessionId,
-            props.session.source_path ?? "",
-            props.session.provider,
-          );
+          const detail = await getSessionDetail(sessionId);
           // Discard result if a newer load was triggered
           if (version !== loadVersion) return;
           setMeta(detail.meta);
@@ -243,11 +243,7 @@ export function SessionView(props: {
 
   async function reloadSession() {
     try {
-      const detail = await getSessionDetail(
-        props.session.id,
-        props.session.source_path ?? "",
-        props.session.provider,
-      );
+      const detail = await getSessionDetail(props.session.id);
       const oldCount = messages().length;
       setMeta(detail.meta);
       setMessages(detail.messages);
@@ -265,47 +261,56 @@ export function SessionView(props: {
   let pollTimer: ReturnType<typeof setInterval> | undefined;
 
   createEffect(
-    on(watching, async (isWatching) => {
-      // Cleanup previous listener & polling
-      clearTimeout(watchDebounce);
-      clearInterval(pollTimer);
-      pollTimer = undefined;
-      unwatchFn?.();
-      unwatchFn = undefined;
+    on(
+      () =>
+        [
+          watching(),
+          meta().provider,
+          meta().source_path,
+          props.session.source_path,
+          getProviderWatchVersion(),
+        ] as const,
+      async ([isWatching]) => {
+        // Cleanup previous listener & polling
+        clearTimeout(watchDebounce);
+        clearInterval(pollTimer);
+        pollTimer = undefined;
+        unwatchFn?.();
+        unwatchFn = undefined;
 
-      if (isWatching) {
-        const activeSourcePath =
-          meta().source_path || props.session.source_path;
-        const providerDef = getProvider(meta().provider);
+        if (isWatching) {
+          void loadProviderWatchSnapshots();
 
-        if (providerDef.watchStrategy === "poll") {
-          pollTimer = setInterval(reloadSession, providerDef.watchDebounceMs);
-        } else {
-          // File-based providers: use FS events
-          unwatchFn = await listen<string[]>("sessions-changed", (event) => {
-            const changedPaths = event.payload ?? [];
-            if (!activeSourcePath) return;
+          const activeSourcePath =
+            meta().source_path || props.session.source_path;
+          const watchConfig = getProviderWatchConfig(meta().provider);
 
-            let matched: boolean;
-            if (providerDef.watchMatchPrefix) {
-              // Gemini: match by project directory prefix
-              // (strip last 2 path segments: /chats/session-id.json → project dir)
-              const dir = activeSourcePath.replace(/\/[^/]+\/[^/]+$/, "");
-              matched = changedPaths.some((p) => p.startsWith(dir));
-            } else {
-              matched = changedPaths.includes(activeSourcePath);
-            }
-            if (!matched) return;
+          if (watchConfig.strategy === "poll") {
+            pollTimer = setInterval(reloadSession, watchConfig.debounceMs);
+          } else {
+            // File-based providers: use FS events
+            unwatchFn = await listen<string[]>("sessions-changed", (event) => {
+              const changedPaths = event.payload ?? [];
+              if (!activeSourcePath) return;
 
-            clearTimeout(watchDebounce);
-            watchDebounce = setTimeout(
-              reloadSession,
-              providerDef.watchDebounceMs,
-            );
-          });
+              let matched: boolean;
+              if (watchConfig.matchPrefix) {
+                // Gemini: match by project directory prefix
+                // (strip last 2 path segments: /chats/session-id.json → project dir)
+                const dir = activeSourcePath.replace(/\/[^/]+\/[^/]+$/, "");
+                matched = changedPaths.some((p) => p.startsWith(dir));
+              } else {
+                matched = changedPaths.includes(activeSourcePath);
+              }
+              if (!matched) return;
+
+              clearTimeout(watchDebounce);
+              watchDebounce = setTimeout(reloadSession, watchConfig.debounceMs);
+            });
+          }
         }
-      }
-    }),
+      },
+    ),
   );
 
   onCleanup(() => {
@@ -365,12 +370,7 @@ export function SessionView(props: {
 
   const handleDelete = async () => {
     try {
-      await trashSession(
-        props.session.id,
-        props.session.source_path ?? "",
-        props.session.provider,
-        props.session.title,
-      );
+      await trashSession(props.session.id);
       setShowDeleteConfirm(false);
       props.onCloseTab(props.session.id);
       props.onRefreshTree();
@@ -383,7 +383,7 @@ export function SessionView(props: {
 
   const handleResume = async () => {
     try {
-      await resumeSession(props.session.id, meta().provider, terminalApp());
+      await resumeSession(props.session.id, terminalApp());
       toast(t("toast.resumed"));
     } catch (_e) {
       toastError(t("toast.resumeFailed"));

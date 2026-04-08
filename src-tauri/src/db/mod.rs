@@ -2,8 +2,6 @@ mod queries;
 mod row_mapper;
 mod sync;
 
-pub use queries::provider_to_str_pub;
-
 use std::path::Path;
 use std::sync::Mutex;
 

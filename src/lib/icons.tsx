@@ -1,6 +1,6 @@
 import type { JSX } from "solid-js";
 import type { Provider } from "./types";
-import { getProviderColor } from "./provider-registry";
+import { getProviderColor } from "../stores/providerSnapshots";
 
 const PROVIDER_ICONS: Record<Provider, () => JSX.Element> = {
   claude: () => (

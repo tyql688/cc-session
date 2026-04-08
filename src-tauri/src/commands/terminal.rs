@@ -1,35 +1,60 @@
 use tauri::State;
 
+use crate::db::Database;
 use crate::models::Provider;
+use crate::services::load_session_meta;
 use crate::terminal;
 
 use super::AppState;
 
+struct ResumeTarget {
+    command: String,
+    cwd: Option<String>,
+}
+
 #[tauri::command]
-pub fn get_resume_command(
-    session_id: String,
-    provider: String,
-    state: State<AppState>,
-) -> Result<String, String> {
-    let safe_id = sanitize_session_id(&session_id);
-    let p = Provider::parse(&provider).ok_or_else(|| format!("unknown provider '{provider}'"))?;
-
-    let session = state.db.get_session(&session_id).ok().flatten();
-
-    let variant_name = session
-        .and_then(|s| s.variant_name)
-        .map(|v| sanitize_session_id(&v));
-
-    p.descriptor()
-        .resume_command(&safe_id, variant_name.as_deref())
-        .ok_or_else(|| format!("{} session missing variant name", provider))
+pub fn get_resume_command(session_id: String, state: State<AppState>) -> Result<String, String> {
+    get_resume_command_for_db(&state.db, &session_id)
 }
 
 /// Sanitize session ID to prevent shell injection — only allow alnum, hyphens, underscores
-fn sanitize_session_id(id: &str) -> String {
-    id.chars()
-        .filter(|c| c.is_alphanumeric() || *c == '-' || *c == '_')
-        .collect()
+fn sanitize_session_id(id: &str) -> Result<String, String> {
+    if id.is_empty() {
+        return Err("session id is empty".to_string());
+    }
+
+    if id
+        .chars()
+        .all(|c| c.is_alphanumeric() || c == '-' || c == '_')
+    {
+        return Ok(id.to_string());
+    }
+
+    Err(format!("session id contains invalid characters: '{id}'"))
+}
+
+fn resolve_resume_target(db: &Database, session_id: &str) -> Result<ResumeTarget, String> {
+    let safe_id = sanitize_session_id(session_id)?;
+    let session = load_session_meta(db, session_id)?;
+    let variant_name = session
+        .variant_name
+        .as_deref()
+        .map(sanitize_session_id)
+        .transpose()?;
+
+    let command = session
+        .provider
+        .descriptor()
+        .resume_command(&safe_id, variant_name.as_deref())
+        .ok_or_else(|| format!("{} session missing variant name", session.provider.key()))?;
+
+    let cwd = (!session.project_path.is_empty()).then_some(session.project_path);
+
+    Ok(ResumeTarget { command, cwd })
+}
+
+pub(crate) fn get_resume_command_for_db(db: &Database, session_id: &str) -> Result<String, String> {
+    Ok(resolve_resume_target(db, session_id)?.command)
 }
 
 /// Shell metacharacters that must never appear in a terminal command.
@@ -84,34 +109,11 @@ fn is_known_cc_mirror_variant(name: &str) -> bool {
 #[tauri::command]
 pub fn resume_session(
     session_id: String,
-    provider: String,
     terminal_app: String,
     state: State<AppState>,
 ) -> Result<(), String> {
-    let safe_id = sanitize_session_id(&session_id);
-    let p = Provider::parse(&provider).ok_or_else(|| format!("unknown provider '{provider}'"))?;
-
-    let session = state.db.get_session(&session_id).ok().flatten();
-
-    let variant_name = session
-        .as_ref()
-        .and_then(|s| s.variant_name.clone())
-        .map(|v| sanitize_session_id(&v));
-
-    let cmd = p
-        .descriptor()
-        .resume_command(&safe_id, variant_name.as_deref())
-        .ok_or_else(|| format!("{} session missing variant name, cannot resume", provider))?;
-
-    let cwd = session.and_then(|s| {
-        if s.project_path.is_empty() {
-            None
-        } else {
-            Some(s.project_path)
-        }
-    });
-
-    terminal::launch_terminal(&terminal_app, &cmd, cwd.as_deref())
+    let target = resolve_resume_target(&state.db, &session_id)?;
+    terminal::launch_terminal(&terminal_app, &target.command, target.cwd.as_deref())
 }
 
 #[tauri::command]
@@ -175,4 +177,28 @@ pub fn detect_terminal() -> String {
 
     #[cfg(not(any(target_os = "windows", target_os = "linux")))]
     "terminal".to_string()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::sanitize_session_id;
+
+    #[test]
+    fn sanitize_session_id_accepts_safe_ids() {
+        assert_eq!(sanitize_session_id("abc-123_DEF").unwrap(), "abc-123_DEF");
+    }
+
+    #[test]
+    fn sanitize_session_id_accepts_unicode_ids() {
+        assert_eq!(
+            sanitize_session_id("会话-123_变体").unwrap(),
+            "会话-123_变体"
+        );
+    }
+
+    #[test]
+    fn sanitize_session_id_rejects_invalid_ids() {
+        let err = sanitize_session_id("abc;rm").unwrap_err();
+        assert!(err.contains("invalid characters"));
+    }
 }

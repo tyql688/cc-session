@@ -2,7 +2,8 @@ use tauri::{AppHandle, State};
 use tauri_plugin_opener::OpenerExt;
 
 use crate::exporter;
-use crate::models::{IndexStats, ProviderInfo};
+use crate::models::{IndexStats, ProviderSnapshot};
+use crate::services::ProviderSnapshotService;
 
 use super::sessions::load_detail;
 use super::AppState;
@@ -52,55 +53,24 @@ pub fn clear_index(state: State<AppState>) -> Result<(), String> {
 }
 
 #[tauri::command]
-pub fn get_provider_paths(state: State<AppState>) -> Result<Vec<ProviderInfo>, String> {
-    let providers = crate::provider::all_providers();
-    let counts = state
-        .db
-        .provider_session_counts()
-        .map_err(|e| format!("failed to load provider session counts: {e}"))?;
-
-    let mut infos = Vec::new();
-
-    for provider in &providers {
-        let paths = provider.watch_paths();
-        let path_str = paths
-            .first()
-            .map(|p| p.to_string_lossy().to_string())
-            .unwrap_or_default();
-        let exists = paths.first().is_some_and(|p| p.exists());
-        let provider_kind = provider.provider();
-        let key = provider_kind.key().to_string();
-        let session_count = counts.get(&key).copied().unwrap_or(0);
-
-        infos.push(ProviderInfo {
-            key,
-            label: provider_kind.label().to_string(),
-            path: path_str,
-            exists,
-            session_count,
-            watch_strategy: provider_kind.descriptor().watch_strategy(),
-        });
-    }
-
-    Ok(infos)
+pub fn get_provider_snapshots(state: State<AppState>) -> Result<Vec<ProviderSnapshot>, String> {
+    ProviderSnapshotService::new(&state.db).list()
 }
 
 #[tauri::command]
 pub fn export_session(
     session_id: String,
-    source_path: String,
-    provider: String,
     format: String,
     output_path: String,
     state: State<AppState>,
 ) -> Result<(), String> {
-    let detail = load_detail(&session_id, &source_path, &provider, &state.db)?;
+    let detail = load_detail(&session_id, &state.db)?;
     exporter::export(&detail, &format, &output_path)
 }
 
 #[tauri::command]
 pub async fn export_sessions_batch(
-    items: Vec<(String, String, String)>,
+    items: Vec<String>,
     format: String,
     output_path: String,
     state: State<'_, AppState>,
@@ -116,12 +86,12 @@ pub async fn export_sessions_batch(
         let options = zip::write::SimpleFileOptions::default();
         let total = items.len();
 
-        for (idx, (session_id, source_path, provider)) in items.iter().enumerate() {
+        for (idx, session_id) in items.iter().enumerate() {
             let _ = app.emit(
                 "export-progress",
                 serde_json::json!({ "current": idx + 1, "total": total }),
             );
-            let detail = load_detail(session_id, source_path, provider, &state.db)?;
+            let detail = load_detail(session_id, &state.db)?;
             let ext = match format.as_str() {
                 "json" => "json",
                 "markdown" => "md",

@@ -2,7 +2,7 @@ import { Show } from "solid-js";
 import type { Accessor } from "solid-js";
 import type { SessionMeta, Message } from "../../lib/types";
 import { useI18n } from "../../i18n/index";
-import { getDisplayLabel } from "../../lib/provider-registry";
+import { getProviderLabel } from "../../stores/providerSnapshots";
 import {
   formatTimestamp,
   fmtK,
@@ -28,7 +28,7 @@ export function SessionToolbar(props: {
 
   const providerLabel = () => {
     const meta = props.meta();
-    return getDisplayLabel(meta.provider, meta.variant_name);
+    return getProviderLabel(meta.provider, meta.variant_name);
   };
 
   // Total token usage across all messages
