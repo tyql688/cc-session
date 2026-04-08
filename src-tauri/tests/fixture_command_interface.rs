@@ -98,10 +98,14 @@ fn command_interface_uses_fixture_provider_data_without_manual_deletes() {
     let _data_guards = override_data_env(data_home.path());
 
     let source_path = write_claude_fixture(home.path());
-    let db = Arc::new(Database::open(db_dir.path()).expect("open temp db"));
+    let seed_db = Database::open(db_dir.path()).expect("open temp db");
     let parsed = parse_session_file(&source_path).expect("parse fixture session");
-    db.sync_provider_snapshot(&Provider::Claude, &[parsed], true)
+    seed_db
+        .sync_provider_snapshot(&Provider::Claude, &[parsed], true)
         .expect("seed db with fixture snapshot");
+    drop(seed_db);
+
+    let db = Arc::new(Database::open(db_dir.path()).expect("reopen temp db"));
 
     let snapshots: Vec<ProviderSnapshot> =
         command_test_helpers::get_provider_snapshots(&db).expect("provider snapshots");
