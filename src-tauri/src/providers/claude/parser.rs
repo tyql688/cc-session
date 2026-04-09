@@ -14,7 +14,7 @@ use crate::provider_utils::{
 
 use super::images::{
     contains_image_placeholder_without_source, contains_image_source,
-    merge_image_placeholders_with_sources,
+    merge_image_placeholders_with_sources, normalize_image_source_segments,
 };
 use crate::models::Provider;
 
@@ -25,6 +25,19 @@ struct ParseState {
     first_user_message: Option<String>,
     pending_user_message: Option<(String, Option<String>)>,
     tool_use_id_map: HashMap<String, usize>,
+}
+
+fn preserves_pending_user_message(line_type: &str) -> bool {
+    matches!(
+        line_type,
+        "attachment"
+            | "file-history-snapshot"
+            | "permission-mode"
+            | "progress"
+            | "queue-operation"
+            | "last-prompt"
+            | "agent-name"
+    )
 }
 
 /// Extract parent session ID from subagent path.
@@ -190,6 +203,9 @@ pub fn parse_session_file(path: &PathBuf) -> Option<ParsedSession> {
             }
             // Skip all other types
             _ => {
+                if preserves_pending_user_message(line_type.as_str()) {
+                    continue;
+                }
                 flush_pending(&mut state);
                 continue;
             }
@@ -726,7 +742,7 @@ fn extract_message_content(message: &Value) -> String {
                 match item_type {
                     "text" => {
                         if let Some(text) = item.get("text").and_then(|t| t.as_str()) {
-                            parts.push(text.to_string());
+                            parts.push(normalize_image_source_segments(text));
                         }
                     }
                     "tool_use" => {

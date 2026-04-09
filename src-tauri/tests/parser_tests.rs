@@ -231,6 +231,43 @@ fn claude_parses_system_subtypes() {
     );
 }
 
+#[test]
+fn claude_normalizes_new_image_source_marker_format() {
+    let provider = ClaudeProvider::new().expect("home dir must be available");
+    let path = fixtures_dir().join("claude_new_image_source_session.jsonl");
+    let session = provider
+        .parse_session(&path)
+        .expect("claude image fixture must parse");
+
+    let first_user = session
+        .messages
+        .iter()
+        .find(|m| m.role == MessageRole::User)
+        .expect("expected user message");
+
+    assert!(
+        first_user
+            .content
+            .contains("[Image: source: /Users/test/.claude/image-cache/example-session/1.png]"),
+        "new marker format should be normalized for frontend rendering, got: {}",
+        first_user.content
+    );
+    assert!(
+        !first_user.content.contains("[Image source:"),
+        "raw new marker should not leak into parsed output: {}",
+        first_user.content
+    );
+    assert_eq!(
+        session
+            .messages
+            .iter()
+            .filter(|m| m.role == MessageRole::User)
+            .count(),
+        1,
+        "attachment records between placeholder and isMeta should not split the user image message"
+    );
+}
+
 // ---------------------------------------------------------------------------
 // Codex parser tests
 // ---------------------------------------------------------------------------

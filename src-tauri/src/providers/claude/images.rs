@@ -1,9 +1,35 @@
 pub fn contains_image_source(text: &str) -> bool {
-    text.contains("[Image: source:")
+    text.contains("[Image: source:") || text.contains("[Image source:")
 }
 
 pub fn contains_image_placeholder_without_source(text: &str) -> bool {
     text.contains("[Image") && !contains_image_source(text)
+}
+
+pub fn normalize_image_source_segments(text: &str) -> String {
+    let mut normalized = String::new();
+    let mut remaining = text;
+
+    while let Some(start) = remaining.find("[Image") {
+        normalized.push_str(&remaining[..start]);
+        let image_slice = &remaining[start..];
+        let Some(end_offset) = image_slice.find(']') else {
+            normalized.push_str(image_slice);
+            return normalized;
+        };
+
+        let candidate = &image_slice[..=end_offset];
+        if let Some(source) = parse_image_source_segment(candidate) {
+            normalized.push_str(&source);
+        } else {
+            normalized.push_str(candidate);
+        }
+
+        remaining = &image_slice[end_offset + 1..];
+    }
+
+    normalized.push_str(remaining);
+    normalized
 }
 
 pub fn merge_image_placeholders_with_sources(placeholder_text: &str, meta_text: &str) -> String {
@@ -59,8 +85,8 @@ pub fn extract_image_source_segments(text: &str) -> Vec<String> {
         };
 
         let candidate = &image_slice[..=end_offset];
-        if contains_image_source(candidate) {
-            segments.push(candidate.to_string());
+        if let Some(source) = parse_image_source_segment(candidate) {
+            segments.push(source);
         }
 
         remaining = &image_slice[end_offset + 1..];
@@ -70,5 +96,60 @@ pub fn extract_image_source_segments(text: &str) -> Vec<String> {
 }
 
 pub fn is_image_placeholder(segment: &str) -> bool {
-    segment.starts_with("[Image") && !segment.contains("source:")
+    segment.starts_with("[Image") && parse_image_source_segment(segment).is_none()
+}
+
+fn parse_image_source_segment(segment: &str) -> Option<String> {
+    if !segment.starts_with("[Image") || !segment.ends_with(']') {
+        return None;
+    }
+
+    let inner = &segment["[Image".len()..segment.len() - 1];
+    let source = inner
+        .strip_prefix(": source:")
+        .or_else(|| inner.strip_prefix(" source:"))?
+        .trim();
+
+    if source.is_empty() {
+        return None;
+    }
+
+    Some(format!("[Image: source: {source}]"))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{
+        extract_image_source_segments, merge_image_placeholders_with_sources,
+        normalize_image_source_segments,
+    };
+
+    #[test]
+    fn normalizes_new_claude_image_source_marker_format() {
+        let text = "[Image source: /tmp/demo.png]";
+        assert_eq!(
+            normalize_image_source_segments(text),
+            "[Image: source: /tmp/demo.png]"
+        );
+    }
+
+    #[test]
+    fn extracts_new_claude_image_source_marker_format() {
+        let text = "[Image source: /tmp/demo.png]";
+        assert_eq!(
+            extract_image_source_segments(text),
+            vec!["[Image: source: /tmp/demo.png]".to_string()]
+        );
+    }
+
+    #[test]
+    fn merges_placeholder_with_new_claude_image_source_marker_format() {
+        assert_eq!(
+            merge_image_placeholders_with_sources(
+                "before [Image #1] after",
+                "[Image source: /tmp/demo.png]"
+            ),
+            "before [Image: source: /tmp/demo.png] after"
+        );
+    }
 }
