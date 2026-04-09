@@ -3,6 +3,7 @@ pub mod db;
 mod exporter;
 pub mod indexer;
 pub mod models;
+pub mod pricing;
 pub mod provider;
 pub mod provider_utils;
 pub mod providers;
