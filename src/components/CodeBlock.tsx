@@ -1,4 +1,4 @@
-import { createSignal, onMount, onCleanup } from "solid-js";
+import { createSignal, createEffect, onCleanup } from "solid-js";
 import { useI18n } from "../i18n/index";
 import hljs from "highlight.js/lib/core";
 
@@ -82,20 +82,20 @@ export function CodeBlock(props: { code: string; language?: string }) {
 
   onCleanup(() => clearTimeout(copyTimer));
 
-  onMount(() => {
-    if (codeRef) {
-      const lang = props.language?.toLowerCase();
-      if (lang && hljs.getLanguage(lang)) {
-        const result = hljs.highlight(props.code, { language: lang });
+  createEffect(() => {
+    if (!codeRef) return;
+
+    codeRef.textContent = props.code;
+    const lang = props.language?.toLowerCase();
+    if (lang && hljs.getLanguage(lang)) {
+      const result = hljs.highlight(props.code, { language: lang });
+      codeRef.innerHTML = result.value;
+    } else if (lang) {
+      try {
+        const result = hljs.highlightAuto(props.code);
         codeRef.innerHTML = result.value;
-      } else if (lang) {
-        // Try auto-detect for unknown languages
-        try {
-          const result = hljs.highlightAuto(props.code);
-          codeRef.innerHTML = result.value;
-        } catch {
-          // plain text fallback
-        }
+      } catch {
+        codeRef.textContent = props.code;
       }
     }
   });
@@ -118,9 +118,11 @@ export function CodeBlock(props: { code: string; language?: string }) {
           <span class="code-block-lang">{props.language}</span>
         )}
         <button
+          type="button"
           class="code-block-copy"
           onClick={handleCopy}
           title={t("common.copyCode")}
+          aria-label={t("common.copyCode")}
         >
           {copied() ? (
             <svg

@@ -1,7 +1,12 @@
 import { createSignal, createMemo, Show, For } from "solid-js";
 import type { Message } from "../../lib/types";
 import { parseContent } from "./MarkdownRenderer";
-import { ImagePreview } from "./ImagePreview";
+import {
+  ImagePreview,
+  LocalImage,
+  RemoteImage,
+  isLocalPath,
+} from "./ImagePreview";
 
 function shortPath(p: string): string {
   return p?.split("/").slice(-2).join("/") || "";
@@ -229,7 +234,10 @@ const SUBAGENT_FILE_PROVIDERS = new Set([
 
 export function ToolMessage(props: { message: Message; provider?: string }) {
   const [expanded, setExpanded] = createSignal(false);
-  const [previewSrc, setPreviewSrc] = createSignal<string | null>(null);
+  const [previewImage, setPreviewImage] = createSignal<{
+    src: string;
+    source?: string;
+  } | null>(null);
 
   const hasInput = () =>
     !!props.message.tool_input && props.message.tool_input.trim().length > 0;
@@ -333,17 +341,23 @@ export function ToolMessage(props: { message: Message; provider?: string }) {
             <For each={parseContent(props.message.content)}>
               {(seg) => {
                 if (seg.type === "image") {
-                  return (
-                    <div class="msg-image-wrap">
-                      <img
-                        src={seg.content}
-                        alt="Tool output"
-                        class="msg-image"
-                        loading="lazy"
-                        decoding="async"
-                        onClick={() => setPreviewSrc(seg.content)}
+                  if (isLocalPath(seg.content)) {
+                    return (
+                      <LocalImage
+                        path={seg.content}
+                        onPreview={(src, source) =>
+                          setPreviewImage({ src, source })
+                        }
                       />
-                    </div>
+                    );
+                  }
+                  return (
+                    <RemoteImage
+                      src={seg.content}
+                      onPreview={(src, source) =>
+                        setPreviewImage({ src, source })
+                      }
+                    />
                   );
                 }
                 return <pre>{seg.content}</pre>;
@@ -352,8 +366,12 @@ export function ToolMessage(props: { message: Message; provider?: string }) {
           </div>
         </Show>
       </Show>
-      <Show when={previewSrc()}>
-        <ImagePreview src={previewSrc()!} onClose={() => setPreviewSrc(null)} />
+      <Show when={previewImage()}>
+        <ImagePreview
+          src={previewImage()!.src}
+          source={previewImage()!.source}
+          onClose={() => setPreviewImage(null)}
+        />
       </Show>
     </div>
   );

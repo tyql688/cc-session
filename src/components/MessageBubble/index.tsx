@@ -6,7 +6,13 @@ import { CodeBlock } from "../CodeBlock";
 import { MermaidBlock } from "../MermaidBlock";
 import { parseContent } from "./MarkdownRenderer";
 import { renderMarkdownText } from "./MarkdownRenderer";
-import { LocalImage, ImagePreview, isLocalPath } from "./ImagePreview";
+import { sanitizeMessageForClipboard } from "./MarkdownRenderer";
+import {
+  LocalImage,
+  RemoteImage,
+  ImagePreview,
+  isLocalPath,
+} from "./ImagePreview";
 import { ThinkingBlock } from "./ThinkingBlock";
 import { CopyMessageButton, TokenUsageDisplay } from "./TokenUsage";
 import { ToolMessage } from "./ToolMessage";
@@ -65,9 +71,14 @@ export function MessageBubble(props: {
   provider?: Provider;
   highlightTerm?: string;
 }) {
-  const { t } = useI18n();
   const segments = createMemo(() => parseContent(props.message.content));
-  const [previewSrc, setPreviewSrc] = createSignal<string | null>(null);
+  const [previewImage, setPreviewImage] = createSignal<{
+    src: string;
+    source?: string;
+  } | null>(null);
+  const copyText = createMemo(() =>
+    sanitizeMessageForClipboard(props.message.content),
+  );
 
   const isEmpty = (): boolean => {
     const msg = props.message;
@@ -150,22 +161,19 @@ export function MessageBubble(props: {
                       return (
                         <LocalImage
                           path={seg.content}
-                          onPreview={(s) => setPreviewSrc(s)}
+                          onPreview={(src, source) =>
+                            setPreviewImage({ src, source })
+                          }
                         />
                       );
                     }
                     return (
-                      <div class="msg-image-wrap">
-                        <img
-                          src={seg.content}
-                          alt={t("common.image")}
-                          class="msg-image"
-                          loading="lazy"
-                          decoding="async"
-                          draggable={false}
-                          onClick={() => setPreviewSrc(seg.content)}
-                        />
-                      </div>
+                      <RemoteImage
+                        src={seg.content}
+                        onPreview={(src, source) =>
+                          setPreviewImage({ src, source })
+                        }
+                      />
                     );
                   }
                   // createMemo makes this reactive: re-renders when highlightTerm signal changes.
@@ -175,7 +183,10 @@ export function MessageBubble(props: {
                   ) as unknown as JSX.Element;
                 }}
               </For>
-              <CopyMessageButton content={props.message.content} />
+              <CopyMessageButton
+                content={props.message.content}
+                copyText={copyText()}
+              />
             </div>
           </div>
           <Show
@@ -195,8 +206,12 @@ export function MessageBubble(props: {
           </Show>
         </Show>
       </Show>
-      <Show when={previewSrc()}>
-        <ImagePreview src={previewSrc()!} onClose={() => setPreviewSrc(null)} />
+      <Show when={previewImage()}>
+        <ImagePreview
+          src={previewImage()!.src}
+          source={previewImage()!.source}
+          onClose={() => setPreviewImage(null)}
+        />
       </Show>
     </>
   );

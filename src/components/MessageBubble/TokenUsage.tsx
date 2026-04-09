@@ -2,13 +2,16 @@ import { createSignal, Show } from "solid-js";
 import type { TokenUsage } from "../../lib/types";
 import { useI18n } from "../../i18n/index";
 
-export function CopyMessageButton(props: { content: string }) {
+export function CopyMessageButton(props: {
+  content: string;
+  copyText?: string;
+}) {
   const { t } = useI18n();
   const [copied, setCopied] = createSignal(false);
 
   async function handleCopy() {
     try {
-      await navigator.clipboard.writeText(props.content);
+      await navigator.clipboard.writeText(props.copyText ?? props.content);
       setCopied(true);
       setTimeout(() => setCopied(false), 1500);
     } catch {

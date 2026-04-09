@@ -7,6 +7,10 @@ export interface ContentSegment {
   language?: string;
 }
 
+export function sanitizeMessageForClipboard(raw: string): string {
+  return raw.replace(/\[Image:\s*source:\s*[^\]]+\]/g, "[Image]");
+}
+
 export function parseContent(raw: string): ContentSegment[] {
   if (!raw.includes("```") && !raw.includes("[Image")) {
     return [{ type: "text", content: raw }];
@@ -425,11 +429,38 @@ export function renderMarkdownText(
     }
 
     // Normal paragraph line
-    elements.push(
-      <p class="msg-text-line">{renderInlineMarkdown(line, highlightTerm)}</p>,
-    );
+    const paragraphLines = [line];
     i++;
+    while (i < lines.length) {
+      const nextLine = lines[i];
+      const nextTrimmed = nextLine.trimStart();
+      if (isBlockBoundaryLine(nextTrimmed)) {
+        break;
+      }
+      paragraphLines.push(nextLine);
+      i++;
+    }
+    elements.push(
+      <p class="msg-text-line">
+        {renderInlineMarkdown(paragraphLines.join("\n"), highlightTerm)}
+      </p>,
+    );
   }
 
   return <div class="msg-text">{elements}</div>;
+}
+
+function isBlockBoundaryLine(trimmed: string): boolean {
+  return (
+    trimmed === "" ||
+    trimmed === "$$" ||
+    trimmed.startsWith("### ") ||
+    trimmed.startsWith("## ") ||
+    trimmed.startsWith("# ") ||
+    /^[-*_]{3,}\s*$/.test(trimmed) ||
+    trimmed.startsWith(">") ||
+    (/^\|.*\|$/.test(trimmed) && trimmed.includes("|", 1)) ||
+    /^[-*]\s+/.test(trimmed) ||
+    /^\d+\.\s+/.test(trimmed)
+  );
 }

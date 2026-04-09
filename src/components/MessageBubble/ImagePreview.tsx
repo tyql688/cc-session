@@ -1,4 +1,4 @@
-import { createSignal, createEffect, Show } from "solid-js";
+import { createSignal, createEffect, onCleanup, Show } from "solid-js";
 import { readImageBase64 } from "../../lib/tauri";
 import { useI18n } from "../../i18n/index";
 
@@ -11,50 +11,211 @@ export function isLocalPath(source: string): boolean {
   );
 }
 
-/** Inline component that loads a local image via IPC and renders it. */
 export function LocalImage(props: {
   path: string;
-  onPreview: (src: string) => void;
+  onPreview: (src: string, source: string) => void;
 }) {
-  const { t } = useI18n();
   const [src, setSrc] = createSignal<string | null>(null);
+  const [failed, setFailed] = createSignal(false);
 
   createEffect(() => {
+    let active = true;
+    setSrc(null);
+    setFailed(false);
+
     readImageBase64(props.path)
-      .then(setSrc)
+      .then((loaded) => {
+        if (!active) return;
+        setSrc(loaded);
+      })
       .catch((e) => {
+        if (!active) return;
         console.warn("failed to load image:", props.path, e);
-        setSrc(null);
+        setFailed(true);
       });
+
+    onCleanup(() => {
+      active = false;
+    });
   });
 
   return (
-    <Show when={src()}>
-      <div class="msg-image-wrap">
-        <img
-          src={src()!}
-          alt={t("common.image")}
-          class="msg-image"
-          loading="lazy"
-          decoding="async"
-          draggable={false}
-          onClick={() => props.onPreview(src()!)}
-        />
-      </div>
+    <Show
+      when={src()}
+      fallback={
+        failed() ? (
+          <div class="msg-image-wrap">
+            <ImageFallback source={props.path} />
+          </div>
+        ) : (
+          <div class="msg-image-wrap">
+            <ImageLoading source={props.path} />
+          </div>
+        )
+      }
+    >
+      <InlineImage
+        src={src()!}
+        source={props.path}
+        onPreview={props.onPreview}
+      />
     </Show>
   );
 }
 
-export function ImagePreview(props: { src: string; onClose: () => void }) {
+export function RemoteImage(props: {
+  src: string;
+  onPreview: (src: string, source: string) => void;
+}) {
+  const [loadedSrc, setLoadedSrc] = createSignal<string | null>(null);
+  const [failed, setFailed] = createSignal(false);
+
+  createEffect(() => {
+    let active = true;
+    setLoadedSrc(null);
+    setFailed(false);
+
+    const image = new Image();
+    image.onload = () => {
+      if (!active) return;
+      setLoadedSrc(props.src);
+    };
+    image.onerror = () => {
+      if (!active) return;
+      setFailed(true);
+    };
+    image.src = props.src;
+
+    onCleanup(() => {
+      active = false;
+      image.onload = null;
+      image.onerror = null;
+    });
+  });
+
+  return (
+    <Show
+      when={loadedSrc()}
+      fallback={
+        failed() ? (
+          <div class="msg-image-wrap">
+            <ImageFallback source={props.src} />
+          </div>
+        ) : (
+          <div class="msg-image-wrap">
+            <ImageLoading source={props.src} />
+          </div>
+        )
+      }
+    >
+      <InlineImage
+        src={loadedSrc()!}
+        source={props.src}
+        onPreview={props.onPreview}
+      />
+    </Show>
+  );
+}
+
+function InlineImage(props: {
+  src: string;
+  source: string;
+  onPreview: (src: string, source: string) => void;
+}) {
+  return (
+    <div class="msg-image-wrap">
+      <button
+        type="button"
+        class="msg-image-button"
+        onClick={() => props.onPreview(props.src, props.source)}
+        title={describeImageSource(props.source)}
+      >
+        <img
+          src={props.src}
+          alt={describeImageSource(props.source)}
+          class="msg-image is-ready"
+          loading="lazy"
+          decoding="async"
+          draggable={false}
+        />
+      </button>
+    </div>
+  );
+}
+
+function ImageLoading(props: { source: string }) {
   const { t } = useI18n();
+  return (
+    <div
+      class="msg-image-state msg-image-loading"
+      title={describeImageSource(props.source)}
+    >
+      <span class="msg-image-state-label">{t("common.loading")}</span>
+      <span class="msg-image-state-source">
+        {labelImageSource(props.source, t)}
+      </span>
+    </div>
+  );
+}
+
+function ImageFallback(props: { source: string }) {
+  const { t } = useI18n();
+  return (
+    <div
+      class="msg-image-state msg-image-fallback"
+      title={describeImageSource(props.source)}
+    >
+      <span class="msg-image-state-label">{t("common.imageLoadFailed")}</span>
+      <span class="msg-image-state-source">
+        {labelImageSource(props.source, t)}
+      </span>
+    </div>
+  );
+}
+
+export function ImagePreview(props: {
+  src: string;
+  source?: string;
+  onClose: () => void;
+}) {
+  const { t } = useI18n();
+
+  createEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        props.onClose();
+      }
+    };
+
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    window.addEventListener("keydown", onKeyDown);
+
+    onCleanup(() => {
+      document.body.style.overflow = previousOverflow;
+      window.removeEventListener("keydown", onKeyDown);
+    });
+  });
+
   return (
     <div class="image-preview-overlay" onClick={props.onClose}>
       <img
         src={props.src}
+        alt={t("common.image")}
         class="image-preview-img"
         onClick={(e) => e.stopPropagation()}
       />
+      <Show when={props.source}>
+        <div
+          class="image-preview-meta"
+          title={props.source ? describeImageSource(props.source) : undefined}
+          onClick={(e) => e.stopPropagation()}
+        >
+          {labelImageSource(props.source!, t)}
+        </div>
+      </Show>
       <button
+        type="button"
         class="image-preview-close"
         aria-label={t("common.closePreview")}
         onClick={props.onClose}
@@ -73,4 +234,32 @@ export function ImagePreview(props: { src: string; onClose: () => void }) {
       </button>
     </div>
   );
+}
+
+function labelImageSource(source: string, t: (key: string) => string): string {
+  if (source.startsWith("data:")) {
+    return t("common.embeddedImage");
+  }
+
+  if (source.startsWith("http://") || source.startsWith("https://")) {
+    try {
+      const url = new URL(source);
+      const pathSegments = url.pathname.split("/").filter(Boolean);
+      const tail = pathSegments.slice(-2).join("/");
+      return tail ? `${url.hostname}/${tail}` : url.hostname;
+    } catch {
+      return source;
+    }
+  }
+
+  const normalized = source.replace(/\\/g, "/");
+  const pathSegments = normalized.split("/").filter(Boolean);
+  return pathSegments.slice(-2).join("/") || source;
+}
+
+function describeImageSource(source: string): string {
+  if (source.startsWith("data:")) {
+    return "embedded image";
+  }
+  return source;
 }

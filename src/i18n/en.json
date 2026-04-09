@@ -1,17 +1,125 @@
 {
   "app": { "title": "CC Session", "subtitle": "Session Explorer" },
-  "error": { "title": "Something went wrong", "message": "An unexpected error occurred.", "reload": "Reload" },
-  "common": { "loading": "Loading...", "copyCode": "Copy code", "copyMessage": "Copy message", "viewSource": "View Source", "viewDiagram": "View Diagram", "untitled": "Untitled", "unknown": "(Unknown)", "image": "Image", "tokens": "tokens", "inputTokens": "Input tokens", "outputTokens": "Output tokens", "cacheReadTokens": "Cache read tokens", "cacheWriteTokens": "Cache creation tokens", "cacheRead": "cache_read", "cacheWrite": "cache_write", "closePreview": "Close preview", "closeTab": "Close tab", "previousMatch": "Previous match", "nextMatch": "Next match", "closeSearch": "Close search", "subagentSession": "Subagent session" },
-  "explorer": { "title": "Explorer", "providers": "Providers", "noProject": "(No Project)", "selected": "selected", "today": "Today", "thisWeek": "This Week", "thisMonth": "This Month", "older": "Older", "locateSession": "Scroll to active session", "hideExplorer": "Hide explorer" },
-  "search": { "placeholder": "Search all sessions...", "noResults": "No results found", "ariaLabel": "Search sessions" },
-  "session": { "messages": "messages", "export": "Export", "copy": "Copy", "delete": "Delete", "resume": "Resume", "created": "Created", "noMessages": "No messages in this session", "watchStart": "Watch for changes", "watchStop": "Stop watching", "favoriteAdd": "Add to favorites", "favoriteRemove": "Remove from favorites", "loading": "Loading session...", "more": "more...", "filterUser": "User", "filterAssistant": "Assistant", "filterTool": "Tool", "filterSystem": "System", "searchPlaceholder": "Find in session...", "searchNoMatch": "No matches", "subagent": "Subagent" },
-  "toast": { "copied": "Copied to clipboard", "copyFailed": "Failed to copy", "favoriteAdded": "Added to favorites", "favoriteRemoved": "Removed from favorites", "favoriteFailed": "Failed to toggle favorite", "trashed": "Session moved to trash", "trashFailed": "Failed to delete session", "resumed": "Session resumed in terminal", "resumeFailed": "Failed to resume session", "idCopied": "Session ID copied", "cmdCopied": "Resume command copied", "rebuildOk": "Index rebuilt successfully", "rebuildFailed": "Failed to rebuild index", "exportOk": "Exported successfully", "clearIndexOk": "Index cleared" },
-  "favorites": { "title": "Favorites", "empty": "No favorites yet", "emptyHint": "Right-click a session and select \"Toggle Favorite\" to add it here" },
-  "editor": { "recentSessions": "Recent Sessions", "emptyHint": "Select a session from the explorer to view", "noTabsTitle": "Welcome to CC Session" },
-  "export": { "title": "Export Session", "json": "JSON", "markdown": "Markdown", "html": "HTML" },
+  "error": {
+    "title": "Something went wrong",
+    "message": "An unexpected error occurred.",
+    "reload": "Reload"
+  },
+  "common": {
+    "loading": "Loading...",
+    "copyCode": "Copy code",
+    "copyMessage": "Copy message",
+    "viewSource": "View Source",
+    "viewDiagram": "View Diagram",
+    "untitled": "Untitled",
+    "unknown": "(Unknown)",
+    "image": "Image",
+    "embeddedImage": "Embedded image",
+    "imageLoadFailed": "Could not load image",
+    "tokens": "tokens",
+    "inputTokens": "Input tokens",
+    "outputTokens": "Output tokens",
+    "cacheReadTokens": "Cache read tokens",
+    "cacheWriteTokens": "Cache creation tokens",
+    "cacheRead": "cache_read",
+    "cacheWrite": "cache_write",
+    "closePreview": "Close preview",
+    "closeTab": "Close tab",
+    "previousMatch": "Previous match",
+    "nextMatch": "Next match",
+    "closeSearch": "Close search",
+    "subagentSession": "Subagent session"
+  },
+  "explorer": {
+    "title": "Explorer",
+    "providers": "Providers",
+    "noProject": "(No Project)",
+    "selected": "selected",
+    "today": "Today",
+    "thisWeek": "This Week",
+    "thisMonth": "This Month",
+    "older": "Older",
+    "locateSession": "Scroll to active session",
+    "hideExplorer": "Hide explorer"
+  },
+  "search": {
+    "placeholder": "Search all sessions...",
+    "noResults": "No results found",
+    "ariaLabel": "Search sessions"
+  },
+  "session": {
+    "messages": "messages",
+    "export": "Export",
+    "copy": "Copy",
+    "delete": "Delete",
+    "resume": "Resume",
+    "created": "Created",
+    "noMessages": "No messages in this session",
+    "watchStart": "Watch for changes",
+    "watchStop": "Stop watching",
+    "favoriteAdd": "Add to favorites",
+    "favoriteRemove": "Remove from favorites",
+    "loading": "Loading session...",
+    "more": "more...",
+    "filterUser": "User",
+    "filterAssistant": "Assistant",
+    "filterTool": "Tool",
+    "filterSystem": "System",
+    "searchPlaceholder": "Find in session...",
+    "searchNoMatch": "No matches",
+    "subagent": "Subagent"
+  },
+  "toast": {
+    "copied": "Copied to clipboard",
+    "copyFailed": "Failed to copy",
+    "favoriteAdded": "Added to favorites",
+    "favoriteRemoved": "Removed from favorites",
+    "favoriteFailed": "Failed to toggle favorite",
+    "trashed": "Session moved to trash",
+    "trashFailed": "Failed to delete session",
+    "resumed": "Session resumed in terminal",
+    "resumeFailed": "Failed to resume session",
+    "idCopied": "Session ID copied",
+    "cmdCopied": "Resume command copied",
+    "rebuildOk": "Index rebuilt successfully",
+    "rebuildFailed": "Failed to rebuild index",
+    "exportOk": "Exported successfully",
+    "clearIndexOk": "Index cleared"
+  },
+  "favorites": {
+    "title": "Favorites",
+    "empty": "No favorites yet",
+    "emptyHint": "Right-click a session and select \"Toggle Favorite\" to add it here"
+  },
+  "editor": {
+    "recentSessions": "Recent Sessions",
+    "emptyHint": "Select a session from the explorer to view",
+    "noTabsTitle": "Welcome to CC Session"
+  },
+  "export": {
+    "title": "Export Session",
+    "json": "JSON",
+    "markdown": "Markdown",
+    "html": "HTML"
+  },
   "inputDialog": { "newTitle": "New title:", "rename": "Rename" },
-  "confirm": { "deleteTitle": "Delete Session", "deleteMsg": "Are you sure you want to delete this session? This cannot be undone.", "cancel": "Cancel", "confirm": "Delete" },
-  "status": { "indexed": "Indexed", "sessions": "sessions", "providers": "providers", "lastScan": "Last scan", "justNow": "just now", "indexing": "Indexing...", "themeLight": "Light", "themeDark": "Dark", "themeSystem": "System" },
+  "confirm": {
+    "deleteTitle": "Delete Session",
+    "deleteMsg": "Are you sure you want to delete this session? This cannot be undone.",
+    "cancel": "Cancel",
+    "confirm": "Delete"
+  },
+  "status": {
+    "indexed": "Indexed",
+    "sessions": "sessions",
+    "providers": "providers",
+    "lastScan": "Last scan",
+    "justNow": "just now",
+    "indexing": "Indexing...",
+    "themeLight": "Light",
+    "themeDark": "Dark",
+    "themeSystem": "System"
+  },
   "keyboard": {
     "title": "Keyboard Shortcuts",
     "search": "Search",
@@ -104,12 +212,21 @@
     "noBlockedFolders": "No blocked folders",
     "unblock": "Unblock"
   },
-  "system": { "turnDuration": "Turn", "compact": "Compact", "microcompact": "Microcompact", "hooks": "Hooks", "apiError": "API Error" },
-  "blocked": { "hint": "Right-click a project folder and select \"Block This Folder\"" },
+  "system": {
+    "turnDuration": "Turn",
+    "compact": "Compact",
+    "microcompact": "Microcompact",
+    "hooks": "Hooks",
+    "apiError": "API Error"
+  },
+  "blocked": {
+    "hint": "Right-click a project folder and select \"Block This Folder\""
+  },
   "trash": {
     "title": "Trash",
     "empty": "Trash is empty",
-    "restore": "Restore", "restoreOk": "Session restored successfully",
+    "restore": "Restore",
+    "restoreOk": "Session restored successfully",
     "permanentDelete": "Permanent Delete",
     "emptyTrash": "Empty Trash",
     "emptyTrashConfirm": "Permanently delete all trashed sessions? This cannot be undone."
