@@ -1,0 +1,3 @@
+{"type":"session_meta","timestamp":"2026-01-01T10:00:00.000Z","payload":{"id":"codex-windows-local-image-001","cwd":"C:\\\\Users\\\\Alice\\\\project"}}
+{"type":"event_msg","timestamp":"2026-01-01T10:00:01.100Z","payload":{"type":"user_message","message":"path [Image #1]","images":[],"local_images":["C:\\\\Users\\\\Alice\\\\AppData\\\\Local\\\\Temp\\\\codex-clipboard.png"],"text_elements":[{"byte_range":{"start":5,"end":15},"placeholder":"[Image #1]"}]}}
+{"type":"response_item","timestamp":"2026-01-01T10:00:02.000Z","payload":{"type":"message","role":"assistant","content":[{"type":"text","text":"done"}]}}

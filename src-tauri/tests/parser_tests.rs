@@ -389,6 +389,55 @@ fn codex_subagent_detected() {
     assert_eq!(session.meta.id, "codex-sub-001");
 }
 
+#[test]
+fn codex_user_message_event_merges_placeholder_with_embedded_image_source() {
+    let provider = CodexProvider::new().expect("home dir must be available");
+    let path = fixtures_dir().join("codex_local_image_session.jsonl");
+    let session = provider
+        .parse_session_file(&path)
+        .expect("codex local image fixture must parse");
+
+    let first = session
+        .messages
+        .first()
+        .expect("expected a parsed user message");
+    assert_eq!(first.role, MessageRole::User);
+    assert!(
+        first
+            .content
+            .contains("[Image: source: data:image/png;base64,abc123]"),
+        "expected embedded image source, got: {}",
+        first.content
+    );
+    assert!(
+        first.content.contains("literal '[Image #1]'"),
+        "quoted placeholder text must remain literal, got: {}",
+        first.content
+    );
+}
+
+#[test]
+fn codex_user_message_event_falls_back_to_windows_local_image_path() {
+    let provider = CodexProvider::new().expect("home dir must be available");
+    let path = fixtures_dir().join("codex_windows_local_image_session.jsonl");
+    let session = provider
+        .parse_session_file(&path)
+        .expect("codex windows local image fixture must parse");
+
+    let first = session
+        .messages
+        .first()
+        .expect("expected a parsed user message");
+    assert_eq!(first.role, MessageRole::User);
+    assert!(
+        first.content.contains(
+            "[Image: source: C:\\\\Users\\\\Alice\\\\AppData\\\\Local\\\\Temp\\\\codex-clipboard.png]",
+        ),
+        "expected windows local image path fallback, got: {}",
+        first.content
+    );
+}
+
 // ---------------------------------------------------------------------------
 // Kimi parser tests
 // ---------------------------------------------------------------------------

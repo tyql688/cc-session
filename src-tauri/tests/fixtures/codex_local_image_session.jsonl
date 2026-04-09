@@ -1,0 +1,4 @@
+{"type":"session_meta","timestamp":"2026-01-01T10:00:00.000Z","payload":{"id":"codex-local-image-001","cwd":"/home/user/my-project"}}
+{"type":"response_item","timestamp":"2026-01-01T10:00:01.000Z","payload":{"type":"message","role":"user","content":[{"type":"input_text","text":"<image name=[Image #1]>"},{"type":"input_image","image_url":"data:image/png;base64,abc123"}]}}
+{"type":"event_msg","timestamp":"2026-01-01T10:00:01.100Z","payload":{"type":"user_message","message":"before [Image #1]\nliteral '[Image #1]'","images":[],"local_images":["/tmp/replay.png"],"text_elements":[{"byte_range":{"start":7,"end":17},"placeholder":"[Image #1]"}]}}
+{"type":"response_item","timestamp":"2026-01-01T10:00:02.000Z","payload":{"type":"message","role":"assistant","content":[{"type":"text","text":"done"}]}}

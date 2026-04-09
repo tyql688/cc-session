@@ -23,6 +23,12 @@ struct CodexLine {
     payload: Option<Value>,
 }
 
+struct PendingCodexUserMessage {
+    content: String,
+    timestamp: Option<String>,
+    image_segments: Vec<String>,
+}
+
 impl CodexProvider {
     pub fn parse_session_file(&self, path: &PathBuf) -> Option<ParsedSession> {
         let file = File::open(path).ok()?;
@@ -48,6 +54,7 @@ impl CodexProvider {
         let mut is_sidechain = false;
         let mut parent_id: Option<String> = None;
         let mut agent_nickname: Option<String> = None;
+        let mut pending_user_message: Option<PendingCodexUserMessage> = None;
         // When parsing subagent files, skip the forked parent context.
         // Subagent JSONL: [sub_meta, parent_meta, ...parent_context..., spawn_marker, sub_turn]
         // The marker "You are the newly spawned agent" signals end of parent context.
@@ -157,6 +164,15 @@ impl CodexProvider {
                         continue;
                     }
 
+                    if !(item_type == "message" && role_str == "user") {
+                        flush_pending_user_message(
+                            &mut pending_user_message,
+                            &mut messages,
+                            &mut content_parts,
+                            &mut first_user_message,
+                        );
+                    }
+
                     match item_type {
                         "message" => {
                             let text = extract_codex_content(payload);
@@ -176,12 +192,20 @@ impl CodexProvider {
                                 continue;
                             }
 
-                            if role == MessageRole::User && first_user_message.is_none() {
-                                first_user_message = Some(normalized_text.clone());
-                            }
-
-                            if !normalized_text.is_empty() {
-                                content_parts.push(normalized_text);
+                            if role == MessageRole::User {
+                                let image_segments = extract_image_source_segments(&text);
+                                flush_pending_user_message(
+                                    &mut pending_user_message,
+                                    &mut messages,
+                                    &mut content_parts,
+                                    &mut first_user_message,
+                                );
+                                pending_user_message = Some(PendingCodexUserMessage {
+                                    content: text,
+                                    timestamp: entry.timestamp.clone(),
+                                    image_segments,
+                                });
+                                continue;
                             }
 
                             let msg_model = if role == MessageRole::Assistant {
@@ -189,6 +213,9 @@ impl CodexProvider {
                             } else {
                                 None
                             };
+                            if !normalized_text.is_empty() {
+                                content_parts.push(normalized_text);
+                            }
                             messages.push(Message {
                                 role,
                                 content: text,
@@ -366,6 +393,12 @@ impl CodexProvider {
                     }
                 }
                 "turn_context" => {
+                    flush_pending_user_message(
+                        &mut pending_user_message,
+                        &mut messages,
+                        &mut content_parts,
+                        &mut first_user_message,
+                    );
                     // Extract actual model name (e.g. "gpt-5.4") from turn_context
                     if let Some(m) = payload.get("model").and_then(|v| v.as_str()) {
                         if !m.is_empty() {
@@ -379,41 +412,88 @@ impl CodexProvider {
                 "event_msg" => {
                     let event_type = payload.get("type").and_then(|v| v.as_str()).unwrap_or("");
                     // agent_message is a duplicate of response_item/message/assistant — skip
-                    if event_type == "token_count" {
-                        if let Some(info) = payload.get("info") {
-                            if let Some(last) = info.get("last_token_usage") {
-                                let input =
-                                    last.get("input_tokens")
+                    match event_type {
+                        "user_message" => {
+                            let pending = pending_user_message.take();
+                            let fallback_content =
+                                pending.as_ref().map(|message| message.content.clone());
+                            let response_image_segments = pending
+                                .as_ref()
+                                .map(|message| message.image_segments.clone())
+                                .unwrap_or_default();
+                            let timestamp = entry
+                                .timestamp
+                                .clone()
+                                .or_else(|| pending.and_then(|message| message.timestamp));
+                            let built_content =
+                                build_codex_user_message(payload, &response_image_segments);
+                            let content = if built_content.is_empty() {
+                                fallback_content.unwrap_or_default()
+                            } else {
+                                built_content
+                            };
+                            append_user_message(
+                                &mut messages,
+                                &mut content_parts,
+                                &mut first_user_message,
+                                content,
+                                timestamp,
+                            );
+                        }
+                        "token_count" => {
+                            if let Some(info) = payload.get("info") {
+                                if let Some(last) = info.get("last_token_usage") {
+                                    let input = last
+                                        .get("input_tokens")
                                         .and_then(|v| v.as_u64())
-                                        .unwrap_or(0) as u32;
-                                let output =
-                                    last.get("output_tokens")
+                                        .unwrap_or(0)
+                                        as u32;
+                                    let output = last
+                                        .get("output_tokens")
                                         .and_then(|v| v.as_u64())
-                                        .unwrap_or(0) as u32;
-                                let cached =
-                                    last.get("cached_input_tokens")
+                                        .unwrap_or(0)
+                                        as u32;
+                                    let cached = last
+                                        .get("cached_input_tokens")
                                         .and_then(|v| v.as_u64())
-                                        .unwrap_or(0) as u32;
-                                let usage = TokenUsage {
-                                    input_tokens: input,
-                                    output_tokens: output,
-                                    cache_read_input_tokens: cached,
-                                    cache_creation_input_tokens: 0,
-                                };
-                                if let Some(last_msg) = messages
-                                    .iter_mut()
-                                    .rev()
-                                    .find(|m| m.role == MessageRole::Assistant)
-                                {
-                                    last_msg.token_usage = Some(usage);
+                                        .unwrap_or(0)
+                                        as u32;
+                                    let usage = TokenUsage {
+                                        input_tokens: input,
+                                        output_tokens: output,
+                                        cache_read_input_tokens: cached,
+                                        cache_creation_input_tokens: 0,
+                                    };
+                                    if let Some(last_msg) = messages
+                                        .iter_mut()
+                                        .rev()
+                                        .find(|m| m.role == MessageRole::Assistant)
+                                    {
+                                        last_msg.token_usage = Some(usage);
+                                    }
                                 }
                             }
+                        }
+                        _ => {
+                            flush_pending_user_message(
+                                &mut pending_user_message,
+                                &mut messages,
+                                &mut content_parts,
+                                &mut first_user_message,
+                            );
                         }
                     }
                 }
                 _ => continue,
             }
         }
+
+        flush_pending_user_message(
+            &mut pending_user_message,
+            &mut messages,
+            &mut content_parts,
+            &mut first_user_message,
+        );
 
         if messages.is_empty() {
             return None;
@@ -468,4 +548,59 @@ impl CodexProvider {
             content_text,
         })
     }
+}
+
+fn append_user_message(
+    messages: &mut Vec<Message>,
+    content_parts: &mut Vec<String>,
+    first_user_message: &mut Option<String>,
+    content: String,
+    timestamp: Option<String>,
+) {
+    if content.is_empty() {
+        return;
+    }
+
+    let normalized_text = strip_inline_image_sources(&content);
+    let trimmed = normalized_text.trim_start();
+    if is_system_content(trimmed) {
+        return;
+    }
+
+    if first_user_message.is_none() {
+        *first_user_message = Some(normalized_text.clone());
+    }
+
+    if !normalized_text.is_empty() {
+        content_parts.push(normalized_text);
+    }
+
+    messages.push(Message {
+        role: MessageRole::User,
+        content,
+        timestamp,
+        tool_name: None,
+        tool_input: None,
+        token_usage: None,
+        model: None,
+    });
+}
+
+fn flush_pending_user_message(
+    pending_user_message: &mut Option<PendingCodexUserMessage>,
+    messages: &mut Vec<Message>,
+    content_parts: &mut Vec<String>,
+    first_user_message: &mut Option<String>,
+) {
+    let Some(pending) = pending_user_message.take() else {
+        return;
+    };
+
+    append_user_message(
+        messages,
+        content_parts,
+        first_user_message,
+        pending.content,
+        pending.timestamp,
+    );
 }

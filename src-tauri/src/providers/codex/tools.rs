@@ -118,3 +118,147 @@ pub fn strip_inline_image_sources(text: &str) -> String {
         .collect::<Vec<_>>()
         .join("\n")
 }
+
+pub fn build_codex_user_message(payload: &Value, response_image_segments: &[String]) -> String {
+    let message = payload
+        .get("message")
+        .and_then(|v| v.as_str())
+        .unwrap_or("");
+
+    let local_image_segments: Vec<String> = payload
+        .get("local_images")
+        .and_then(|v| v.as_array())
+        .into_iter()
+        .flatten()
+        .filter_map(|value| value.as_str())
+        .map(image_source_marker)
+        .collect();
+
+    let mut preferred_image_segments = response_image_segments.to_vec();
+    if preferred_image_segments.len() < local_image_segments.len() {
+        preferred_image_segments.extend(
+            local_image_segments
+                .iter()
+                .skip(preferred_image_segments.len())
+                .cloned(),
+        );
+    }
+
+    let text_elements = payload.get("text_elements").and_then(|v| v.as_array());
+    let (mut merged_text, used_inline_images) =
+        merge_text_elements_with_image_segments(message, text_elements, &preferred_image_segments);
+
+    let remote_image_segments: Vec<String> = payload
+        .get("images")
+        .and_then(|v| v.as_array())
+        .into_iter()
+        .flatten()
+        .filter_map(|value| value.as_str())
+        .map(image_source_marker)
+        .collect();
+
+    append_image_segments(&mut merged_text, &remote_image_segments);
+    append_image_segments(
+        &mut merged_text,
+        &preferred_image_segments[used_inline_images..],
+    );
+
+    merged_text
+}
+
+pub fn extract_image_source_segments(text: &str) -> Vec<String> {
+    let mut segments = Vec::new();
+    let mut remaining = text;
+
+    while let Some(start) = remaining.find("[Image") {
+        let image_slice = &remaining[start..];
+        let Some(end_offset) = image_slice.find(']') else {
+            break;
+        };
+
+        let candidate = &image_slice[..=end_offset];
+        if candidate.contains("source:") {
+            segments.push(candidate.to_string());
+        }
+
+        remaining = &image_slice[end_offset + 1..];
+    }
+
+    segments
+}
+
+pub fn is_image_placeholder(segment: &str) -> bool {
+    segment.starts_with("[Image") && !segment.contains("source:")
+}
+
+fn image_source_marker(source: &str) -> String {
+    format!("[Image: source: {source}]")
+}
+
+fn append_image_segments(content: &mut String, segments: &[String]) {
+    for segment in segments {
+        if !content.is_empty() && !content.ends_with('\n') {
+            content.push('\n');
+        }
+        content.push_str(segment);
+    }
+}
+
+fn merge_text_elements_with_image_segments(
+    text: &str,
+    text_elements: Option<&Vec<Value>>,
+    image_segments: &[String],
+) -> (String, usize) {
+    let Some(text_elements) = text_elements else {
+        return (text.to_string(), 0);
+    };
+
+    let mut ranges: Vec<(usize, usize, Option<&str>)> = text_elements
+        .iter()
+        .filter_map(|element| {
+            let start = element
+                .get("byte_range")
+                .and_then(|range| range.get("start"))
+                .and_then(|value| value.as_u64())? as usize;
+            let end = element
+                .get("byte_range")
+                .and_then(|range| range.get("end"))
+                .and_then(|value| value.as_u64())? as usize;
+            let placeholder = element.get("placeholder").and_then(|value| value.as_str());
+            Some((start, end, placeholder))
+        })
+        .collect();
+
+    ranges.sort_by_key(|(start, _, _)| *start);
+
+    let mut merged = String::new();
+    let mut last_index = 0usize;
+    let mut source_index = 0usize;
+
+    for (start, end, placeholder) in ranges {
+        if start > end
+            || end > text.len()
+            || start < last_index
+            || !text.is_char_boundary(start)
+            || !text.is_char_boundary(end)
+        {
+            continue;
+        }
+
+        merged.push_str(&text[last_index..start]);
+        let original = &text[start..end];
+        let element_text = placeholder.unwrap_or(original);
+
+        if source_index < image_segments.len() && is_image_placeholder(element_text) {
+            merged.push_str(&image_segments[source_index]);
+            source_index += 1;
+        } else {
+            merged.push_str(original);
+        }
+
+        last_index = end;
+    }
+
+    merged.push_str(&text[last_index..]);
+    (merged, source_index)
+}
