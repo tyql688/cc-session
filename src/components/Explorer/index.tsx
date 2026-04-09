@@ -1,6 +1,7 @@
 import { createSignal, createEffect, createMemo, For, Show } from "solid-js";
 import type { SessionRef, TreeNode } from "../../lib/types";
 import {
+  getResumeCommand,
   resumeSession,
   trashSession,
   exportSessionsBatch,
@@ -84,6 +85,7 @@ export function Explorer(props: {
     pos: { x: number; y: number };
     node: TreeNode;
     projectLabel: string;
+    resumeCommand: string | null;
   } | null>(null);
   const [nodeMenu, setNodeMenu] = createSignal<{
     pos: { x: number; y: number };
@@ -169,7 +171,9 @@ export function Explorer(props: {
     props.onOpenSession(buildSessionRef(node, parentProjectLabel));
   }
 
-  function handleSessionContextMenu(
+  const resumeCommandCache = new Map<string, string | null>();
+
+  async function handleSessionContextMenu(
     e: MouseEvent,
     node: TreeNode,
     parentProjectLabel: string,
@@ -182,10 +186,20 @@ export function Explorer(props: {
       setSelectionMenu({ x: e.clientX, y: e.clientY });
       return;
     }
+    let resumeCommand = resumeCommandCache.get(node.id) ?? null;
+    if (!resumeCommandCache.has(node.id)) {
+      try {
+        resumeCommand = await getResumeCommand(node.id);
+      } catch {
+        resumeCommand = null;
+      }
+      resumeCommandCache.set(node.id, resumeCommand);
+    }
     setSessionMenu({
       pos: { x: e.clientX, y: e.clientY },
       node,
       projectLabel: parentProjectLabel,
+      resumeCommand,
     });
   }
 
@@ -300,6 +314,7 @@ export function Explorer(props: {
     return buildSessionMenuItems({
       node: m.node,
       sessionProjectPath: findSessionProjectPath(m.node.id),
+      resumeCommand: m.resumeCommand,
       t,
       terminalApp: terminalApp(),
       resumeSession,

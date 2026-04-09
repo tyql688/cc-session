@@ -1,6 +1,6 @@
 import type { MenuItemDef } from "../ContextMenu";
 import type { TreeNode } from "../../lib/types";
-import { getResumeCommand, openInFolder } from "../../lib/tauri";
+import { openInFolder } from "../../lib/tauri";
 import { toast, toastError } from "../../stores/toast";
 import { selectionCount } from "../../stores/selection";
 import { bumpFavoriteVersion } from "../../stores/favorites";
@@ -8,6 +8,7 @@ import { bumpFavoriteVersion } from "../../stores/favorites";
 export interface SessionMenuContext {
   node: TreeNode;
   sessionProjectPath: string;
+  resumeCommand: string | null;
   t: (key: string) => string;
   terminalApp: string;
   resumeSession: (id: string, terminal: string) => Promise<void>;
@@ -32,8 +33,8 @@ export function buildSessionMenuItems(ctx: SessionMenuContext): MenuItemDef[] {
       label: t("contextMenu.copyResumeCommand"),
       onClick: async () => {
         try {
-          const cmd = await getResumeCommand(node.id);
-          await navigator.clipboard.writeText(cmd);
+          if (!ctx.resumeCommand) throw new Error("resume command unavailable");
+          await navigator.clipboard.writeText(ctx.resumeCommand);
           toast(t("toast.cmdCopied"));
         } catch (_e) {
           toastError(t("toast.copyFailed"));
