@@ -1,10 +1,11 @@
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashMap};
 use std::sync::Arc;
 use std::time::Instant;
 
+use crate::db::sync::TokenStatRow;
 use crate::db::Database;
 use crate::models::{Provider, SessionMeta, TreeNode, TreeNodeType};
-use crate::provider::SessionProvider;
+use crate::provider::{ParsedSession, SessionProvider};
 
 #[derive(Clone)]
 pub struct Indexer {
@@ -66,6 +67,16 @@ impl Indexer {
             self.db
                 .sync_provider_snapshot(&provider_kind, &sessions, aggressive)
                 .map_err(|e| format!("failed to sync {} provider: {}", provider_kind.key(), e))?;
+
+            for parsed in &sessions {
+                let stat_rows = compute_token_stats(parsed);
+                if !stat_rows.is_empty() {
+                    if let Err(e) = self.db.replace_token_stats(&parsed.meta.id, &stat_rows) {
+                        log::warn!("failed to write token stats for {}: {e}", parsed.meta.id);
+                    }
+                }
+            }
+
             total += count;
         }
 
@@ -253,4 +264,42 @@ impl Indexer {
 
         Ok(tree)
     }
+}
+
+/// Compute per-(date, model) token usage aggregates from a parsed session's messages.
+pub(crate) fn compute_token_stats(parsed: &ParsedSession) -> Vec<TokenStatRow> {
+    let fallback_date = chrono::DateTime::from_timestamp(parsed.meta.created_at, 0)
+        .map(|dt| dt.format("%Y-%m-%d").to_string())
+        .unwrap_or_else(|| "1970-01-01".to_string());
+
+    let mut stats_map: HashMap<(String, String), TokenStatRow> = HashMap::new();
+    for msg in &parsed.messages {
+        if let Some(usage) = &msg.token_usage {
+            let date = msg
+                .timestamp
+                .as_deref()
+                .and_then(|t| t.get(..10).filter(|d| d.len() == 10))
+                .unwrap_or(&fallback_date)
+                .to_string();
+            let model = msg.model.as_deref().unwrap_or("").to_string();
+            let entry = stats_map
+                .entry((date.clone(), model.clone()))
+                .or_insert_with(|| TokenStatRow {
+                    date,
+                    model,
+                    turn_count: 0,
+                    input_tokens: 0,
+                    output_tokens: 0,
+                    cache_read_tokens: 0,
+                    cache_write_tokens: 0,
+                });
+            entry.turn_count += 1;
+            entry.input_tokens += usage.input_tokens as u64;
+            entry.output_tokens += usage.output_tokens as u64;
+            entry.cache_read_tokens += usage.cache_read_input_tokens as u64;
+            entry.cache_write_tokens += usage.cache_creation_input_tokens as u64;
+        }
+    }
+
+    stats_map.into_values().collect()
 }

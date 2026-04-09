@@ -1,6 +1,6 @@
 mod queries;
 mod row_mapper;
-mod sync;
+pub(crate) mod sync;
 
 use std::path::Path;
 use std::sync::Mutex;

@@ -1,4 +1,5 @@
 use crate::db::Database;
+use crate::indexer::compute_token_stats;
 use crate::models::Provider;
 
 pub struct SourceSyncService<'a> {
@@ -37,7 +38,18 @@ impl<'a> SourceSyncService<'a> {
 
         self.db
             .sync_source_snapshot(&provider, source_path, &sessions)
-            .map_err(|e| format!("failed to sync source snapshot: {e}"))
+            .map_err(|e| format!("failed to sync source snapshot: {e}"))?;
+
+        for parsed in &sessions {
+            let stat_rows = compute_token_stats(parsed);
+            if !stat_rows.is_empty() {
+                if let Err(e) = self.db.replace_token_stats(&parsed.meta.id, &stat_rows) {
+                    log::warn!("failed to write token stats for {}: {e}", parsed.meta.id);
+                }
+            }
+        }
+
+        Ok(())
     }
 
     pub fn sync_provider_key(&self, provider_key: &str, source_path: &str) -> Result<(), String> {

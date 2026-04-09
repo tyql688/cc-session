@@ -7,6 +7,17 @@ use crate::provider::ParsedSession;
 
 use super::Database;
 
+/// A single row in session_token_stats, keyed by (date, model).
+pub struct TokenStatRow {
+    pub date: String,
+    pub model: String,
+    pub turn_count: u64,
+    pub input_tokens: u64,
+    pub output_tokens: u64,
+    pub cache_read_tokens: u64,
+    pub cache_write_tokens: u64,
+}
+
 impl Database {
     pub fn sync_provider_snapshot(
         &self,
@@ -154,6 +165,38 @@ impl Database {
         conn.execute("DELETE FROM sessions WHERE parent_id = ?1", params![id])?;
         conn.execute("DELETE FROM favorites WHERE session_id = ?1", params![id])?;
         conn.execute("DELETE FROM sessions WHERE id = ?1", params![id])?;
+        Ok(())
+    }
+
+    /// Replace all token stats for a session. Called during indexing.
+    /// Deletes existing rows first, then inserts new per-(date, model) aggregates.
+    pub fn replace_token_stats(
+        &self,
+        session_id: &str,
+        stats: &[TokenStatRow],
+    ) -> Result<(), rusqlite::Error> {
+        let conn = self.lock_write()?;
+        conn.execute(
+            "DELETE FROM session_token_stats WHERE session_id = ?1",
+            params![session_id],
+        )?;
+        let mut stmt = conn.prepare_cached(
+            "INSERT INTO session_token_stats
+                (session_id, date, model, turn_count, input_tokens, output_tokens, cache_read_tokens, cache_write_tokens)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+        )?;
+        for row in stats {
+            stmt.execute(params![
+                session_id,
+                row.date,
+                row.model,
+                row.turn_count as i64,
+                row.input_tokens as i64,
+                row.output_tokens as i64,
+                row.cache_read_tokens as i64,
+                row.cache_write_tokens as i64,
+            ])?;
+        }
         Ok(())
     }
 }
