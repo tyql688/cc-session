@@ -1,5 +1,5 @@
 import { createSignal, Show, For } from "solid-js";
-import type { Message } from "../lib/types";
+import type { Message, Provider } from "../lib/types";
 import { MessageBubble, formatMcpLabel } from "./MessageBubble";
 
 const TOOL_ICONS: Record<string, string> = {
@@ -28,6 +28,7 @@ function toolIcon(name: string): string {
 export function MergedToolRow(props: {
   tools: string[];
   messages: Message[];
+  provider?: Provider;
   highlightTerm?: string;
 }) {
   const [expanded, setExpanded] = createSignal(false);
@@ -56,6 +57,7 @@ export function MergedToolRow(props: {
             {(msg) => (
               <MessageBubble
                 message={msg}
+                provider={props.provider}
                 highlightTerm={props.highlightTerm}
               />
             )}

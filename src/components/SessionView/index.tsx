@@ -476,6 +476,7 @@ export function SessionView(props: {
                     <MergedToolRow
                       tools={entry.tools}
                       messages={entry.messages}
+                      provider={meta().provider}
                       highlightTerm={sessionSearch()}
                     />
                   </div>
