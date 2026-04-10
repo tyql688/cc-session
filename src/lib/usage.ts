@@ -1,6 +1,7 @@
-import type { DailyUsage, UsageStats } from "./types";
+import type { DailyUsage, PrevPeriodTotals, UsageStats } from "./types";
 
 export type UsageSortState = { col: string; asc: boolean };
+export type ChartMetric = "tokens" | "cost";
 
 export interface UsageChartProviderMeta {
   label: string;
@@ -11,18 +12,17 @@ export interface UsageDailyChartData {
   dates: string[];
   byDate: Map<string, Map<string, number>>;
   providers: string[];
-  maxTokens: number;
+  maxValue: number;
 }
 
 export interface HoveredDaySummary {
   date: string;
   total: number;
-  xPercent: number;
   breakdown: Array<{
     provider: string;
     label: string;
     color: string;
-    tokens: number;
+    value: number;
   }>;
 }
 
@@ -42,6 +42,7 @@ export function makeEmptyUsageStats(): UsageStats {
     model_costs: [],
     project_costs: [],
     recent_sessions: [],
+    prev_period: undefined,
   };
 }
 
@@ -72,13 +73,15 @@ export function totalUsageTokens(data: UsageStats | undefined): number {
 export function buildDailyChartData(
   dailyUsage: DailyUsage[],
   selectedProviderKeys: string[],
+  metric: ChartMetric = "tokens",
 ): UsageDailyChartData {
   const byDate = new Map<string, Map<string, number>>();
-  let maxTokens = 0;
+  let maxValue = 0;
 
   for (const item of dailyUsage) {
     if (!byDate.has(item.date)) byDate.set(item.date, new Map());
-    byDate.get(item.date)!.set(item.provider, item.tokens);
+    const value = metric === "cost" ? item.cost : item.tokens;
+    byDate.get(item.date)!.set(item.provider, value);
   }
 
   for (const providerMap of byDate.values()) {
@@ -86,7 +89,7 @@ export function buildDailyChartData(
       (sum, value) => sum + value,
       0,
     );
-    if (total > maxTokens) maxTokens = total;
+    if (total > maxValue) maxValue = total;
   }
 
   const providers = selectedProviderKeys.filter((key) =>
@@ -97,7 +100,7 @@ export function buildDailyChartData(
     dates: [...byDate.keys()].sort(),
     byDate,
     providers,
-    maxTokens: maxTokens || 1,
+    maxValue: maxValue || 1,
   };
 }
 
@@ -108,30 +111,41 @@ export function buildHoveredDaySummary(
 ): HoveredDaySummary | null {
   if (!date) return null;
 
-  const dateIndex = chartData.dates.indexOf(date);
-  if (dateIndex === -1) return null;
+  if (!chartData.dates.includes(date)) return null;
 
   const providerMap = chartData.byDate.get(date);
   if (!providerMap) return null;
 
   const breakdown = chartData.providers
     .map((provider) => {
-      const tokens = providerMap.get(provider) ?? 0;
+      const value = providerMap.get(provider) ?? 0;
       const meta = getProviderMeta(provider);
       return {
         provider,
         label: meta.label,
         color: meta.color,
-        tokens,
+        value,
       };
     })
-    .filter((entry) => entry.tokens > 0)
-    .sort((left, right) => right.tokens - left.tokens);
+    .filter((entry) => entry.value > 0)
+    .sort((left, right) => right.value - left.value);
 
   return {
     date,
-    total: breakdown.reduce((sum, entry) => sum + entry.tokens, 0),
-    xPercent: ((dateIndex + 0.5) / chartData.dates.length) * 100,
+    total: breakdown.reduce((sum, entry) => sum + entry.value, 0),
     breakdown,
   };
+}
+
+/** Compute percentage change between current and previous values.
+ *  Returns null when prev is 0 or undefined (no meaningful comparison). */
+export function trendPercent(
+  current: number,
+  prev: PrevPeriodTotals | undefined,
+  field: keyof PrevPeriodTotals,
+): number | null {
+  if (!prev) return null;
+  const prevVal = prev[field] as number;
+  if (prevVal === 0) return current > 0 ? null : null;
+  return (current - prevVal) / prevVal;
 }

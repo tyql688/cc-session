@@ -23,6 +23,7 @@ describe("makeEmptyUsageStats", () => {
       model_costs: [],
       project_costs: [],
       recent_sessions: [],
+      prev_period: undefined,
     });
   });
 });
@@ -57,16 +58,16 @@ describe("buildDailyChartData", () => {
   it("groups dates and filters providers without activity", () => {
     const chartData = buildDailyChartData(
       [
-        { date: "2026-04-09", provider: "claude", tokens: 40 },
-        { date: "2026-04-09", provider: "codex", tokens: 10 },
-        { date: "2026-04-10", provider: "claude", tokens: 15 },
+        { date: "2026-04-09", provider: "claude", tokens: 40, cost: 0.4 },
+        { date: "2026-04-09", provider: "codex", tokens: 10, cost: 0.1 },
+        { date: "2026-04-10", provider: "claude", tokens: 15, cost: 0.15 },
       ],
       ["claude", "codex", "kimi"],
     );
 
     expect(chartData.dates).toEqual(["2026-04-09", "2026-04-10"]);
     expect(chartData.providers).toEqual(["claude", "codex"]);
-    expect(chartData.maxTokens).toBe(50);
+    expect(chartData.maxValue).toBe(50);
     expect(chartData.byDate.get("2026-04-10")?.get("claude")).toBe(15);
   });
 });
@@ -75,8 +76,8 @@ describe("buildHoveredDaySummary", () => {
   it("builds a sorted breakdown for the selected date", () => {
     const chartData = buildDailyChartData(
       [
-        { date: "2026-04-09", provider: "claude", tokens: 40 },
-        { date: "2026-04-09", provider: "codex", tokens: 10 },
+        { date: "2026-04-09", provider: "claude", tokens: 40, cost: 0.4 },
+        { date: "2026-04-09", provider: "codex", tokens: 10, cost: 0.1 },
       ],
       ["claude", "codex"],
     );
@@ -98,17 +99,16 @@ describe("buildHoveredDaySummary", () => {
           provider: "claude",
           label: "CLAUDE",
           color: "var(--claude)",
-          tokens: 40,
+          value: 40,
         },
         {
           provider: "codex",
           label: "CODEX",
           color: "var(--codex)",
-          tokens: 10,
+          value: 10,
         },
       ],
     });
-    expect(summary?.xPercent).toBe(50);
   });
 
   it("returns null when the date is missing", () => {

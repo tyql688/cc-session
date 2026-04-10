@@ -29,6 +29,8 @@ import {
   makeEmptyUsageStats,
   ROW_LIMIT_OPTIONS,
   totalUsageTokens,
+  trendPercent,
+  type ChartMetric,
   type HoveredDaySummary,
   type UsageSortState,
 } from "../lib/usage";
@@ -66,6 +68,7 @@ export function UsagePanel() {
   const [projectLimit, setProjectLimit] = createSignal<LimitOption>(10);
   const [sessionLimit, setSessionLimit] = createSignal<LimitOption>(10);
   const [hoveredDate, setHoveredDate] = createSignal<string | null>(null);
+  const [chartMetric, setChartMetric] = createSignal<ChartMetric>("tokens");
   const [showClearUsageConfirm, setShowClearUsageConfirm] = createSignal(false);
   const [isRefreshingPricing, setIsRefreshingPricing] = createSignal(false);
   const [activeMaintenanceJob, setActiveMaintenanceJob] =
@@ -269,6 +272,23 @@ export function UsagePanel() {
   };
   const fmtCost = (n: number): string => `$${n.toFixed(2)}`;
   const fmtPct = (n: number): string => `${(n * 100).toFixed(0)}%`;
+  const fmtChartValue = (n: number): string =>
+    chartMetric() === "cost" ? fmtCost(n) : fmtTokens(n);
+  const fmtTrend = (pct: number | null): string => {
+    if (pct === null) return "";
+    const abs = Math.abs(pct * 100);
+    const arrow = pct > 0 ? "\u2191" : pct < 0 ? "\u2193" : "";
+    return `${arrow} ${abs.toFixed(0)}%`;
+  };
+  const trendClass = (
+    pct: number | null,
+    invertColor: boolean = false,
+  ): string => {
+    if (pct === null) return "";
+    if (pct > 0) return invertColor ? "usage-trend-down" : "usage-trend-up";
+    if (pct < 0) return invertColor ? "usage-trend-up" : "usage-trend-down";
+    return "";
+  };
   const fmtActive = (ts: number): string => {
     const now = Date.now() / 1000;
     const diff = now - ts;
@@ -305,6 +325,7 @@ export function UsagePanel() {
     return buildDailyChartData(
       stats()?.daily_usage ?? [],
       selectedProviderKeys(),
+      chartMetric(),
     );
   });
 
@@ -374,6 +395,83 @@ export function UsagePanel() {
     return t("usage.usageReady");
   });
 
+  const totalCostTrend = createMemo(() =>
+    trendPercent(stats()?.total_cost ?? 0, stats()?.prev_period, "total_cost"),
+  );
+
+  const summaryStats = createMemo(() => {
+    const data = stats();
+    return [
+      {
+        label: t("usage.sessions"),
+        value: (data?.total_sessions ?? 0).toLocaleString(),
+        trend: trendPercent(
+          data?.total_sessions ?? 0,
+          data?.prev_period,
+          "total_sessions",
+        ),
+      },
+      {
+        label: t("usage.turns"),
+        value: (data?.total_turns ?? 0).toLocaleString(),
+        trend: trendPercent(
+          data?.total_turns ?? 0,
+          data?.prev_period,
+          "total_turns",
+        ),
+      },
+      {
+        label: t("usage.tokens"),
+        value: fmtTokens(totalTokens()),
+        trend: trendPercent(totalTokens(), data?.prev_period, "total_tokens"),
+      },
+      {
+        label: t("usage.cacheHit"),
+        value: fmtPct(data?.cache_hit_rate ?? 0),
+        trend: null,
+      },
+    ];
+  });
+
+  const tokenBreakdown = createMemo(() => {
+    const data = stats();
+    const tokenTotal = totalTokens();
+    return [
+      {
+        label: t("usage.input"),
+        value: fmtTokens(data?.total_input_tokens ?? 0),
+        share:
+          tokenTotal > 0
+            ? fmtPct((data?.total_input_tokens ?? 0) / tokenTotal)
+            : "0%",
+      },
+      {
+        label: t("usage.output"),
+        value: fmtTokens(data?.total_output_tokens ?? 0),
+        share:
+          tokenTotal > 0
+            ? fmtPct((data?.total_output_tokens ?? 0) / tokenTotal)
+            : "0%",
+      },
+      {
+        label: t("usage.cacheRead"),
+        value: fmtTokens(data?.total_cache_read_tokens ?? 0),
+        share:
+          tokenTotal > 0
+            ? fmtPct((data?.total_cache_read_tokens ?? 0) / tokenTotal)
+            : "0%",
+      },
+      {
+        label: t("usage.cacheWrite"),
+        value: fmtTokens(data?.total_cache_write_tokens ?? 0),
+        share:
+          tokenTotal > 0
+            ? fmtPct((data?.total_cache_write_tokens ?? 0) / tokenTotal)
+            : "0%",
+      },
+    ];
+  });
+
   function handleUsageDataChangedIfStale() {
     if (document.visibilityState === "hidden") return;
     const usageRefreshedAt = indexStats()?.usage_last_refreshed_at;
@@ -420,44 +518,22 @@ export function UsagePanel() {
     <div class="usage-panel">
       <section class="usage-card usage-toolbar-card">
         <div class="usage-toolbar-main">
-          <div>
+          <div class="usage-toolbar-copy">
             <div class="usage-title-row">
               <h1 class="usage-title">{t("usage.title")}</h1>
               <span class="usage-subtitle-pill">{activeRangeLabel()}</span>
             </div>
-            <p class="usage-subtitle">
-              {selectedProviderKeys().length} {t("usage.providers")}
-            </p>
-            <div class="usage-status-card">
-              <div
-                class={`usage-status-primary${activeMaintenanceJob() ? " is-active" : ""}`}
+            <div class="usage-toolbar-subline">
+              <span class="usage-subtitle">
+                {selectedProviderKeys().length} {t("usage.providers")}
+              </span>
+              <span
+                class={`usage-status-pill${activeMaintenanceJob() ? " is-active" : ""}`}
               >
                 <span class="usage-status-dot" />
                 <span>{maintenanceStatusText()}</span>
-              </div>
-              <div class="usage-status-secondary">
-                <span class="usage-status-metric">
-                  {t("usage.pricingUpdatedShort").replace(
-                    "{count}",
-                    String(pricingStatus()?.model_count ?? 0),
-                  )}
-                </span>
-                <span class="usage-status-metric">
-                  {t("usage.pricingUpdatedAtShort").replace(
-                    "{updatedAt}",
-                    formattedPricingUpdatedAt(),
-                  )}
-                </span>
-                <span class="usage-status-metric">
-                  {t("usage.usageUpdatedShort").replace(
-                    "{updatedAt}",
-                    formattedUsageUpdatedAt(),
-                  )}
-                </span>
-              </div>
+              </span>
             </div>
-            <p class="usage-note">{t("usage.rebuildKeepsSessions")}</p>
-            <p class="usage-note">{t("usage.pricingSourceNote")}</p>
           </div>
           <div class="usage-toolbar-actions">
             <div class="usage-range-group">
@@ -475,7 +551,7 @@ export function UsagePanel() {
               </For>
             </div>
             <button
-              class="usage-secondary-btn"
+              class="usage-action-btn"
               onClick={handleRefreshPricing}
               disabled={
                 isRefreshingPricing() || activeMaintenanceJob() !== null
@@ -487,7 +563,7 @@ export function UsagePanel() {
                 : t("settings.refreshPricingCatalog")}
             </button>
             <button
-              class="usage-secondary-btn"
+              class="usage-action-btn usage-action-btn-primary"
               onClick={() => setShowClearUsageConfirm(true)}
               disabled={activeMaintenanceJob() !== null}
               type="button"
@@ -497,6 +573,27 @@ export function UsagePanel() {
                 : t("usage.refreshUsage")}
             </button>
           </div>
+        </div>
+
+        <div class="usage-toolbar-meta">
+          <span class="usage-meta-pill">
+            {t("usage.pricingUpdatedShort").replace(
+              "{count}",
+              String(pricingStatus()?.model_count ?? 0),
+            )}
+          </span>
+          <span class="usage-meta-pill">
+            {t("usage.pricingUpdatedAtShort").replace(
+              "{updatedAt}",
+              formattedPricingUpdatedAt(),
+            )}
+          </span>
+          <span class="usage-meta-pill">
+            {t("usage.usageUpdatedShort").replace(
+              "{updatedAt}",
+              formattedUsageUpdatedAt(),
+            )}
+          </span>
         </div>
 
         <div class="usage-chips">
@@ -554,603 +651,642 @@ export function UsagePanel() {
               </section>
             }
           >
-            <div class="usage-summary-grid">
-              <section class="usage-card usage-hero-card">
-                <span class="usage-overline">{t("usage.estCost")}</span>
-                <div class="usage-cost-hero">{fmtCost(data().total_cost)}</div>
-                <div class="usage-cost-detail">
-                  {fmtTokens(totalTokens())} {t("usage.tokens")} ·{" "}
-                  {t("usage.pricingNote")}
+            <div class="usage-content-stack">
+              <section class="usage-card usage-summary-card">
+                <div class="usage-summary-main">
+                  <div class="usage-summary-hero">
+                    <span class="usage-overline">{t("usage.estCost")}</span>
+                    <div class="usage-cost-row">
+                      <div class="usage-cost-hero">
+                        {fmtCost(data().total_cost)}
+                      </div>
+                      <Show when={totalCostTrend() !== null}>
+                        <span
+                          class={`usage-trend ${trendClass(
+                            totalCostTrend(),
+                            true,
+                          )}`}
+                        >
+                          {fmtTrend(totalCostTrend())}
+                        </span>
+                      </Show>
+                    </div>
+                    <div class="usage-cost-detail">
+                      {t("usage.pricingNote")}
+                    </div>
+                  </div>
+
+                  <div class="usage-summary-kpis">
+                    <For each={summaryStats()}>
+                      {(item) => (
+                        <div class="usage-summary-stat">
+                          <span class="usage-kpi-label">{item.label}</span>
+                          <strong class="usage-kpi-value">{item.value}</strong>
+                          <span class="usage-kpi-sub">
+                            <Show
+                              when={item.trend !== null}
+                              fallback={"\u00A0"}
+                            >
+                              <span
+                                class={`usage-trend ${trendClass(item.trend)}`}
+                              >
+                                {fmtTrend(item.trend)}
+                              </span>
+                            </Show>
+                          </span>
+                        </div>
+                      )}
+                    </For>
+                  </div>
+                </div>
+
+                <div class="usage-breakdown-grid">
+                  <For each={tokenBreakdown()}>
+                    {(item) => (
+                      <div class="usage-breakdown-item">
+                        <span class="usage-breakdown-label">{item.label}</span>
+                        <strong class="usage-breakdown-value">
+                          {item.value}
+                        </strong>
+                        <span class="usage-breakdown-pct">{item.share}</span>
+                      </div>
+                    )}
+                  </For>
+                </div>
+
+                <div class="usage-summary-notes">
+                  <span class="usage-note-pill">
+                    {t("usage.rebuildKeepsSessions")}
+                  </span>
+                  <span class="usage-note-pill">
+                    {t("usage.pricingSourceNote")}
+                  </span>
                 </div>
               </section>
 
-              <div class="usage-kpi-grid">
-                <div class="usage-card usage-kpi-card">
-                  <span class="usage-kpi-label">{t("usage.sessions")}</span>
-                  <strong class="usage-kpi-value">
-                    {data().total_sessions}
-                  </strong>
-                </div>
-                <div class="usage-card usage-kpi-card">
-                  <span class="usage-kpi-label">{t("usage.turns")}</span>
-                  <strong class="usage-kpi-value">
-                    {data().total_turns.toLocaleString()}
-                  </strong>
-                </div>
-                <div class="usage-card usage-kpi-card">
-                  <span class="usage-kpi-label">{t("usage.tokens")}</span>
-                  <strong class="usage-kpi-value">
-                    {fmtTokens(totalTokens())}
-                  </strong>
-                </div>
-                <div class="usage-card usage-kpi-card">
-                  <span class="usage-kpi-label">{t("usage.cacheHit")}</span>
-                  <strong class="usage-kpi-value">
-                    {fmtPct(data().cache_hit_rate)}
-                  </strong>
-                </div>
-              </div>
-            </div>
-
-            <div class="usage-overview-grid">
-              <section class="usage-card usage-chart-card">
-                <div class="usage-section-header">
-                  <div>
-                    <div class="usage-section-title">
-                      {t("usage.dailyUsage")}
-                    </div>
-                    <div class="usage-section-subtitle">
-                      {activeRangeLabel()}
-                    </div>
-                  </div>
-                  <div class="usage-chart-inspector">
-                    <Show
-                      when={hoveredDaySummary()}
-                      fallback={
-                        <div class="usage-chart-hint">
-                          {t("usage.hoverHint")}
+              <div class="usage-overview-grid">
+                <section class="usage-card usage-chart-card">
+                  <div class="usage-section-header">
+                    <div class="usage-section-title-row">
+                      <div class="usage-chart-heading">
+                        <div class="usage-section-title">
+                          {t("usage.dailyUsage")}
                         </div>
-                      }
-                    >
-                      {(summary) => (
-                        <>
-                          <div class="usage-chart-inspector-date">
-                            {summary().date}
-                          </div>
-                          <div class="usage-chart-inspector-total">
-                            {fmtTokens(summary().total)} {t("usage.tokens")}
-                          </div>
-                          <div class="usage-chart-inspector-breakdown">
-                            <For each={summary().breakdown}>
-                              {(entry) => (
-                                <span class="usage-chart-inspector-item">
-                                  <span
-                                    class="usage-provider-dot"
-                                    style={{ background: entry.color }}
-                                  />
-                                  {entry.label}
-                                  <strong>{fmtTokens(entry.tokens)}</strong>
-                                </span>
-                              )}
-                            </For>
-                          </div>
-                        </>
-                      )}
-                    </Show>
-                  </div>
-                </div>
-
-                <Show when={dailyChartData().dates.length > 0}>
-                  <>
-                    <div class="usage-chart-wrap">
-                      <Show when={hoveredDaySummary()}>
-                        {(summary) => (
-                          <div
-                            class="usage-chart-tooltip"
-                            style={{ left: `${summary().xPercent}%` }}
+                        <div class="usage-section-subtitle">
+                          {activeRangeLabel()}
+                        </div>
+                        <div class="usage-metric-toggle">
+                          <button
+                            class={`usage-metric-btn${chartMetric() === "tokens" ? " active" : ""}`}
+                            aria-pressed={chartMetric() === "tokens"}
+                            onClick={() => setChartMetric("tokens")}
+                            type="button"
                           >
-                            <div class="usage-chart-tooltip-date">
+                            {t("usage.tokens")}
+                          </button>
+                          <button
+                            class={`usage-metric-btn${chartMetric() === "cost" ? " active" : ""}`}
+                            aria-pressed={chartMetric() === "cost"}
+                            onClick={() => setChartMetric("cost")}
+                            type="button"
+                          >
+                            {t("usage.cost")}
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                    <div class="usage-chart-inspector">
+                      <Show
+                        when={hoveredDaySummary()}
+                        fallback={
+                          <div class="usage-chart-hint">
+                            {t("usage.hoverHint")}
+                          </div>
+                        }
+                      >
+                        {(summary) => (
+                          <>
+                            <div class="usage-chart-inspector-date">
                               {summary().date}
                             </div>
-                            <div class="usage-chart-tooltip-total">
-                              {fmtTokens(summary().total)} {t("usage.tokens")}
+                            <div class="usage-chart-inspector-total">
+                              {fmtChartValue(summary().total)}
                             </div>
-                            <div class="usage-chart-tooltip-breakdown">
+                            <div class="usage-chart-inspector-breakdown">
                               <For each={summary().breakdown}>
                                 {(entry) => (
-                                  <span class="usage-chart-tooltip-item">
+                                  <span class="usage-chart-inspector-item">
                                     <span
                                       class="usage-provider-dot"
                                       style={{ background: entry.color }}
                                     />
-                                    {entry.label} · {fmtTokens(entry.tokens)}
+                                    {entry.label}
+                                    <strong>
+                                      {fmtChartValue(entry.value)}
+                                    </strong>
                                   </span>
                                 )}
                               </For>
                             </div>
-                          </div>
+                          </>
                         )}
                       </Show>
-                      <div class="usage-daily-bars">
-                        <For each={dailyChartData().dates}>
-                          {(date) => {
-                            const providers =
-                              dailyChartData().byDate.get(date)!;
-                            const max = dailyChartData().maxTokens;
-                            const active = () => hoveredDate() === date;
-                            return (
-                              <button
-                                class={`usage-bar-col${active() ? " active" : ""}`}
-                                onBlur={() => setHoveredDate(null)}
-                                onFocus={() => setHoveredDate(date)}
-                                onMouseEnter={() => setHoveredDate(date)}
-                                onMouseLeave={() => setHoveredDate(null)}
-                                title={`${date} · ${fmtTokens(
-                                  [...providers.values()].reduce(
-                                    (sum, value) => sum + value,
-                                    0,
-                                  ),
-                                )} ${t("usage.tokens")}`}
-                                type="button"
-                              >
-                                <For
-                                  each={dailyChartData()
-                                    .providers.slice()
-                                    .reverse()}
+                    </div>
+                  </div>
+
+                  <Show when={dailyChartData().dates.length > 0}>
+                    <>
+                      <div class="usage-chart-wrap">
+                        <div class="usage-daily-bars">
+                          <For each={dailyChartData().dates}>
+                            {(date) => {
+                              const providers =
+                                dailyChartData().byDate.get(date)!;
+                              const max = dailyChartData().maxValue;
+                              const active = () => hoveredDate() === date;
+                              return (
+                                <button
+                                  class={`usage-bar-col${active() ? " active" : ""}`}
+                                  onBlur={() => setHoveredDate(null)}
+                                  onFocus={() => setHoveredDate(date)}
+                                  onMouseEnter={() => setHoveredDate(date)}
+                                  onMouseLeave={() => setHoveredDate(null)}
+                                  title={`${date} · ${fmtChartValue(
+                                    [...providers.values()].reduce(
+                                      (sum, value) => sum + value,
+                                      0,
+                                    ),
+                                  )}`}
+                                  type="button"
                                 >
-                                  {(provider) => {
-                                    const tokens = providers.get(provider) ?? 0;
-                                    return (
-                                      <Show when={tokens > 0}>
-                                        <span
-                                          class={`usage-bar-seg${
-                                            hoveredDate() && !active()
-                                              ? " usage-bar-seg-muted"
-                                              : ""
-                                          }`}
-                                          style={{
-                                            height: `${Math.max(
-                                              4,
-                                              (tokens / max) * 100,
-                                            )}%`,
-                                            background:
-                                              providerInfo(provider).color,
-                                          }}
-                                        />
-                                      </Show>
-                                    );
-                                  }}
-                                </For>
-                              </button>
-                            );
-                          }}
-                        </For>
+                                  <For
+                                    each={dailyChartData()
+                                      .providers.slice()
+                                      .reverse()}
+                                  >
+                                    {(provider) => {
+                                      const val = providers.get(provider) ?? 0;
+                                      return (
+                                        <Show when={val > 0}>
+                                          <span
+                                            class={`usage-bar-seg${
+                                              hoveredDate() && !active()
+                                                ? " usage-bar-seg-muted"
+                                                : ""
+                                            }`}
+                                            style={{
+                                              height: `${Math.max(
+                                                4,
+                                                (val / max) * 100,
+                                              )}%`,
+                                              background:
+                                                providerInfo(provider).color,
+                                            }}
+                                          />
+                                        </Show>
+                                      );
+                                    }}
+                                  </For>
+                                </button>
+                              );
+                            }}
+                          </For>
+                        </div>
+                        <div class="usage-bar-labels">
+                          <For each={dailyChartData().dates}>
+                            {(date) => (
+                              <span
+                                class={
+                                  hoveredDate() === date ? "active" : undefined
+                                }
+                              >
+                                {date.slice(5)}
+                              </span>
+                            )}
+                          </For>
+                        </div>
                       </div>
-                      <div class="usage-bar-labels">
-                        <For each={dailyChartData().dates}>
-                          {(date) => (
-                            <span
-                              class={
-                                hoveredDate() === date ? "active" : undefined
-                              }
-                            >
-                              {date.slice(5)}
+
+                      <div class="usage-legend">
+                        <For each={dailyChartData().providers}>
+                          {(provider) => (
+                            <span class="usage-legend-item">
+                              <span
+                                class="usage-provider-dot"
+                                style={{
+                                  background: providerInfo(provider).color,
+                                }}
+                              />
+                              {providerInfo(provider).label}
                             </span>
                           )}
                         </For>
                       </div>
-                    </div>
+                    </>
+                  </Show>
+                </section>
 
-                    <div class="usage-legend">
-                      <For each={dailyChartData().providers}>
-                        {(provider) => (
-                          <span class="usage-legend-item">
-                            <span
-                              class="usage-provider-dot"
-                              style={{
-                                background: providerInfo(provider).color,
-                              }}
-                            />
-                            {providerInfo(provider).label}
-                          </span>
+                <section class="usage-card usage-spotlight-card">
+                  <div class="usage-section-header">
+                    <div>
+                      <div class="usage-section-title">
+                        {t("usage.topModels")}
+                      </div>
+                      <div class="usage-section-subtitle">
+                        {t("usage.costByModel")}
+                      </div>
+                    </div>
+                  </div>
+
+                  <Show
+                    when={topModels().length > 0}
+                    fallback={
+                      <div class="usage-empty-inline">{t("usage.noData")}</div>
+                    }
+                  >
+                    <div class="usage-spotlight-list">
+                      <For each={topModels()}>
+                        {(row) => (
+                          <div class="usage-spotlight-item">
+                            <div class="usage-spotlight-meta">
+                              <span class="usage-model-tag">
+                                {formatModelName(row.model)}
+                              </span>
+                              <span class="usage-spotlight-tokens">
+                                {fmtTokens(
+                                  row.input_tokens +
+                                    row.output_tokens +
+                                    row.cache_tokens,
+                                )}
+                              </span>
+                            </div>
+                            <div class="usage-spotlight-bar">
+                              <div
+                                class="usage-spotlight-bar-fill"
+                                style={{
+                                  width: `${Math.max(
+                                    8,
+                                    maxTopModelCost() > 0
+                                      ? (row.cost / maxTopModelCost()) * 100
+                                      : 0,
+                                  )}%`,
+                                }}
+                              />
+                            </div>
+                            <div class="usage-spotlight-cost">
+                              {fmtCost(row.cost)}
+                            </div>
+                          </div>
                         )}
                       </For>
                     </div>
-                  </>
-                </Show>
-              </section>
-
-              <section class="usage-card usage-spotlight-card">
+                  </Show>
+                </section>
+              </div>
+              <section class="usage-card usage-table-card">
                 <div class="usage-section-header">
                   <div>
                     <div class="usage-section-title">
-                      {t("usage.topModels")}
-                    </div>
-                    <div class="usage-section-subtitle">
                       {t("usage.costByModel")}
                     </div>
+                    <div class="usage-section-subtitle">
+                      {t("usage.estCost")}
+                    </div>
                   </div>
                 </div>
+                <div class="usage-table-wrap">
+                  <table class="usage-table">
+                    <thead>
+                      <tr>
+                        <th>{t("usage.model")}</th>
+                        <th
+                          class="r"
+                          onClick={() => toggleSort(setModelSort, "turns")}
+                        >
+                          {t("usage.turns")}
+                          <span class="usage-sort-icon">
+                            {sortIcon(modelSort(), "turns")}
+                          </span>
+                        </th>
+                        <th
+                          class="r"
+                          onClick={() =>
+                            toggleSort(setModelSort, "input_tokens")
+                          }
+                        >
+                          {t("usage.input")}
+                          <span class="usage-sort-icon">
+                            {sortIcon(modelSort(), "input_tokens")}
+                          </span>
+                        </th>
+                        <th
+                          class="r"
+                          onClick={() =>
+                            toggleSort(setModelSort, "output_tokens")
+                          }
+                        >
+                          {t("usage.output")}
+                          <span class="usage-sort-icon">
+                            {sortIcon(modelSort(), "output_tokens")}
+                          </span>
+                        </th>
+                        <th
+                          class="r"
+                          onClick={() =>
+                            toggleSort(setModelSort, "cache_tokens")
+                          }
+                        >
+                          {t("usage.cache")}
+                          <span class="usage-sort-icon">
+                            {sortIcon(modelSort(), "cache_tokens")}
+                          </span>
+                        </th>
+                        <th
+                          class="r"
+                          onClick={() => toggleSort(setModelSort, "cost")}
+                        >
+                          {t("usage.cost")}
+                          <span class="usage-sort-icon">
+                            {sortIcon(modelSort(), "cost")}
+                          </span>
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <For each={sortedModels()}>
+                        {(row) => (
+                          <tr>
+                            <td>
+                              <div class="usage-model-cell">
+                                <span class="usage-model-tag">
+                                  {formatModelName(row.model)}
+                                </span>
+                                <Show
+                                  when={
+                                    row.cost === 0 &&
+                                    row.input_tokens +
+                                      row.output_tokens +
+                                      row.cache_tokens >
+                                      0
+                                  }
+                                >
+                                  <span class="usage-price-badge">
+                                    {t("usage.unpriced")}
+                                  </span>
+                                </Show>
+                              </div>
+                            </td>
+                            <td class="r">{row.turns.toLocaleString()}</td>
+                            <td class="r">{fmtTokens(row.input_tokens)}</td>
+                            <td class="r">{fmtTokens(row.output_tokens)}</td>
+                            <td class="r">{fmtTokens(row.cache_tokens)}</td>
+                            <td class="r usage-cost-val">
+                              {fmtCost(row.cost)}
+                            </td>
+                          </tr>
+                        )}
+                      </For>
+                    </tbody>
+                  </table>
+                </div>
+              </section>
 
-                <Show
-                  when={topModels().length > 0}
-                  fallback={
-                    <div class="usage-empty-inline">{t("usage.noData")}</div>
-                  }
-                >
-                  <div class="usage-spotlight-list">
-                    <For each={topModels()}>
-                      {(row) => (
-                        <div class="usage-spotlight-item">
-                          <div class="usage-spotlight-meta">
-                            <span class="usage-model-tag">
-                              {formatModelName(row.model)}
-                            </span>
-                            <span class="usage-spotlight-tokens">
-                              {fmtTokens(
-                                row.input_tokens +
-                                  row.output_tokens +
-                                  row.cache_tokens,
-                              )}
-                            </span>
-                          </div>
-                          <div class="usage-spotlight-bar">
-                            <div
-                              class="usage-spotlight-bar-fill"
-                              style={{
-                                width: `${Math.max(
-                                  8,
-                                  maxTopModelCost() > 0
-                                    ? (row.cost / maxTopModelCost()) * 100
-                                    : 0,
-                                )}%`,
-                              }}
-                            />
-                          </div>
-                          <div class="usage-spotlight-cost">
-                            {fmtCost(row.cost)}
-                          </div>
-                        </div>
+              <section class="usage-card usage-table-card">
+                <div class="usage-section-header">
+                  <div>
+                    <div class="usage-section-title">
+                      {t("usage.costByProject")}
+                    </div>
+                    <div class="usage-section-subtitle">
+                      {Math.min(projectLimit(), sortedProjects().length)}/
+                      {sortedProjects().length}
+                    </div>
+                  </div>
+                  <div class="usage-section-actions">
+                    <For each={ROW_LIMIT_OPTIONS}>
+                      {(limit) => (
+                        <button
+                          class={`usage-limit-btn${projectLimit() === limit ? " active" : ""}`}
+                          onClick={() => setProjectLimit(limit)}
+                          type="button"
+                        >
+                          {limit}
+                        </button>
                       )}
                     </For>
                   </div>
-                </Show>
+                </div>
+                <div class="usage-table-wrap">
+                  <table class="usage-table">
+                    <thead>
+                      <tr>
+                        <th>{t("usage.project")}</th>
+                        <th>{t("usage.provider")}</th>
+                        <th
+                          class="r"
+                          onClick={() => toggleSort(setProjectSort, "sessions")}
+                        >
+                          {t("usage.sessions")}
+                          <span class="usage-sort-icon">
+                            {sortIcon(projectSort(), "sessions")}
+                          </span>
+                        </th>
+                        <th
+                          class="r"
+                          onClick={() => toggleSort(setProjectSort, "turns")}
+                        >
+                          {t("usage.turns")}
+                          <span class="usage-sort-icon">
+                            {sortIcon(projectSort(), "turns")}
+                          </span>
+                        </th>
+                        <th
+                          class="r"
+                          onClick={() => toggleSort(setProjectSort, "tokens")}
+                        >
+                          {t("usage.tokens")}
+                          <span class="usage-sort-icon">
+                            {sortIcon(projectSort(), "tokens")}
+                          </span>
+                        </th>
+                        <th
+                          class="r"
+                          onClick={() => toggleSort(setProjectSort, "cost")}
+                        >
+                          {t("usage.cost")}
+                          <span class="usage-sort-icon">
+                            {sortIcon(projectSort(), "cost")}
+                          </span>
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <For each={visibleProjects()}>
+                        {(row) => {
+                          const info = providerInfo(row.provider);
+                          return (
+                            <tr>
+                              <td>
+                                <div class="usage-entity-cell">
+                                  <div class="usage-entity-title">
+                                    {formatProjectName(
+                                      row.project,
+                                      row.project_path,
+                                    )}
+                                  </div>
+                                  <div
+                                    class="usage-entity-subtitle"
+                                    title={formatProjectPath(row.project_path)}
+                                  >
+                                    {formatProjectPath(row.project_path)}
+                                  </div>
+                                </div>
+                              </td>
+                              <td class="usage-provider-cell">
+                                <span
+                                  class="usage-provider-dot"
+                                  style={{ background: info.color }}
+                                />
+                                {info.label}
+                              </td>
+                              <td class="r">{row.sessions}</td>
+                              <td class="r">{row.turns.toLocaleString()}</td>
+                              <td class="r">{fmtTokens(row.tokens)}</td>
+                              <td class="r usage-cost-val">
+                                {fmtCost(row.cost)}
+                              </td>
+                            </tr>
+                          );
+                        }}
+                      </For>
+                    </tbody>
+                  </table>
+                </div>
+              </section>
+
+              <section class="usage-card usage-table-card">
+                <div class="usage-section-header">
+                  <div>
+                    <div class="usage-section-title">
+                      {t("usage.recentSessions")}
+                    </div>
+                    <div class="usage-section-subtitle">
+                      {Math.min(sessionLimit(), sortedSessions().length)}/
+                      {sortedSessions().length}
+                    </div>
+                  </div>
+                  <div class="usage-section-actions">
+                    <For each={ROW_LIMIT_OPTIONS}>
+                      {(limit) => (
+                        <button
+                          class={`usage-limit-btn${sessionLimit() === limit ? " active" : ""}`}
+                          onClick={() => setSessionLimit(limit)}
+                          type="button"
+                        >
+                          {limit}
+                        </button>
+                      )}
+                    </For>
+                  </div>
+                </div>
+                <div class="usage-table-wrap">
+                  <table class="usage-table">
+                    <thead>
+                      <tr>
+                        <th>{t("usage.project")}</th>
+                        <th>{t("usage.provider")}</th>
+                        <th>{t("usage.model")}</th>
+                        <th
+                          class="r"
+                          onClick={() =>
+                            toggleSort(setSessionSort, "updated_at")
+                          }
+                        >
+                          {t("usage.active")}
+                          <span class="usage-sort-icon">
+                            {sortIcon(sessionSort(), "updated_at")}
+                          </span>
+                        </th>
+                        <th
+                          class="r"
+                          onClick={() => toggleSort(setSessionSort, "turns")}
+                        >
+                          {t("usage.turns")}
+                          <span class="usage-sort-icon">
+                            {sortIcon(sessionSort(), "turns")}
+                          </span>
+                        </th>
+                        <th
+                          class="r"
+                          onClick={() => toggleSort(setSessionSort, "tokens")}
+                        >
+                          {t("usage.tokens")}
+                          <span class="usage-sort-icon">
+                            {sortIcon(sessionSort(), "tokens")}
+                          </span>
+                        </th>
+                        <th
+                          class="r"
+                          onClick={() => toggleSort(setSessionSort, "cost")}
+                        >
+                          {t("usage.cost")}
+                          <span class="usage-sort-icon">
+                            {sortIcon(sessionSort(), "cost")}
+                          </span>
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <For each={visibleSessions()}>
+                        {(row) => {
+                          const info = providerInfo(row.provider);
+                          return (
+                            <tr>
+                              <td>
+                                <div class="usage-entity-cell">
+                                  <div class="usage-entity-title">
+                                    {formatProjectName(
+                                      row.project,
+                                      row.project_path,
+                                    )}
+                                  </div>
+                                  <div
+                                    class="usage-entity-subtitle"
+                                    title={formatProjectPath(row.project_path)}
+                                  >
+                                    {formatProjectPath(row.project_path)}
+                                  </div>
+                                </div>
+                              </td>
+                              <td class="usage-provider-cell">
+                                <span
+                                  class="usage-provider-dot"
+                                  style={{ background: info.color }}
+                                />
+                                {info.label}
+                              </td>
+                              <td>
+                                <span class="usage-model-tag">
+                                  {formatModelName(row.model)}
+                                </span>
+                              </td>
+                              <td class="r usage-dim">
+                                {fmtActive(row.updated_at)}
+                              </td>
+                              <td class="r">{row.turns.toLocaleString()}</td>
+                              <td class="r">{fmtTokens(row.tokens)}</td>
+                              <td class="r usage-cost-val">
+                                {fmtCost(row.cost)}
+                              </td>
+                            </tr>
+                          );
+                        }}
+                      </For>
+                    </tbody>
+                  </table>
+                </div>
               </section>
             </div>
-
-            <section class="usage-card usage-table-card">
-              <div class="usage-section-header">
-                <div>
-                  <div class="usage-section-title">
-                    {t("usage.costByModel")}
-                  </div>
-                  <div class="usage-section-subtitle">{t("usage.estCost")}</div>
-                </div>
-              </div>
-              <div class="usage-table-wrap">
-                <table class="usage-table">
-                  <thead>
-                    <tr>
-                      <th>{t("usage.model")}</th>
-                      <th
-                        class="r"
-                        onClick={() => toggleSort(setModelSort, "turns")}
-                      >
-                        {t("usage.turns")}
-                        <span class="usage-sort-icon">
-                          {sortIcon(modelSort(), "turns")}
-                        </span>
-                      </th>
-                      <th
-                        class="r"
-                        onClick={() => toggleSort(setModelSort, "input_tokens")}
-                      >
-                        {t("usage.input")}
-                        <span class="usage-sort-icon">
-                          {sortIcon(modelSort(), "input_tokens")}
-                        </span>
-                      </th>
-                      <th
-                        class="r"
-                        onClick={() =>
-                          toggleSort(setModelSort, "output_tokens")
-                        }
-                      >
-                        {t("usage.output")}
-                        <span class="usage-sort-icon">
-                          {sortIcon(modelSort(), "output_tokens")}
-                        </span>
-                      </th>
-                      <th
-                        class="r"
-                        onClick={() => toggleSort(setModelSort, "cache_tokens")}
-                      >
-                        {t("usage.cache")}
-                        <span class="usage-sort-icon">
-                          {sortIcon(modelSort(), "cache_tokens")}
-                        </span>
-                      </th>
-                      <th
-                        class="r"
-                        onClick={() => toggleSort(setModelSort, "cost")}
-                      >
-                        {t("usage.cost")}
-                        <span class="usage-sort-icon">
-                          {sortIcon(modelSort(), "cost")}
-                        </span>
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    <For each={sortedModels()}>
-                      {(row) => (
-                        <tr>
-                          <td>
-                            <div class="usage-model-cell">
-                              <span class="usage-model-tag">
-                                {formatModelName(row.model)}
-                              </span>
-                              <Show
-                                when={
-                                  row.cost === 0 &&
-                                  row.input_tokens +
-                                    row.output_tokens +
-                                    row.cache_tokens >
-                                    0
-                                }
-                              >
-                                <span class="usage-price-badge">
-                                  {t("usage.unpriced")}
-                                </span>
-                              </Show>
-                            </div>
-                          </td>
-                          <td class="r">{row.turns.toLocaleString()}</td>
-                          <td class="r">{fmtTokens(row.input_tokens)}</td>
-                          <td class="r">{fmtTokens(row.output_tokens)}</td>
-                          <td class="r">{fmtTokens(row.cache_tokens)}</td>
-                          <td class="r usage-cost-val">{fmtCost(row.cost)}</td>
-                        </tr>
-                      )}
-                    </For>
-                  </tbody>
-                </table>
-              </div>
-            </section>
-
-            <section class="usage-card usage-table-card">
-              <div class="usage-section-header">
-                <div>
-                  <div class="usage-section-title">
-                    {t("usage.costByProject")}
-                  </div>
-                  <div class="usage-section-subtitle">
-                    {Math.min(projectLimit(), sortedProjects().length)}/
-                    {sortedProjects().length}
-                  </div>
-                </div>
-                <div class="usage-section-actions">
-                  <For each={ROW_LIMIT_OPTIONS}>
-                    {(limit) => (
-                      <button
-                        class={`usage-limit-btn${projectLimit() === limit ? " active" : ""}`}
-                        onClick={() => setProjectLimit(limit)}
-                        type="button"
-                      >
-                        {limit}
-                      </button>
-                    )}
-                  </For>
-                </div>
-              </div>
-              <div class="usage-table-wrap">
-                <table class="usage-table">
-                  <thead>
-                    <tr>
-                      <th>{t("usage.project")}</th>
-                      <th>{t("usage.provider")}</th>
-                      <th
-                        class="r"
-                        onClick={() => toggleSort(setProjectSort, "sessions")}
-                      >
-                        {t("usage.sessions")}
-                        <span class="usage-sort-icon">
-                          {sortIcon(projectSort(), "sessions")}
-                        </span>
-                      </th>
-                      <th
-                        class="r"
-                        onClick={() => toggleSort(setProjectSort, "turns")}
-                      >
-                        {t("usage.turns")}
-                        <span class="usage-sort-icon">
-                          {sortIcon(projectSort(), "turns")}
-                        </span>
-                      </th>
-                      <th
-                        class="r"
-                        onClick={() => toggleSort(setProjectSort, "tokens")}
-                      >
-                        {t("usage.tokens")}
-                        <span class="usage-sort-icon">
-                          {sortIcon(projectSort(), "tokens")}
-                        </span>
-                      </th>
-                      <th
-                        class="r"
-                        onClick={() => toggleSort(setProjectSort, "cost")}
-                      >
-                        {t("usage.cost")}
-                        <span class="usage-sort-icon">
-                          {sortIcon(projectSort(), "cost")}
-                        </span>
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    <For each={visibleProjects()}>
-                      {(row) => {
-                        const info = providerInfo(row.provider);
-                        return (
-                          <tr>
-                            <td>
-                              <div class="usage-entity-cell">
-                                <div class="usage-entity-title">
-                                  {formatProjectName(
-                                    row.project,
-                                    row.project_path,
-                                  )}
-                                </div>
-                                <div
-                                  class="usage-entity-subtitle"
-                                  title={formatProjectPath(row.project_path)}
-                                >
-                                  {formatProjectPath(row.project_path)}
-                                </div>
-                              </div>
-                            </td>
-                            <td class="usage-provider-cell">
-                              <span
-                                class="usage-provider-dot"
-                                style={{ background: info.color }}
-                              />
-                              {info.label}
-                            </td>
-                            <td class="r">{row.sessions}</td>
-                            <td class="r">{row.turns.toLocaleString()}</td>
-                            <td class="r">{fmtTokens(row.tokens)}</td>
-                            <td class="r usage-cost-val">
-                              {fmtCost(row.cost)}
-                            </td>
-                          </tr>
-                        );
-                      }}
-                    </For>
-                  </tbody>
-                </table>
-              </div>
-            </section>
-
-            <section class="usage-card usage-table-card">
-              <div class="usage-section-header">
-                <div>
-                  <div class="usage-section-title">
-                    {t("usage.recentSessions")}
-                  </div>
-                  <div class="usage-section-subtitle">
-                    {Math.min(sessionLimit(), sortedSessions().length)}/
-                    {sortedSessions().length}
-                  </div>
-                </div>
-                <div class="usage-section-actions">
-                  <For each={ROW_LIMIT_OPTIONS}>
-                    {(limit) => (
-                      <button
-                        class={`usage-limit-btn${sessionLimit() === limit ? " active" : ""}`}
-                        onClick={() => setSessionLimit(limit)}
-                        type="button"
-                      >
-                        {limit}
-                      </button>
-                    )}
-                  </For>
-                </div>
-              </div>
-              <div class="usage-table-wrap">
-                <table class="usage-table">
-                  <thead>
-                    <tr>
-                      <th>{t("usage.project")}</th>
-                      <th>{t("usage.provider")}</th>
-                      <th>{t("usage.model")}</th>
-                      <th
-                        class="r"
-                        onClick={() => toggleSort(setSessionSort, "updated_at")}
-                      >
-                        {t("usage.active")}
-                        <span class="usage-sort-icon">
-                          {sortIcon(sessionSort(), "updated_at")}
-                        </span>
-                      </th>
-                      <th
-                        class="r"
-                        onClick={() => toggleSort(setSessionSort, "turns")}
-                      >
-                        {t("usage.turns")}
-                        <span class="usage-sort-icon">
-                          {sortIcon(sessionSort(), "turns")}
-                        </span>
-                      </th>
-                      <th
-                        class="r"
-                        onClick={() => toggleSort(setSessionSort, "tokens")}
-                      >
-                        {t("usage.tokens")}
-                        <span class="usage-sort-icon">
-                          {sortIcon(sessionSort(), "tokens")}
-                        </span>
-                      </th>
-                      <th
-                        class="r"
-                        onClick={() => toggleSort(setSessionSort, "cost")}
-                      >
-                        {t("usage.cost")}
-                        <span class="usage-sort-icon">
-                          {sortIcon(sessionSort(), "cost")}
-                        </span>
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    <For each={visibleSessions()}>
-                      {(row) => {
-                        const info = providerInfo(row.provider);
-                        return (
-                          <tr>
-                            <td>
-                              <div class="usage-entity-cell">
-                                <div class="usage-entity-title">
-                                  {formatProjectName(
-                                    row.project,
-                                    row.project_path,
-                                  )}
-                                </div>
-                                <div
-                                  class="usage-entity-subtitle"
-                                  title={formatProjectPath(row.project_path)}
-                                >
-                                  {formatProjectPath(row.project_path)}
-                                </div>
-                              </div>
-                            </td>
-                            <td class="usage-provider-cell">
-                              <span
-                                class="usage-provider-dot"
-                                style={{ background: info.color }}
-                              />
-                              {info.label}
-                            </td>
-                            <td>
-                              <span class="usage-model-tag">
-                                {formatModelName(row.model)}
-                              </span>
-                            </td>
-                            <td class="r usage-dim">
-                              {fmtActive(row.updated_at)}
-                            </td>
-                            <td class="r">{row.turns.toLocaleString()}</td>
-                            <td class="r">{fmtTokens(row.tokens)}</td>
-                            <td class="r usage-cost-val">
-                              {fmtCost(row.cost)}
-                            </td>
-                          </tr>
-                        );
-                      }}
-                    </For>
-                  </tbody>
-                </table>
-              </div>
-            </section>
           </Show>
         )}
       </Show>
