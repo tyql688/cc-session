@@ -413,6 +413,7 @@ fn handle_tool_result(msg: &Value, state: &mut ParseState, timestamp: &Option<St
                     tool_input: None,
                     token_usage: None,
                     model: None,
+                    usage_hash: None,
                 });
             }
         }
@@ -455,6 +456,7 @@ fn handle_assistant_message(entry: &Value, state: &mut ParseState, timestamp: Op
                                 tool_input: None,
                                 token_usage: None,
                                 model: None,
+                                usage_hash: None,
                             });
                         }
                     }
@@ -479,6 +481,7 @@ fn handle_assistant_message(entry: &Value, state: &mut ParseState, timestamp: Op
                             tool_input: None,
                             token_usage: None,
                             model: per_message_model.clone(),
+                            usage_hash: None,
                         });
                         text_parts.clear();
                     }
@@ -494,6 +497,7 @@ fn handle_assistant_message(entry: &Value, state: &mut ParseState, timestamp: Op
                         tool_input: input,
                         token_usage: None,
                         model: None,
+                        usage_hash: None,
                     });
                     // Record tool_use_id for merging results later
                     if let Some(id) = item.get("id").and_then(|i| i.as_str()) {
@@ -515,6 +519,7 @@ fn handle_assistant_message(entry: &Value, state: &mut ParseState, timestamp: Op
                 tool_input: None,
                 token_usage: None,
                 model: per_message_model,
+                usage_hash: None,
             });
         }
     } else {
@@ -530,19 +535,21 @@ fn handle_assistant_message(entry: &Value, state: &mut ParseState, timestamp: Op
                 tool_input: None,
                 token_usage: None,
                 model: per_message_model,
+                usage_hash: None,
             });
         }
     }
 
-    // Attach token usage to the last assistant/tool message of this turn
+    // Attach token usage + dedup hash to the last assistant/tool message of this turn
     if let Some(usage) = turn_usage {
-        // Find the last non-thinking message in this turn
+        let hash = unique_hash_from_entry(entry);
         if let Some(last_msg) = state.messages[turn_start..]
             .iter_mut()
             .filter(|m| m.role != MessageRole::System)
             .last()
         {
             last_msg.token_usage = Some(usage);
+            last_msg.usage_hash = hash;
         }
     }
 }
@@ -666,6 +673,7 @@ fn handle_system_message(entry: &Value, state: &mut ParseState, timestamp: Optio
         tool_input: None,
         token_usage: None,
         model: None,
+        usage_hash: None,
     });
 }
 
@@ -711,6 +719,7 @@ fn append_user_message(
         tool_input: None,
         token_usage: None,
         model: None,
+        usage_hash: None,
     });
 }
 

@@ -179,6 +179,7 @@ impl Database {
                     created_at, updated_at, message_count, file_size_bytes, source_path, is_sidechain,
                     variant_name, model, cc_version, git_branch, parent_id
              FROM sessions
+             WHERE parent_id IS NULL
              ORDER BY updated_at DESC
              LIMIT ?1",
             params![limit as i64],

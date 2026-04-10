@@ -74,6 +74,9 @@ pub struct Message {
     pub token_usage: Option<TokenUsage>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub model: Option<String>,
+    /// `messageId:requestId` hash for cross-file usage deduplication.
+    #[serde(skip, default)]
+    pub usage_hash: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -117,6 +120,7 @@ pub struct IndexStats {
     pub session_count: u64,
     pub db_size_bytes: u64,
     pub last_index_time: String,
+    pub usage_last_refreshed_at: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
