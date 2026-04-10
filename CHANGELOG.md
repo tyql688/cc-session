@@ -7,6 +7,24 @@ versioned with [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.3.8] - 2026-04-11
+
+### Added
+
+- GitHub Copilot provider support for local Copilot session-state transcripts
+- Usage dashboard with provider filters, daily token/cost charts, per-model/project/session breakdowns, and previous-period trend summaries
+
+### Changed
+
+- Usage dashboard layout and chart controls were refined for clearer hierarchy and less visual clutter
+- macOS builds now disable the app sandbox so local provider directories remain accessible after installation
+
+### Fixed
+
+- Daily usage chart interaction now uses a single hover detail surface and exposes pressed state for the token/cost toggle
+- Usage aggregate query types now satisfy strict CI clippy checks
+
+
 ## [0.3.7] - 2026-04-09
 
 ### Added
