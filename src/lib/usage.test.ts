@@ -81,10 +81,14 @@ describe("buildHoveredDaySummary", () => {
       ["claude", "codex"],
     );
 
-    const summary = buildHoveredDaySummary("2026-04-09", chartData, (provider) => ({
-      label: provider.toUpperCase(),
-      color: `var(--${provider})`,
-    }));
+    const summary = buildHoveredDaySummary(
+      "2026-04-09",
+      chartData,
+      (provider) => ({
+        label: provider.toUpperCase(),
+        color: `var(--${provider})`,
+      }),
+    );
 
     expect(summary).toMatchObject({
       date: "2026-04-09",
@@ -109,7 +113,9 @@ describe("buildHoveredDaySummary", () => {
 
   it("returns null when the date is missing", () => {
     const chartData = buildDailyChartData([], []);
-    expect(buildHoveredDaySummary(null, chartData, () => ({ label: "", color: "" }))).toBeNull();
+    expect(
+      buildHoveredDaySummary(null, chartData, () => ({ label: "", color: "" })),
+    ).toBeNull();
     expect(
       buildHoveredDaySummary("2026-04-09", chartData, () => ({
         label: "",

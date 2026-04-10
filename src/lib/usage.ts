@@ -82,7 +82,10 @@ export function buildDailyChartData(
   }
 
   for (const providerMap of byDate.values()) {
-    const total = [...providerMap.values()].reduce((sum, value) => sum + value, 0);
+    const total = [...providerMap.values()].reduce(
+      (sum, value) => sum + value,
+      0,
+    );
     if (total > maxTokens) maxTokens = total;
   }
 
