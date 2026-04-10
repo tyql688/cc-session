@@ -13,6 +13,7 @@ import { useI18n } from "../i18n/index";
 import {
   getPricingCatalogStatus,
   startRefreshUsage,
+  getIndexStats,
   getUsageStats,
   getSessionCount,
   refreshPricingCatalog,
@@ -20,7 +21,7 @@ import {
 import { listProviderSnapshots } from "../stores/providerSnapshots";
 import { ConfirmDialog } from "./ConfirmDialog";
 import { toast, toastError, toastInfo } from "../stores/toast";
-import { formatLocalDateTime } from "../lib/formatters";
+import { formatLocalDateTime, shortenHomePath } from "../lib/formatters";
 import type {
   MaintenanceEvent,
   MaintenanceJob,
@@ -92,7 +93,6 @@ export function UsagePanel() {
   const [isRefreshingPricing, setIsRefreshingPricing] = createSignal(false);
   const [activeMaintenanceJob, setActiveMaintenanceJob] =
     createSignal<MaintenanceJob | null>(null);
-  const [lastUsageRefreshAt, setLastUsageRefreshAt] = createSignal(Date.now());
 
   const providerSnapshots = createMemo(() => listProviderSnapshots());
   const existingProviderSnapshots = createMemo(() =>
@@ -154,6 +154,20 @@ export function UsagePanel() {
   );
 
   const [sessionCount] = createResource(() => getSessionCount());
+  const [indexStats, { refetch: refetchIndexStats }] = createResource(
+    async () => {
+      try {
+        return await getIndexStats();
+      } catch {
+        return {
+          session_count: 0,
+          db_size_bytes: 0,
+          last_index_time: "",
+          usage_last_refreshed_at: "",
+        };
+      }
+    },
+  );
   const [pricingStatus, { refetch: refetchPricingStatus }] =
     createResource<PricingCatalogStatus>(async () => {
       try {
@@ -167,7 +181,7 @@ export function UsagePanel() {
   const handleUsageDataChanged = () => {
     void refetchStats();
     void refetchPricingStatus();
-    setLastUsageRefreshAt(Date.now());
+    void refetchIndexStats();
   };
 
   onMount(async () => {
@@ -308,6 +322,8 @@ export function UsagePanel() {
     const name = projectPath.split(/[\\/]/).filter(Boolean).at(-1);
     return name || t("common.unknown");
   };
+  const formatProjectPath = (projectPath: string): string =>
+    shortenHomePath(projectPath || t("common.unknown"));
 
   const totalTokens = createMemo(() => {
     const data = stats();
@@ -429,16 +445,24 @@ export function UsagePanel() {
       : t("settings.pricingNotFetched");
   });
 
+  const formattedUsageUpdatedAt = createMemo(() => {
+    const updatedAt = indexStats()?.usage_last_refreshed_at;
+    return updatedAt ? formatLocalDateTime(updatedAt) : t("usage.notRefreshed");
+  });
+
   const maintenanceStatusText = createMemo(() => {
     const job = activeMaintenanceJob();
     if (job === "refresh_usage") return t("usage.refreshUsageRunning");
     if (job === "rebuild_index") return t("usage.rebuildRunning");
-    return "";
+    return t("usage.usageReady");
   });
 
   function handleUsageDataChangedIfStale() {
     if (document.visibilityState === "hidden") return;
-    if (Date.now() - lastUsageRefreshAt() < 5 * 60 * 1000) return;
+    const usageRefreshedAt = indexStats()?.usage_last_refreshed_at;
+    if (!usageRefreshedAt) return;
+    const parsed = Date.parse(usageRefreshedAt);
+    if (!Number.isNaN(parsed) && Date.now() - parsed < 5 * 60 * 1000) return;
     handleUsageDataChanged();
   }
 
@@ -477,9 +501,6 @@ export function UsagePanel() {
 
   return (
     <div class="usage-panel">
-      <Show when={activeMaintenanceJob() !== null}>
-        <div class="usage-status-banner">{maintenanceStatusText()}</div>
-      </Show>
       <section class="usage-card usage-toolbar-card">
         <div class="usage-toolbar-main">
           <div>
@@ -490,13 +511,36 @@ export function UsagePanel() {
             <p class="usage-subtitle">
               {selectedProviderKeys().length} {t("usage.providers")}
             </p>
+            <div class="usage-status-card">
+              <div
+                class={`usage-status-primary${activeMaintenanceJob() ? " is-active" : ""}`}
+              >
+                <span class="usage-status-dot" />
+                <span>{maintenanceStatusText()}</span>
+              </div>
+              <div class="usage-status-secondary">
+                <span class="usage-status-metric">
+                  {t("usage.pricingUpdatedShort").replace(
+                    "{count}",
+                    String(pricingStatus()?.model_count ?? 0),
+                  )}
+                </span>
+                <span class="usage-status-metric">
+                  {t("usage.pricingUpdatedAtShort").replace(
+                    "{updatedAt}",
+                    formattedPricingUpdatedAt(),
+                  )}
+                </span>
+                <span class="usage-status-metric">
+                  {t("usage.usageUpdatedShort").replace(
+                    "{updatedAt}",
+                    formattedUsageUpdatedAt(),
+                  )}
+                </span>
+              </div>
+            </div>
             <p class="usage-note">{t("usage.rebuildKeepsSessions")}</p>
             <p class="usage-note">{t("usage.pricingSourceNote")}</p>
-            <p class="usage-note">
-              {t("usage.pricingCatalogStatus")
-                .replace("{count}", String(pricingStatus()?.model_count ?? 0))
-                .replace("{updatedAt}", formattedPricingUpdatedAt())}
-            </p>
           </div>
           <div class="usage-toolbar-actions">
             <div class="usage-range-group">
@@ -1042,9 +1086,9 @@ export function UsagePanel() {
                                 </div>
                                 <div
                                   class="usage-entity-subtitle"
-                                  title={row.project_path}
+                                  title={formatProjectPath(row.project_path)}
                                 >
-                                  {row.project_path}
+                                  {formatProjectPath(row.project_path)}
                                 </div>
                               </div>
                             </td>
@@ -1156,9 +1200,9 @@ export function UsagePanel() {
                                 </div>
                                 <div
                                   class="usage-entity-subtitle"
-                                  title={row.project_path}
+                                  title={formatProjectPath(row.project_path)}
                                 >
-                                  {row.project_path}
+                                  {formatProjectPath(row.project_path)}
                                 </div>
                               </div>
                             </td>

@@ -283,9 +283,13 @@
     "refreshUsageConfirm": "Refresh usage now? This will clear cached usage stats and rebuild the index. Sessions themselves are not deleted.",
     "refreshUsageRunning": "Refreshing usage in the background. The page will update automatically when it finishes.",
     "rebuildRunning": "Rebuilding the index in the background. The page will update automatically when it finishes.",
+    "usageReady": "Usage ready",
+    "notRefreshed": "Not refreshed yet",
+    "pricingUpdatedShort": "Pricing catalog {count} models",
+    "pricingUpdatedAtShort": "Pricing updated {updatedAt}",
+    "usageUpdatedShort": "Usage updated {updatedAt}",
     "rebuildKeepsSessions": "Rebuild Index only rescans sessions and recomputes usage. It does not delete your sessions.",
     "pricingSourceNote": "Pricing comes from the cached remote model-rate manifest. If no catalog is cached yet, affected models will show as unpriced until you refresh pricing and rebuild the index.",
-    "pricingCatalogStatus": "Cached pricing entries: {count} · Updated: {updatedAt}",
     "unpriced": "unpriced"
   }
 }

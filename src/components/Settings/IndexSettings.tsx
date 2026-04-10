@@ -16,7 +16,12 @@ export function IndexSettings(props: { onIndexChanged: () => void }) {
       try {
         return await getIndexStats();
       } catch {
-        return { session_count: 0, db_size_bytes: 0, last_index_time: "" };
+        return {
+          session_count: 0,
+          db_size_bytes: 0,
+          last_index_time: "",
+          usage_last_refreshed_at: "",
+        };
       }
     },
   );

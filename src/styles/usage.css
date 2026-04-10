@@ -15,17 +15,6 @@
   box-shadow: 0 12px 30px rgba(15, 23, 42, 0.05);
 }
 
-.usage-status-banner {
-  margin-bottom: 12px;
-  padding: 10px 14px;
-  border: 1px solid color-mix(in srgb, var(--accent) 28%, var(--border));
-  border-radius: 12px;
-  background: color-mix(in srgb, var(--accent-light) 65%, var(--bg-editor));
-  color: var(--text-primary);
-  font-size: 12px;
-  font-weight: 600;
-}
-
 .usage-toolbar-card {
   padding: 18px 20px;
   margin-bottom: 18px;
@@ -66,12 +55,69 @@
   font-size: 12px;
 }
 
+.usage-status-card {
+  display: inline-flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--bg-sidebar) 78%, var(--bg-editor));
+}
+
+.usage-status-primary {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text-primary);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.usage-status-primary.is-active {
+  color: var(--accent);
+}
+
+.usage-status-secondary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.usage-status-metric {
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+  padding: 0 8px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--bg-editor) 88%, var(--bg-sidebar));
+  color: var(--text-secondary);
+  font-size: 11px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.usage-status-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 999px;
+  background: var(--status-dot);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--status-dot) 18%, transparent);
+}
+
+.usage-status-primary.is-active .usage-status-dot {
+  background: var(--accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 18%, transparent);
+}
+
 .usage-note {
-  margin-top: 6px;
-  max-width: 460px;
+  margin-top: 10px;
+  max-width: 720px;
   color: var(--text-tertiary);
   font-size: 11px;
-  line-height: 1.5;
+  line-height: 1.4;
 }
 
 .usage-subtitle-pill,
@@ -303,6 +349,11 @@
 .usage-spotlight-card,
 .usage-table-card {
   padding: 18px 20px;
+}
+
+.usage-table-card {
+  user-select: none;
+  -webkit-user-select: none;
 }
 
 .usage-section-header {
@@ -581,26 +632,33 @@
 
 .usage-table-wrap {
   overflow-x: auto;
+  user-select: none;
+  -webkit-user-select: none;
 }
 
 .usage-table {
   width: 100%;
   border-collapse: collapse;
-  font-size: 11px;
+  font-size: 12px;
   font-variant-numeric: tabular-nums;
+  user-select: none;
+  -webkit-user-select: none;
 }
 
+.usage-table thead,
+.usage-table tbody,
+.usage-table tr,
 .usage-table th {
   padding: 10px 8px;
   border-bottom: 1px solid var(--border);
   color: var(--text-secondary);
-  font-size: 10px;
-  font-weight: 700;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
   text-align: left;
   white-space: nowrap;
   user-select: none;
+  -webkit-user-select: none;
 }
 
 .usage-table th.r,
@@ -622,6 +680,9 @@
   padding: 12px 8px;
   border-bottom: 1px solid var(--border-subtle);
   vertical-align: middle;
+  user-select: none;
+  -webkit-user-select: none;
+  line-height: 1.45;
 }
 
 .usage-table tbody tr:hover {
@@ -636,8 +697,10 @@
   border-radius: 999px;
   background: var(--bg-sidebar);
   color: var(--text-primary);
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 600;
+  letter-spacing: normal;
+  text-transform: none;
 }
 
 .usage-model-cell {
@@ -645,6 +708,8 @@
   align-items: center;
   gap: 8px;
   flex-wrap: wrap;
+  user-select: none;
+  -webkit-user-select: none;
 }
 
 .usage-price-badge {
@@ -666,11 +731,18 @@
   flex-direction: column;
   gap: 4px;
   min-width: 0;
+  user-select: none;
+  -webkit-user-select: none;
 }
 
 .usage-entity-title {
   font-weight: 600;
   color: var(--text-primary);
+  user-select: none;
+  -webkit-user-select: none;
+  font-size: 12px;
+  letter-spacing: normal;
+  text-transform: none;
 }
 
 .usage-entity-subtitle {
@@ -678,7 +750,19 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: 10px;
+  font-size: 11px;
+  color: var(--text-secondary);
+  user-select: text;
+  -webkit-user-select: text;
+}
+
+.usage-provider-cell,
+.usage-model-tag,
+.usage-price-badge,
+.usage-cost-val,
+.usage-dim {
+  user-select: none;
+  -webkit-user-select: none;
 }
 
 @media (max-width: 1080px) {
@@ -710,6 +794,20 @@
   .usage-toolbar-actions {
     width: 100%;
     justify-content: stretch;
+  }
+
+  .usage-status-card {
+    width: 100%;
+  }
+
+  .usage-status-secondary {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .usage-status-metric {
+    width: 100%;
+    white-space: normal;
   }
 
   .usage-range-group {

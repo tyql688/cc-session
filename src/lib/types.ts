@@ -95,6 +95,7 @@ export interface IndexStats {
   session_count: number;
   db_size_bytes: number;
   last_index_time: string;
+  usage_last_refreshed_at: string;
 }
 
 export interface PricingCatalogStatus {
