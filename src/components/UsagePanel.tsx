@@ -7,12 +7,20 @@ import {
   Show,
 } from "solid-js";
 import { useI18n } from "../i18n/index";
-import { clearUsageStats, getUsageStats, getSessionCount } from "../lib/tauri";
+import {
+  clearUsageStats,
+  getPricingCatalogStatus,
+  rebuildIndex,
+  getUsageStats,
+  getSessionCount,
+  refreshPricingCatalog,
+} from "../lib/tauri";
 import { listProviderSnapshots } from "../stores/providerSnapshots";
 import { ConfirmDialog } from "./ConfirmDialog";
 import { toast, toastError } from "../stores/toast";
 import type {
   ModelCost,
+  PricingCatalogStatus,
   ProjectCost,
   SessionCostRow,
   UsageStats,
@@ -76,6 +84,8 @@ export function UsagePanel() {
   const [sessionLimit, setSessionLimit] = createSignal<LimitOption>(10);
   const [hoveredDate, setHoveredDate] = createSignal<string | null>(null);
   const [showClearUsageConfirm, setShowClearUsageConfirm] = createSignal(false);
+  const [isRefreshingPricing, setIsRefreshingPricing] = createSignal(false);
+  const [isRefreshingUsage, setIsRefreshingUsage] = createSignal(false);
 
   const providerSnapshots = createMemo(() => listProviderSnapshots());
   const existingProviderSnapshots = createMemo(() =>
@@ -137,6 +147,14 @@ export function UsagePanel() {
   );
 
   const [sessionCount] = createResource(() => getSessionCount());
+  const [pricingStatus, { refetch: refetchPricingStatus }] =
+    createResource<PricingCatalogStatus>(async () => {
+      try {
+        return await getPricingCatalogStatus();
+      } catch {
+        return { source_url: "", updated_at: null, model_count: 0 };
+      }
+    });
 
   const [modelSort, setModelSort] = createSignal<SortState>({
     col: "cost",
@@ -362,14 +380,32 @@ export function UsagePanel() {
     { days: null, label: () => t("usage.rangeAll") },
   ];
 
-  async function handleClearUsageStats() {
+  async function handleRefreshUsage() {
+    setIsRefreshingUsage(true);
     try {
-      await clearUsageStats(selectedProviderKeys());
+      await clearUsageStats([]);
+      await rebuildIndex();
       setHoveredDate(null);
       await refetchStats();
-      toast(t("toast.clearUsageOk"));
+      await refetchPricingStatus();
+      toast(t("toast.refreshUsageOk"));
     } catch (error) {
       toastError(String(error));
+    } finally {
+      setIsRefreshingUsage(false);
+    }
+  }
+
+  async function handleRefreshPricing() {
+    setIsRefreshingPricing(true);
+    try {
+      await refreshPricingCatalog();
+      await refetchPricingStatus();
+      toast(t("toast.pricingRefreshOk"));
+    } catch (error) {
+      toastError(String(error));
+    } finally {
+      setIsRefreshingPricing(false);
     }
   }
 
@@ -387,6 +423,15 @@ export function UsagePanel() {
             </p>
             <p class="usage-note">{t("usage.rebuildKeepsSessions")}</p>
             <p class="usage-note">{t("usage.pricingSourceNote")}</p>
+            <p class="usage-note">
+              {t("usage.pricingCatalogStatus")
+                .replace("{count}", String(pricingStatus()?.model_count ?? 0))
+                .replace(
+                  "{updatedAt}",
+                  pricingStatus()?.updated_at ||
+                    t("settings.pricingNotFetched"),
+                )}
+            </p>
           </div>
           <div class="usage-toolbar-actions">
             <div class="usage-range-group">
@@ -405,10 +450,21 @@ export function UsagePanel() {
             </div>
             <button
               class="usage-secondary-btn"
-              onClick={() => setShowClearUsageConfirm(true)}
+              onClick={handleRefreshPricing}
+              disabled={isRefreshingPricing()}
               type="button"
             >
-              {t("usage.clearUsage")}
+              {isRefreshingPricing()
+                ? "..."
+                : t("settings.refreshPricingCatalog")}
+            </button>
+            <button
+              class="usage-secondary-btn"
+              onClick={() => setShowClearUsageConfirm(true)}
+              disabled={isRefreshingUsage()}
+              type="button"
+            >
+              {isRefreshingUsage() ? "..." : t("usage.refreshUsage")}
             </button>
           </div>
         </div>
@@ -1071,19 +1127,12 @@ export function UsagePanel() {
 
       <ConfirmDialog
         open={showClearUsageConfirm()}
-        title={t("usage.clearUsage")}
-        message={
-          selectedProviderKeys().length > 0
-            ? t("usage.clearUsageConfirmSelected").replace(
-                "{count}",
-                String(selectedProviderKeys().length),
-              )
-            : t("usage.clearUsageConfirm")
-        }
-        confirmLabel={t("usage.clearUsage")}
+        title={t("usage.refreshUsage")}
+        message={t("usage.refreshUsageConfirm")}
+        confirmLabel={t("usage.refreshUsage")}
         onConfirm={() => {
           setShowClearUsageConfirm(false);
-          void handleClearUsageStats();
+          void handleRefreshUsage();
         }}
         onCancel={() => setShowClearUsageConfirm(false)}
         danger={true}

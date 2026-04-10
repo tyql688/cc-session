@@ -1,12 +1,13 @@
-/// Per-token costs in USD.
-///
-/// Priority order:
-/// 1. Exact or near-exact mappings for models currently observed in the index.
-/// 2. Family fallbacks for older or less specific model names.
-///
-/// Major rates here were refreshed from official pricing pages for OpenAI,
-/// Anthropic, Google Gemini, and Moonshot/Kimi in April 2026. Providers/models
-/// without stable public USD pricing remain best-effort fallbacks.
+use std::collections::HashMap;
+
+use serde::Deserialize;
+
+pub const PRICING_CATALOG_URL: &str =
+    "https://raw.githubusercontent.com/BerriAI/litellm/main/model_prices_and_context_window.json";
+pub const PRICING_CATALOG_JSON_KEY: &str = "pricing_catalog_json";
+pub const PRICING_CATALOG_UPDATED_AT_KEY: &str = "pricing_catalog_updated_at";
+
+/// Per-token costs in USD sourced from a cached pricing catalog.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct ModelPricing {
     pub input: f64,
@@ -20,134 +21,78 @@ pub struct ModelPricing {
     pub threshold_tokens: Option<u64>,
 }
 
-const fn usd_per_token(
-    input_per_million: f64,
-    output_per_million: f64,
-    cache_read_per_million: f64,
-    cache_write_per_million: f64,
-) -> ModelPricing {
-    ModelPricing {
-        input: input_per_million / 1_000_000.0,
-        output: output_per_million / 1_000_000.0,
-        cache_read: cache_read_per_million / 1_000_000.0,
-        cache_write: cache_write_per_million / 1_000_000.0,
-        input_above_threshold: None,
-        output_above_threshold: None,
-        cache_read_above_threshold: None,
-        cache_write_above_threshold: None,
-        threshold_tokens: None,
-    }
+#[derive(Clone, Debug, Deserialize)]
+pub struct RemoteModelPricing {
+    pub input_cost_per_token: Option<f64>,
+    pub output_cost_per_token: Option<f64>,
+    pub cache_read_input_token_cost: Option<f64>,
+    pub cache_creation_input_token_cost: Option<f64>,
+    pub input_cost_per_token_above_200k_tokens: Option<f64>,
+    pub output_cost_per_token_above_200k_tokens: Option<f64>,
+    pub cache_read_input_token_cost_above_200k_tokens: Option<f64>,
+    pub cache_creation_input_token_cost_above_200k_tokens: Option<f64>,
 }
 
-const fn usd_per_token_tiered(
-    base_per_million: [f64; 4],
-    above_threshold_per_million: [f64; 4],
-    threshold_tokens: u64,
-) -> ModelPricing {
-    ModelPricing {
-        input: base_per_million[0] / 1_000_000.0,
-        output: base_per_million[1] / 1_000_000.0,
-        cache_read: base_per_million[2] / 1_000_000.0,
-        cache_write: base_per_million[3] / 1_000_000.0,
-        input_above_threshold: Some(above_threshold_per_million[0] / 1_000_000.0),
-        output_above_threshold: Some(above_threshold_per_million[1] / 1_000_000.0),
-        cache_read_above_threshold: Some(above_threshold_per_million[2] / 1_000_000.0),
-        cache_write_above_threshold: Some(above_threshold_per_million[3] / 1_000_000.0),
-        threshold_tokens: Some(threshold_tokens),
-    }
+pub type PricingCatalog = HashMap<String, RemoteModelPricing>;
+
+pub fn parse_catalog(json: &str) -> Option<PricingCatalog> {
+    serde_json::from_str(json).ok()
 }
 
-fn contains_any(model: &str, aliases: &[&str]) -> bool {
-    aliases.iter().any(|alias| model.contains(alias))
+fn model_pricing_from_remote(remote: &RemoteModelPricing) -> Option<ModelPricing> {
+    let input = remote.input_cost_per_token?;
+    let output = remote.output_cost_per_token?;
+    let cache_read = remote.cache_read_input_token_cost.unwrap_or(input);
+    let cache_write = remote.cache_creation_input_token_cost.unwrap_or(input);
+
+    Some(ModelPricing {
+        input,
+        output,
+        cache_read,
+        cache_write,
+        input_above_threshold: remote.input_cost_per_token_above_200k_tokens,
+        output_above_threshold: remote.output_cost_per_token_above_200k_tokens,
+        cache_read_above_threshold: remote.cache_read_input_token_cost_above_200k_tokens,
+        cache_write_above_threshold: remote.cache_creation_input_token_cost_above_200k_tokens,
+        threshold_tokens: remote
+            .input_cost_per_token_above_200k_tokens
+            .or(remote.output_cost_per_token_above_200k_tokens)
+            .or(remote.cache_read_input_token_cost_above_200k_tokens)
+            .or(remote.cache_creation_input_token_cost_above_200k_tokens)
+            .map(|_| 200_000),
+    })
 }
 
-/// Look up pricing by model-name matching.
-pub fn lookup_pricing(model: &str) -> Option<ModelPricing> {
-    let m = model.to_lowercase();
-
-    // Anthropic Claude
-    if contains_any(&m, &["claude-opus-4-6", "opus-4-6", "opus-4-5"]) {
-        return Some(usd_per_token(5.0, 25.0, 0.5, 6.25));
-    }
-    if contains_any(&m, &["claude-opus-4-1", "opus-4-1", "opus-4-0", "opus-3"]) {
-        return Some(usd_per_token(15.0, 75.0, 1.5, 18.75));
-    }
-    if contains_any(&m, &["claude-sonnet-4-5", "sonnet-4-5"]) {
-        return Some(usd_per_token_tiered(
-            [3.0, 15.0, 0.3, 3.75],
-            [6.0, 22.5, 0.6, 7.5],
-            200_000,
-        ));
-    }
-    if contains_any(&m, &["claude-sonnet-4-6", "sonnet-4-6", "sonnet"]) {
-        return Some(usd_per_token(3.0, 15.0, 0.3, 3.75));
-    }
-    if contains_any(&m, &["claude-haiku-4-5", "haiku-4-5", "haiku"]) {
-        return Some(usd_per_token(1.0, 5.0, 0.1, 1.25));
+pub fn lookup_pricing_in_catalog(catalog: &PricingCatalog, model: &str) -> Option<ModelPricing> {
+    let normalized = model.trim().to_lowercase();
+    if let Some(remote) = catalog.get(&normalized) {
+        if let Some(pricing) = model_pricing_from_remote(remote) {
+            return Some(pricing);
+        }
     }
 
-    // OpenAI / Codex
-    if contains_any(&m, &["gpt-5.4-mini", "gpt-5-mini", "codex-mini"]) {
-        return Some(usd_per_token(0.75, 4.5, 0.075, 0.0));
-    }
-    if contains_any(&m, &["gpt-5.4", "gpt-5-codex"]) {
-        return Some(usd_per_token(2.5, 15.0, 0.25, 0.0));
-    }
-    if contains_any(&m, &["gpt-5.3", "gpt-5.2", "gpt-5.1-codex"]) {
-        return Some(usd_per_token(1.75, 14.0, 0.175, 0.0));
-    }
-    if contains_any(&m, &["gpt-5"]) {
-        return Some(usd_per_token(1.25, 10.0, 0.125, 0.0));
-    }
-
-    // Google Gemini
-    if contains_any(&m, &["gemini-2.5-pro", "gemini-2-5-pro"]) {
-        return Some(usd_per_token(1.25, 10.0, 0.125, 0.0));
-    }
-    if contains_any(&m, &["gemini-2.5-flash", "gemini-2-5-flash"]) {
-        return Some(usd_per_token(0.3, 2.5, 0.03, 0.0));
-    }
-    if contains_any(
-        &m,
-        &["gemini-3-flash-preview", "gemini-3-flash", "gemini-3"],
-    ) {
-        return Some(usd_per_token(0.5, 3.0, 0.05, 0.0));
-    }
-
-    // Moonshot / Kimi
-    if contains_any(&m, &["kimi-k2.5", "k2.5"]) {
-        return Some(usd_per_token(0.6, 3.0, 0.1, 0.6));
-    }
-    if contains_any(&m, &["kimi-k2", "k2-0905", "kimi k2"]) {
-        return Some(usd_per_token(0.6, 2.5, 0.15, 0.6));
-    }
-
-    // Best-effort fallbacks for providers without exact public USD mappings here.
-    if contains_any(&m, &["glm-5.1", "glm-5"]) {
-        return Some(usd_per_token(0.55, 2.2, 0.14, 0.0));
-    }
-    if contains_any(
-        &m,
-        &["minimax-m2.7-highspeed", "minimax-m2.7", "m2.7-highspeed"],
-    ) {
-        return Some(usd_per_token(1.1, 8.0, 0.2, 0.0));
-    }
-    if contains_any(&m, &["qwen", "coder-model"]) {
-        return Some(usd_per_token(0.4, 1.2, 0.1, 0.0));
-    }
-
-    None
+    catalog.iter().find_map(|(name, remote)| {
+        let candidate = name.to_lowercase();
+        if candidate == normalized
+            || candidate.contains(&normalized)
+            || normalized.contains(&candidate)
+        {
+            model_pricing_from_remote(remote)
+        } else {
+            None
+        }
+    })
 }
 
-/// Calculate estimated cost for given token counts and model.
-pub fn estimate_cost(
+pub fn estimate_cost_with_catalog(
+    catalog: Option<&PricingCatalog>,
     model: &str,
     input: u64,
     output: u64,
     cache_read: u64,
     cache_write: u64,
 ) -> f64 {
-    let Some(p) = lookup_pricing(model) else {
+    let Some(p) = catalog.and_then(|catalog| lookup_pricing_in_catalog(catalog, model)) else {
         return 0.0;
     };
     component_cost(input, p.input, p.input_above_threshold, p.threshold_tokens)
@@ -192,15 +137,19 @@ fn component_cost(
 
 #[cfg(test)]
 mod tests {
-    use super::{estimate_cost, lookup_pricing};
+    use super::{estimate_cost_with_catalog, parse_catalog};
 
     fn assert_close(actual: f64, expected: f64) {
         assert!((actual - expected).abs() < 1e-12, "{actual} != {expected}");
     }
 
     #[test]
-    fn lookup_pricing_matches_gpt_54_exactly() {
-        let pricing = lookup_pricing("gpt-5.4").expect("pricing");
+    fn parse_catalog_and_lookup_exact_model() {
+        let catalog = parse_catalog(
+            r#"{"gpt-5.4":{"input_cost_per_token":2.5e-6,"output_cost_per_token":15e-6,"cache_read_input_token_cost":2.5e-7}}"#,
+        )
+        .expect("catalog");
+        let pricing = super::lookup_pricing_in_catalog(&catalog, "gpt-5.4").expect("pricing");
         assert_close(pricing.input, 2.5e-6);
         assert_close(pricing.output, 15.0e-6);
         assert_close(pricing.cache_read, 0.25e-6);
@@ -208,24 +157,19 @@ mod tests {
     }
 
     #[test]
-    fn lookup_pricing_matches_gpt_54_mini_exactly() {
-        let pricing = lookup_pricing("gpt-5.4-mini").expect("pricing");
-        assert_close(pricing.input, 0.75e-6);
-        assert_close(pricing.output, 4.5e-6);
-        assert_close(pricing.cache_read, 0.075e-6);
-    }
-
-    #[test]
-    fn lookup_pricing_matches_gemini_3_flash_preview() {
-        let pricing = lookup_pricing("gemini-3-flash-preview").expect("pricing");
-        assert_close(pricing.input, 0.5e-6);
-        assert_close(pricing.output, 3.0e-6);
-        assert_close(pricing.cache_read, 0.05e-6);
-    }
-
-    #[test]
     fn estimate_cost_handles_tiered_pricing() {
-        let cost = estimate_cost("claude-sonnet-4-5", 300_000, 250_000, 250_000, 300_000);
+        let catalog = parse_catalog(
+            r#"{"claude-sonnet-4-5":{"input_cost_per_token":3e-6,"output_cost_per_token":15e-6,"cache_read_input_token_cost":3e-7,"cache_creation_input_token_cost":3.75e-6,"input_cost_per_token_above_200k_tokens":6e-6,"output_cost_per_token_above_200k_tokens":22.5e-6,"cache_read_input_token_cost_above_200k_tokens":6e-7,"cache_creation_input_token_cost_above_200k_tokens":7.5e-6}}"#,
+        )
+        .expect("catalog");
+        let cost = estimate_cost_with_catalog(
+            Some(&catalog),
+            "claude-sonnet-4-5",
+            300_000,
+            250_000,
+            250_000,
+            300_000,
+        );
         let expected = (200_000.0 * 3e-6)
             + (100_000.0 * 6e-6)
             + (200_000.0 * 15e-6)
@@ -239,7 +183,11 @@ mod tests {
 
     #[test]
     fn estimate_cost_uses_cache_components() {
-        let cost = estimate_cost("kimi-k2.5", 100, 50, 20, 10);
+        let catalog = parse_catalog(
+            r#"{"kimi-k2.5":{"input_cost_per_token":0.6e-6,"output_cost_per_token":3e-6,"cache_read_input_token_cost":0.1e-6,"cache_creation_input_token_cost":0.6e-6}}"#,
+        )
+        .expect("catalog");
+        let cost = estimate_cost_with_catalog(Some(&catalog), "kimi-k2.5", 100, 50, 20, 10);
         let expected = (100.0 * 0.6e-6) + (50.0 * 3.0e-6) + (20.0 * 0.1e-6) + (10.0 * 0.6e-6);
         assert!((cost - expected).abs() < 1e-12);
     }

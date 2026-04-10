@@ -5,6 +5,7 @@ import type {
   SearchFilters,
   TreeNode,
   IndexStats,
+  PricingCatalogStatus,
   ProviderSnapshot,
   TrashMeta,
   SessionMeta,
@@ -70,6 +71,14 @@ export async function getChildSessions(
 
 export async function getIndexStats(): Promise<IndexStats> {
   return invoke<IndexStats>("get_index_stats");
+}
+
+export async function getPricingCatalogStatus(): Promise<PricingCatalogStatus> {
+  return invoke<PricingCatalogStatus>("get_pricing_catalog_status");
+}
+
+export async function refreshPricingCatalog(): Promise<PricingCatalogStatus> {
+  return invoke<PricingCatalogStatus>("refresh_pricing_catalog");
 }
 
 export async function rebuildIndex(): Promise<number> {

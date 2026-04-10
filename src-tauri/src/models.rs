@@ -120,6 +120,13 @@ pub struct IndexStats {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PricingCatalogStatus {
+    pub source_url: String,
+    pub updated_at: Option<String>,
+    pub model_count: u64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ProviderSnapshot {
     pub key: Provider,
     pub label: String,

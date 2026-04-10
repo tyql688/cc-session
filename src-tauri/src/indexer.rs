@@ -6,7 +6,7 @@ use std::time::Instant;
 use crate::db::sync::TokenStatRow;
 use crate::db::Database;
 use crate::models::{Provider, SessionMeta, TreeNode, TreeNodeType};
-use crate::pricing;
+use crate::pricing::{self, PricingCatalog, PRICING_CATALOG_JSON_KEY};
 use crate::provider::{ParsedSession, SessionProvider};
 use crate::providers::codex::parser::extract_usage_events_from_file;
 
@@ -41,6 +41,12 @@ impl Indexer {
     ) -> Result<usize, String> {
         let start = Instant::now();
         let mut total = 0usize;
+        let pricing_catalog = self
+            .db
+            .get_meta(PRICING_CATALOG_JSON_KEY)
+            .ok()
+            .flatten()
+            .and_then(|json| pricing::parse_catalog(&json));
 
         let now_millis = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
@@ -72,7 +78,7 @@ impl Indexer {
                 .map_err(|e| format!("failed to sync {} provider: {}", provider_kind.key(), e))?;
 
             for parsed in &sessions {
-                let stat_rows = compute_token_stats(parsed);
+                let stat_rows = compute_token_stats_with_catalog(parsed, pricing_catalog.as_ref());
                 if let Err(e) = self.db.replace_token_stats(&parsed.meta.id, &stat_rows) {
                     log::warn!("failed to write token stats for {}: {e}", parsed.meta.id);
                 }
@@ -268,9 +274,17 @@ impl Indexer {
 }
 
 /// Compute per-(date, model) token usage aggregates from a parsed session's messages.
+#[cfg(test)]
 pub(crate) fn compute_token_stats(parsed: &ParsedSession) -> Vec<TokenStatRow> {
+    compute_token_stats_with_catalog(parsed, None)
+}
+
+pub(crate) fn compute_token_stats_with_catalog(
+    parsed: &ParsedSession,
+    pricing_catalog: Option<&PricingCatalog>,
+) -> Vec<TokenStatRow> {
     if parsed.meta.provider == Provider::Codex {
-        return compute_codex_token_stats(parsed);
+        return compute_codex_token_stats(parsed, pricing_catalog);
     }
 
     let fallback_date = chrono::DateTime::from_timestamp(parsed.meta.created_at, 0)
@@ -317,7 +331,8 @@ pub(crate) fn compute_token_stats(parsed: &ParsedSession) -> Vec<TokenStatRow> {
             entry.output_tokens += usage.output_tokens as u64;
             entry.cache_read_tokens += usage.cache_read_input_tokens as u64;
             entry.cache_write_tokens += usage.cache_creation_input_tokens as u64;
-            entry.cost_usd += pricing::estimate_cost(
+            entry.cost_usd += pricing::estimate_cost_with_catalog(
+                pricing_catalog,
                 &entry.model,
                 usage.input_tokens as u64,
                 usage.output_tokens as u64,
@@ -341,7 +356,10 @@ fn timestamp_to_local_date(timestamp: &str) -> Option<String> {
         .or_else(|| timestamp.get(..10).map(ToString::to_string))
 }
 
-fn compute_codex_token_stats(parsed: &ParsedSession) -> Vec<TokenStatRow> {
+fn compute_codex_token_stats(
+    parsed: &ParsedSession,
+    pricing_catalog: Option<&PricingCatalog>,
+) -> Vec<TokenStatRow> {
     let path = PathBuf::from(&parsed.meta.source_path);
     let mut stats_map: HashMap<(String, String), TokenStatRow> = HashMap::new();
 
@@ -364,7 +382,8 @@ fn compute_codex_token_stats(parsed: &ParsedSession) -> Vec<TokenStatRow> {
         entry.input_tokens += event.input_tokens;
         entry.output_tokens += event.output_tokens;
         entry.cache_read_tokens += event.cache_read_input_tokens;
-        entry.cost_usd += pricing::estimate_cost(
+        entry.cost_usd += pricing::estimate_cost_with_catalog(
+            pricing_catalog,
             &entry.model,
             event.input_tokens,
             event.output_tokens,

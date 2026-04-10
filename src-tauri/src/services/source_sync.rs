@@ -1,6 +1,7 @@
 use crate::db::Database;
-use crate::indexer::compute_token_stats;
+use crate::indexer::compute_token_stats_with_catalog;
 use crate::models::Provider;
+use crate::pricing::{self, PRICING_CATALOG_JSON_KEY};
 
 pub struct SourceSyncService<'a> {
     db: &'a Database,
@@ -40,8 +41,15 @@ impl<'a> SourceSyncService<'a> {
             .sync_source_snapshot(&provider, source_path, &sessions)
             .map_err(|e| format!("failed to sync source snapshot: {e}"))?;
 
+        let pricing_catalog = self
+            .db
+            .get_meta(PRICING_CATALOG_JSON_KEY)
+            .ok()
+            .flatten()
+            .and_then(|json| pricing::parse_catalog(&json));
+
         for parsed in &sessions {
-            let stat_rows = compute_token_stats(parsed);
+            let stat_rows = compute_token_stats_with_catalog(parsed, pricing_catalog.as_ref());
             if let Err(e) = self.db.replace_token_stats(&parsed.meta.id, &stat_rows) {
                 log::warn!("failed to write token stats for {}: {e}", parsed.meta.id);
             }

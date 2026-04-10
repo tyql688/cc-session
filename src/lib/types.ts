@@ -97,6 +97,12 @@ export interface IndexStats {
   last_index_time: string;
 }
 
+export interface PricingCatalogStatus {
+  source_url: string;
+  updated_at: string | null;
+  model_count: number;
+}
+
 export interface ProviderSnapshot {
   key: Provider;
   label: string;

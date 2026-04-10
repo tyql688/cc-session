@@ -83,9 +83,11 @@
     "cmdCopied": "恢复命令已复制",
     "rebuildOk": "索引重建成功",
     "rebuildFailed": "索引重建失败",
+    "pricingRefreshOk": "价格目录已刷新",
     "exportOk": "导出成功",
     "clearIndexOk": "索引已清除",
-    "clearUsageOk": "用量统计已清除"
+    "clearUsageOk": "用量统计已清除",
+    "refreshUsageOk": "用量已刷新"
   },
   "favorites": {
     "title": "收藏",
@@ -198,6 +200,11 @@
     "providerDisabled": "已禁用",
     "clearIndexConfirm": "清除整个索引？下次重建时将重新扫描会话。",
     "rebuildIndexNote": "“重建索引”会重新扫描本地会话来源并重算用量，不会删除会话；“清除索引”只会清空本地数据库，之后重建会再次导入会话。",
+    "pricingCatalog": "价格目录",
+    "pricingUpdatedAt": "价格更新时间",
+    "pricingNotFetched": "尚未获取",
+    "refreshPricingCatalog": "刷新价格",
+    "pricingCatalogNote": "刷新价格会拉取最新模型价格清单并缓存到本地。刷新后请重建索引，才能把新价格应用到已存储的用量记录。",
     "timeGrouping": "按时间分组",
     "timeGroupingDesc": "将会话按今天、本周、本月和更早分组",
     "showOrphans": "显示子代理",
@@ -266,8 +273,11 @@
     "clearUsage": "清理用量",
     "clearUsageConfirm": "仅清理用量统计？会话本身不会删除。之后点击“重建索引”会根据现有会话重新计算用量。",
     "clearUsageConfirmSelected": "仅清理当前选中的 {count} 个提供商的用量统计？会话本身不会删除。之后点击“重建索引”会根据现有会话重新计算用量。",
+    "refreshUsage": "刷新用量",
+    "refreshUsageConfirm": "现在刷新用量？这会清空缓存的用量统计并重建索引，但不会删除会话本身。",
     "rebuildKeepsSessions": "“重建索引”只会重新扫描会话并重算用量，不会删除任何会话。",
-    "pricingSourceNote": "费用使用应用内置的模型价格表。Claude 已与外部报告结果核对；其他部分提供商目前仍可能是估算值。",
+    "pricingSourceNote": "费用来自缓存的远程模型价格清单。如果还没有缓存价格目录，相关模型会显示为“未定价”，直到你刷新价格并重建索引。",
+    "pricingCatalogStatus": "缓存价格条目：{count} · 更新时间：{updatedAt}",
     "unpriced": "未定价"
   }
 }

@@ -83,9 +83,11 @@
     "cmdCopied": "Resume command copied",
     "rebuildOk": "Index rebuilt successfully",
     "rebuildFailed": "Failed to rebuild index",
+    "pricingRefreshOk": "Pricing catalog refreshed",
     "exportOk": "Exported successfully",
     "clearIndexOk": "Index cleared",
-    "clearUsageOk": "Usage stats cleared"
+    "clearUsageOk": "Usage stats cleared",
+    "refreshUsageOk": "Usage refreshed"
   },
   "favorites": {
     "title": "Favorites",
@@ -198,6 +200,11 @@
     "providerDisabled": "Disabled",
     "clearIndexConfirm": "Clear the entire index? Sessions will be re-scanned on next rebuild.",
     "rebuildIndexNote": "Rebuild Index rescans your local session sources and recomputes usage. It does not delete sessions. Clear Index wipes the local database only; rebuilding imports sessions again.",
+    "pricingCatalog": "Pricing Catalog",
+    "pricingUpdatedAt": "Pricing Updated",
+    "pricingNotFetched": "Not fetched yet",
+    "refreshPricingCatalog": "Refresh Pricing",
+    "pricingCatalogNote": "Refresh pricing to fetch the latest model rate manifest and cache it locally. Rebuild the index afterwards to apply updated rates to stored usage rows.",
     "timeGrouping": "Group by Time",
     "timeGroupingDesc": "Group sessions by today, this week, this month, and older",
     "showOrphans": "Show Subagents",
@@ -268,8 +275,11 @@
     "clearUsage": "Clear usage",
     "clearUsageConfirm": "Clear only usage stats? Sessions stay intact. Rebuild Index will recompute usage from existing sessions.",
     "clearUsageConfirmSelected": "Clear usage stats for the currently selected {count} provider(s)? Sessions stay intact. Rebuild Index will recompute usage from existing sessions.",
+    "refreshUsage": "Refresh usage",
+    "refreshUsageConfirm": "Refresh usage now? This will clear cached usage stats and rebuild the index. Sessions themselves are not deleted.",
     "rebuildKeepsSessions": "Rebuild Index only rescans sessions and recomputes usage. It does not delete your sessions.",
-    "pricingSourceNote": "Pricing uses the app's built-in model rate table. Claude has been verified against external report output; some other providers may still be estimates.",
+    "pricingSourceNote": "Pricing comes from the cached remote model-rate manifest. If no catalog is cached yet, affected models will show as unpriced until you refresh pricing and rebuild the index.",
+    "pricingCatalogStatus": "Cached pricing entries: {count} · Updated: {updatedAt}",
     "unpriced": "unpriced"
   }
 }

@@ -2,7 +2,10 @@ use tauri::{AppHandle, State};
 use tauri_plugin_opener::OpenerExt;
 
 use crate::exporter;
-use crate::models::{IndexStats, ProviderSnapshot};
+use crate::models::{IndexStats, PricingCatalogStatus, ProviderSnapshot};
+use crate::pricing::{
+    parse_catalog, PRICING_CATALOG_JSON_KEY, PRICING_CATALOG_UPDATED_AT_KEY, PRICING_CATALOG_URL,
+};
 use crate::services::ProviderSnapshotService;
 
 use super::sessions::load_detail;
@@ -36,6 +39,59 @@ pub fn get_index_stats(state: State<AppState>) -> Result<IndexStats, String> {
         session_count,
         db_size_bytes,
         last_index_time,
+    })
+}
+
+#[tauri::command]
+pub fn get_pricing_catalog_status(state: State<AppState>) -> Result<PricingCatalogStatus, String> {
+    let updated_at = state
+        .db
+        .get_meta(PRICING_CATALOG_UPDATED_AT_KEY)
+        .map_err(|e| format!("failed to read pricing updated_at: {e}"))?;
+    let model_count = state
+        .db
+        .get_meta(PRICING_CATALOG_JSON_KEY)
+        .map_err(|e| format!("failed to read pricing catalog: {e}"))?
+        .and_then(|json| parse_catalog(&json).map(|catalog| catalog.len() as u64))
+        .unwrap_or(0);
+
+    Ok(PricingCatalogStatus {
+        source_url: PRICING_CATALOG_URL.to_string(),
+        updated_at,
+        model_count,
+    })
+}
+
+#[tauri::command]
+pub async fn refresh_pricing_catalog(
+    state: State<'_, AppState>,
+) -> Result<PricingCatalogStatus, String> {
+    let response = reqwest::get(PRICING_CATALOG_URL)
+        .await
+        .map_err(|e| format!("failed to fetch pricing catalog: {e}"))?;
+    let response = response
+        .error_for_status()
+        .map_err(|e| format!("pricing catalog request failed: {e}"))?;
+    let body = response
+        .text()
+        .await
+        .map_err(|e| format!("failed to read pricing catalog body: {e}"))?;
+    let catalog = parse_catalog(&body).ok_or_else(|| "invalid pricing catalog JSON".to_string())?;
+    let updated_at = chrono::Utc::now().to_rfc3339();
+
+    state
+        .db
+        .set_meta(PRICING_CATALOG_JSON_KEY, &body)
+        .map_err(|e| format!("failed to store pricing catalog: {e}"))?;
+    state
+        .db
+        .set_meta(PRICING_CATALOG_UPDATED_AT_KEY, &updated_at)
+        .map_err(|e| format!("failed to store pricing timestamp: {e}"))?;
+
+    Ok(PricingCatalogStatus {
+        source_url: PRICING_CATALOG_URL.to_string(),
+        updated_at: Some(updated_at),
+        model_count: catalog.len() as u64,
     })
 }
 
