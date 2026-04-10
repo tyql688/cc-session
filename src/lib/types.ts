@@ -103,6 +103,15 @@ export interface PricingCatalogStatus {
   model_count: number;
 }
 
+export type MaintenanceJob = "rebuild_index" | "refresh_usage";
+export type MaintenancePhase = "started" | "finished" | "failed";
+
+export interface MaintenanceEvent {
+  job: MaintenanceJob;
+  phase: MaintenancePhase;
+  message?: string;
+}
+
 export interface ProviderSnapshot {
   key: Provider;
   label: string;

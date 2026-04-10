@@ -1,4 +1,4 @@
-use tauri::{AppHandle, State};
+use tauri::{AppHandle, Emitter, State};
 use tauri_plugin_opener::OpenerExt;
 
 use crate::exporter;
@@ -10,6 +10,29 @@ use crate::services::ProviderSnapshotService;
 
 use super::sessions::load_detail;
 use super::AppState;
+
+#[derive(Clone, serde::Serialize)]
+struct MaintenanceEventPayload {
+    job: &'static str,
+    phase: &'static str,
+    message: Option<String>,
+}
+
+fn emit_maintenance(
+    app: &AppHandle,
+    job: &'static str,
+    phase: &'static str,
+    message: Option<String>,
+) {
+    let _ = app.emit(
+        "maintenance-status",
+        MaintenanceEventPayload {
+            job,
+            phase,
+            message,
+        },
+    );
+}
 
 /// Open external URL in browser
 #[tauri::command]
@@ -101,6 +124,38 @@ pub fn rebuild_index(state: State<AppState>) -> Result<usize, String> {
 }
 
 #[tauri::command]
+pub async fn start_rebuild_index(
+    app: AppHandle,
+    state: State<'_, AppState>,
+) -> Result<bool, String> {
+    use std::sync::atomic::Ordering;
+
+    let state = state.inner().clone();
+    if state.maintenance_running.swap(true, Ordering::SeqCst) {
+        return Ok(false);
+    }
+
+    tokio::spawn(async move {
+        emit_maintenance(&app, "rebuild_index", "started", None);
+        let result = tokio::task::spawn_blocking({
+            let state = state.clone();
+            move || state.indexer.reindex()
+        })
+        .await
+        .map_err(|e| format!("task join error: {e}"))
+        .and_then(|result| result);
+
+        match result {
+            Ok(_) => emit_maintenance(&app, "rebuild_index", "finished", None),
+            Err(error) => emit_maintenance(&app, "rebuild_index", "failed", Some(error)),
+        }
+        state.maintenance_running.store(false, Ordering::SeqCst);
+    });
+
+    Ok(true)
+}
+
+#[tauri::command]
 pub fn clear_index(state: State<AppState>) -> Result<(), String> {
     state
         .db
@@ -114,6 +169,44 @@ pub fn clear_usage_stats(providers: Vec<String>, state: State<AppState>) -> Resu
         .db
         .clear_usage_stats_for_providers(&providers)
         .map_err(|e| format!("failed to clear usage stats: {e}"))
+}
+
+#[tauri::command]
+pub async fn start_refresh_usage(
+    app: AppHandle,
+    state: State<'_, AppState>,
+) -> Result<bool, String> {
+    use std::sync::atomic::Ordering;
+
+    let state = state.inner().clone();
+    if state.maintenance_running.swap(true, Ordering::SeqCst) {
+        return Ok(false);
+    }
+
+    tokio::spawn(async move {
+        emit_maintenance(&app, "refresh_usage", "started", None);
+        let result = tokio::task::spawn_blocking({
+            let state = state.clone();
+            move || {
+                state
+                    .db
+                    .clear_usage_stats()
+                    .map_err(|e| format!("failed to clear usage stats: {e}"))?;
+                state.indexer.reindex().map(|_| ())
+            }
+        })
+        .await
+        .map_err(|e| format!("task join error: {e}"))
+        .and_then(|result| result);
+
+        match result {
+            Ok(_) => emit_maintenance(&app, "refresh_usage", "finished", None),
+            Err(error) => emit_maintenance(&app, "refresh_usage", "failed", Some(error)),
+        }
+        state.maintenance_running.store(false, Ordering::SeqCst);
+    });
+
+    Ok(true)
 }
 
 #[tauri::command]

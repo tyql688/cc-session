@@ -15,6 +15,17 @@
   box-shadow: 0 12px 30px rgba(15, 23, 42, 0.05);
 }
 
+.usage-status-banner {
+  margin-bottom: 12px;
+  padding: 10px 14px;
+  border: 1px solid color-mix(in srgb, var(--accent) 28%, var(--border));
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--accent-light) 65%, var(--bg-editor));
+  color: var(--text-primary);
+  font-size: 12px;
+  font-weight: 600;
+}
+
 .usage-toolbar-card {
   padding: 18px 20px;
   margin-bottom: 18px;

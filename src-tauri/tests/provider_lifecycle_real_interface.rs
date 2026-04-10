@@ -15,6 +15,7 @@
 use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::path::{Path, PathBuf};
 use std::process::Command;
+use std::sync::atomic::AtomicBool;
 use std::sync::{Arc, Mutex};
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -69,7 +70,11 @@ fn build_app() -> (TempDir, App<MockRuntime>, tauri::WebviewWindow<MockRuntime>)
     let temp_dir = TempDir::new().expect("temp dir");
     let db = Arc::new(Database::open(temp_dir.path()).expect("open temp db"));
     let indexer = Indexer::new(Arc::clone(&db), provider::all_runtimes());
-    let state = AppState { db, indexer };
+    let state = AppState {
+        db,
+        indexer,
+        maintenance_running: Arc::new(AtomicBool::new(false)),
+    };
 
     let app = mock_builder()
         .manage(state)

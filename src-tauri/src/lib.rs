@@ -136,6 +136,7 @@ pub fn run() {
     let state = AppState {
         db: Arc::clone(&db),
         indexer,
+        maintenance_running: Arc::new(std::sync::atomic::AtomicBool::new(false)),
     };
 
     tauri::Builder::default()
@@ -161,9 +162,11 @@ pub fn run() {
             commands::get_index_stats,
             commands::get_pricing_catalog_status,
             commands::rebuild_index,
+            commands::start_rebuild_index,
             commands::refresh_pricing_catalog,
             commands::clear_index,
             commands::clear_usage_stats,
+            commands::start_refresh_usage,
             commands::get_provider_snapshots,
             commands::get_resume_command,
             commands::detect_terminal,

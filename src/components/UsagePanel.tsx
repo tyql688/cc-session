@@ -3,22 +3,27 @@ import {
   createResource,
   createMemo,
   createEffect,
+  onCleanup,
+  onMount,
   For,
   Show,
 } from "solid-js";
+import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { useI18n } from "../i18n/index";
 import {
-  clearUsageStats,
   getPricingCatalogStatus,
-  rebuildIndex,
+  startRefreshUsage,
   getUsageStats,
   getSessionCount,
   refreshPricingCatalog,
 } from "../lib/tauri";
 import { listProviderSnapshots } from "../stores/providerSnapshots";
 import { ConfirmDialog } from "./ConfirmDialog";
-import { toast, toastError } from "../stores/toast";
+import { toast, toastError, toastInfo } from "../stores/toast";
+import { formatLocalDateTime } from "../lib/formatters";
 import type {
+  MaintenanceEvent,
+  MaintenanceJob,
   ModelCost,
   PricingCatalogStatus,
   ProjectCost,
@@ -85,7 +90,9 @@ export function UsagePanel() {
   const [hoveredDate, setHoveredDate] = createSignal<string | null>(null);
   const [showClearUsageConfirm, setShowClearUsageConfirm] = createSignal(false);
   const [isRefreshingPricing, setIsRefreshingPricing] = createSignal(false);
-  const [isRefreshingUsage, setIsRefreshingUsage] = createSignal(false);
+  const [activeMaintenanceJob, setActiveMaintenanceJob] =
+    createSignal<MaintenanceJob | null>(null);
+  const [lastUsageRefreshAt, setLastUsageRefreshAt] = createSignal(Date.now());
 
   const providerSnapshots = createMemo(() => listProviderSnapshots());
   const existingProviderSnapshots = createMemo(() =>
@@ -155,6 +162,48 @@ export function UsagePanel() {
         return { source_url: "", updated_at: null, model_count: 0 };
       }
     });
+
+  let unlistenMaintenance: UnlistenFn | undefined;
+  const handleUsageDataChanged = () => {
+    void refetchStats();
+    void refetchPricingStatus();
+    setLastUsageRefreshAt(Date.now());
+  };
+
+  onMount(async () => {
+    window.addEventListener("usage-data-changed", handleUsageDataChanged);
+    window.addEventListener("focus", handleUsageDataChangedIfStale);
+    document.addEventListener(
+      "visibilitychange",
+      handleUsageDataChangedIfStale,
+    );
+    unlistenMaintenance = await listen<MaintenanceEvent>(
+      "maintenance-status",
+      (event) => {
+        const payload = event.payload;
+        if (payload.phase === "started") {
+          setActiveMaintenanceJob(payload.job);
+          return;
+        }
+        if (
+          activeMaintenanceJob() === payload.job &&
+          (payload.phase === "finished" || payload.phase === "failed")
+        ) {
+          setActiveMaintenanceJob(null);
+        }
+      },
+    );
+  });
+
+  onCleanup(() => {
+    window.removeEventListener("usage-data-changed", handleUsageDataChanged);
+    window.removeEventListener("focus", handleUsageDataChangedIfStale);
+    document.removeEventListener(
+      "visibilitychange",
+      handleUsageDataChangedIfStale,
+    );
+    unlistenMaintenance?.();
+  });
 
   const [modelSort, setModelSort] = createSignal<SortState>({
     col: "cost",
@@ -373,6 +422,26 @@ export function UsagePanel() {
     return currentSort.asc ? "↑" : "↓";
   };
 
+  const formattedPricingUpdatedAt = createMemo(() => {
+    const updatedAt = pricingStatus()?.updated_at;
+    return updatedAt
+      ? formatLocalDateTime(updatedAt)
+      : t("settings.pricingNotFetched");
+  });
+
+  const maintenanceStatusText = createMemo(() => {
+    const job = activeMaintenanceJob();
+    if (job === "refresh_usage") return t("usage.refreshUsageRunning");
+    if (job === "rebuild_index") return t("usage.rebuildRunning");
+    return "";
+  });
+
+  function handleUsageDataChangedIfStale() {
+    if (document.visibilityState === "hidden") return;
+    if (Date.now() - lastUsageRefreshAt() < 5 * 60 * 1000) return;
+    handleUsageDataChanged();
+  }
+
   const ranges: { days: number | null; label: () => string }[] = [
     { days: 7, label: () => t("usage.range7d") },
     { days: 30, label: () => t("usage.range30d") },
@@ -381,18 +450,15 @@ export function UsagePanel() {
   ];
 
   async function handleRefreshUsage() {
-    setIsRefreshingUsage(true);
     try {
-      await clearUsageStats([]);
-      await rebuildIndex();
+      const started = await startRefreshUsage();
+      if (!started) {
+        toastInfo(t("toast.maintenanceBusy"));
+        return;
+      }
       setHoveredDate(null);
-      await refetchStats();
-      await refetchPricingStatus();
-      toast(t("toast.refreshUsageOk"));
     } catch (error) {
       toastError(String(error));
-    } finally {
-      setIsRefreshingUsage(false);
     }
   }
 
@@ -411,6 +477,9 @@ export function UsagePanel() {
 
   return (
     <div class="usage-panel">
+      <Show when={activeMaintenanceJob() !== null}>
+        <div class="usage-status-banner">{maintenanceStatusText()}</div>
+      </Show>
       <section class="usage-card usage-toolbar-card">
         <div class="usage-toolbar-main">
           <div>
@@ -426,11 +495,7 @@ export function UsagePanel() {
             <p class="usage-note">
               {t("usage.pricingCatalogStatus")
                 .replace("{count}", String(pricingStatus()?.model_count ?? 0))
-                .replace(
-                  "{updatedAt}",
-                  pricingStatus()?.updated_at ||
-                    t("settings.pricingNotFetched"),
-                )}
+                .replace("{updatedAt}", formattedPricingUpdatedAt())}
             </p>
           </div>
           <div class="usage-toolbar-actions">
@@ -451,7 +516,9 @@ export function UsagePanel() {
             <button
               class="usage-secondary-btn"
               onClick={handleRefreshPricing}
-              disabled={isRefreshingPricing()}
+              disabled={
+                isRefreshingPricing() || activeMaintenanceJob() !== null
+              }
               type="button"
             >
               {isRefreshingPricing()
@@ -461,10 +528,12 @@ export function UsagePanel() {
             <button
               class="usage-secondary-btn"
               onClick={() => setShowClearUsageConfirm(true)}
-              disabled={isRefreshingUsage()}
+              disabled={activeMaintenanceJob() !== null}
               type="button"
             >
-              {isRefreshingUsage() ? "..." : t("usage.refreshUsage")}
+              {activeMaintenanceJob() === "refresh_usage"
+                ? "..."
+                : t("usage.refreshUsage")}
             </button>
           </div>
         </div>
