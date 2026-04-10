@@ -1,4 +1,4 @@
-use std::collections::{BTreeMap, HashMap};
+use std::collections::{BTreeMap, HashMap, HashSet};
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Instant;
@@ -77,8 +77,13 @@ impl Indexer {
                 .sync_provider_snapshot(&provider_kind, &sessions, aggressive)
                 .map_err(|e| format!("failed to sync {} provider: {}", provider_kind.key(), e))?;
 
+            let mut seen_hashes: HashSet<String> = HashSet::new();
             for parsed in &sessions {
-                let stat_rows = compute_token_stats_with_catalog(parsed, pricing_catalog.as_ref());
+                let stat_rows = compute_token_stats_dedup(
+                    parsed,
+                    pricing_catalog.as_ref(),
+                    Some(&mut seen_hashes),
+                );
                 if let Err(e) = self.db.replace_token_stats(&parsed.meta.id, &stat_rows) {
                     log::warn!("failed to write token stats for {}: {e}", parsed.meta.id);
                 }
@@ -92,6 +97,9 @@ impl Indexer {
                 .set_meta("last_index_time", &now_millis.to_string())
                 .map_err(|e| format!("failed to store last_index_time: {e}"))?;
         }
+        self.db
+            .set_meta("usage_last_refreshed_at", &chrono::Utc::now().to_rfc3339())
+            .map_err(|e| format!("failed to store usage_last_refreshed_at: {e}"))?;
 
         let elapsed = start.elapsed();
         log::info!(
@@ -279,9 +287,26 @@ pub(crate) fn compute_token_stats(parsed: &ParsedSession) -> Vec<TokenStatRow> {
     compute_token_stats_with_catalog(parsed, None)
 }
 
+#[cfg_attr(not(test), allow(dead_code))]
 pub(crate) fn compute_token_stats_with_catalog(
     parsed: &ParsedSession,
     pricing_catalog: Option<&PricingCatalog>,
+) -> Vec<TokenStatRow> {
+    compute_token_stats_dedup(parsed, pricing_catalog, None)
+}
+
+pub(crate) fn compute_token_stats_with_catalog_dedup(
+    parsed: &ParsedSession,
+    pricing_catalog: Option<&PricingCatalog>,
+    seen_hashes: &mut HashSet<String>,
+) -> Vec<TokenStatRow> {
+    compute_token_stats_dedup(parsed, pricing_catalog, Some(seen_hashes))
+}
+
+fn compute_token_stats_dedup(
+    parsed: &ParsedSession,
+    pricing_catalog: Option<&PricingCatalog>,
+    mut seen_hashes: Option<&mut HashSet<String>>,
 ) -> Vec<TokenStatRow> {
     if parsed.meta.provider == Provider::Codex {
         return compute_codex_token_stats(parsed, pricing_catalog);
@@ -303,6 +328,15 @@ pub(crate) fn compute_token_stats_with_catalog(
             last_seen_model = model.to_string();
         }
         if let Some(usage) = &msg.token_usage {
+            // Dedup: skip if this usage entry was already counted (cross-file)
+            if let Some(ref mut seen) = seen_hashes {
+                if let Some(ref hash) = msg.usage_hash {
+                    if !seen.insert(hash.clone()) {
+                        continue;
+                    }
+                }
+            }
+
             let date = msg
                 .timestamp
                 .as_deref()
@@ -397,9 +431,10 @@ fn compute_codex_token_stats(
 
 #[cfg(test)]
 mod tests {
-    use super::compute_token_stats;
+    use super::{compute_token_stats, compute_token_stats_with_catalog_dedup};
     use crate::models::{Message, MessageRole, Provider, SessionMeta, TokenUsage};
     use crate::provider::ParsedSession;
+    use std::collections::HashSet;
 
     fn make_session(meta_model: Option<&str>, messages: Vec<Message>) -> ParsedSession {
         ParsedSession {
@@ -447,6 +482,7 @@ mod tests {
                 tool_input: None,
                 token_usage: token_usage(100, 50),
                 model: None,
+                usage_hash: None,
             }],
         );
 
@@ -467,6 +503,7 @@ mod tests {
                 tool_input: None,
                 token_usage: token_usage(25, 10),
                 model: None,
+                usage_hash: None,
             }],
         );
 
@@ -493,6 +530,7 @@ mod tests {
                     tool_input: None,
                     token_usage: None,
                     model: Some("claude-opus-4-6".into()),
+                    usage_hash: None,
                 },
                 Message {
                     role: MessageRole::Tool,
@@ -502,6 +540,7 @@ mod tests {
                     tool_input: None,
                     token_usage: token_usage(100, 50),
                     model: None,
+                    usage_hash: None,
                 },
             ],
         );
@@ -523,11 +562,36 @@ mod tests {
                 tool_input: None,
                 token_usage: token_usage(10, 5),
                 model: Some("claude-opus-4-6".into()),
+                usage_hash: None,
             }],
         );
 
         let rows = compute_token_stats(&parsed);
         assert_eq!(rows.len(), 1);
         assert_eq!(rows[0].date, "2026-04-09");
+    }
+
+    #[test]
+    fn compute_token_stats_dedups_same_usage_hash_across_sessions() {
+        let make_message = || Message {
+            role: MessageRole::Assistant,
+            content: String::new(),
+            timestamp: Some("2026-04-09T12:00:00Z".into()),
+            tool_name: None,
+            tool_input: None,
+            token_usage: token_usage(100, 50),
+            model: Some("claude-opus-4-6".into()),
+            usage_hash: Some("msg-1:req-1".into()),
+        };
+
+        let first = make_session(Some("claude-opus-4-6"), vec![make_message()]);
+        let second = make_session(Some("claude-opus-4-6"), vec![make_message()]);
+        let mut seen_hashes = HashSet::new();
+
+        let first_rows = compute_token_stats_with_catalog_dedup(&first, None, &mut seen_hashes);
+        let second_rows = compute_token_stats_with_catalog_dedup(&second, None, &mut seen_hashes);
+
+        assert_eq!(first_rows.len(), 1);
+        assert!(second_rows.is_empty());
     }
 }

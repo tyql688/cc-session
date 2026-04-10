@@ -4,7 +4,9 @@ use tauri_plugin_opener::OpenerExt;
 use crate::exporter;
 use crate::models::{IndexStats, PricingCatalogStatus, ProviderSnapshot};
 use crate::pricing::{
-    parse_catalog, PRICING_CATALOG_JSON_KEY, PRICING_CATALOG_UPDATED_AT_KEY, PRICING_CATALOG_URL,
+    count_models_dev_models, parse_catalog, parse_models_dev, PRICING_CATALOG_JSON_KEY,
+    PRICING_CATALOG_MODEL_COUNT_KEY, PRICING_CATALOG_UPDATED_AT_KEY, PRICING_CATALOG_URL,
+    PRICING_SOURCE_LABEL,
 };
 use crate::services::ProviderSnapshotService;
 
@@ -57,11 +59,17 @@ pub fn get_index_stats(state: State<AppState>) -> Result<IndexStats, String> {
         .get_meta("last_index_time")
         .map_err(|e| format!("failed to read last_index_time: {e}"))?
         .unwrap_or_default();
+    let usage_last_refreshed_at = state
+        .db
+        .get_meta("usage_last_refreshed_at")
+        .map_err(|e| format!("failed to read usage_last_refreshed_at: {e}"))?
+        .unwrap_or_default();
 
     Ok(IndexStats {
         session_count,
         db_size_bytes,
         last_index_time,
+        usage_last_refreshed_at,
     })
 }
 
@@ -73,13 +81,21 @@ pub fn get_pricing_catalog_status(state: State<AppState>) -> Result<PricingCatal
         .map_err(|e| format!("failed to read pricing updated_at: {e}"))?;
     let model_count = state
         .db
-        .get_meta(PRICING_CATALOG_JSON_KEY)
-        .map_err(|e| format!("failed to read pricing catalog: {e}"))?
-        .and_then(|json| parse_catalog(&json).map(|catalog| catalog.len() as u64))
+        .get_meta(PRICING_CATALOG_MODEL_COUNT_KEY)
+        .map_err(|e| format!("failed to read pricing model count: {e}"))?
+        .and_then(|count| count.parse::<u64>().ok())
+        .or_else(|| {
+            state
+                .db
+                .get_meta(PRICING_CATALOG_JSON_KEY)
+                .ok()
+                .flatten()
+                .and_then(|json| parse_catalog(&json).map(|catalog| catalog.len() as u64))
+        })
         .unwrap_or(0);
 
     Ok(PricingCatalogStatus {
-        source_url: PRICING_CATALOG_URL.to_string(),
+        source_url: PRICING_SOURCE_LABEL.to_string(),
         updated_at,
         model_count,
     })
@@ -99,7 +115,11 @@ pub async fn refresh_pricing_catalog(
         .text()
         .await
         .map_err(|e| format!("failed to read pricing catalog body: {e}"))?;
-    let catalog = parse_catalog(&body).ok_or_else(|| "invalid pricing catalog JSON".to_string())?;
+    let model_count =
+        count_models_dev_models(&body).ok_or_else(|| "invalid models.dev JSON".to_string())?;
+    let catalog = parse_models_dev(&body).ok_or_else(|| "invalid models.dev JSON".to_string())?;
+    let body = serde_json::to_string(&catalog)
+        .map_err(|e| format!("failed to serialize pricing catalog: {e}"))?;
     let updated_at = chrono::Utc::now().to_rfc3339();
 
     state
@@ -110,11 +130,15 @@ pub async fn refresh_pricing_catalog(
         .db
         .set_meta(PRICING_CATALOG_UPDATED_AT_KEY, &updated_at)
         .map_err(|e| format!("failed to store pricing timestamp: {e}"))?;
+    state
+        .db
+        .set_meta(PRICING_CATALOG_MODEL_COUNT_KEY, &model_count.to_string())
+        .map_err(|e| format!("failed to store pricing model count: {e}"))?;
 
     Ok(PricingCatalogStatus {
-        source_url: PRICING_CATALOG_URL.to_string(),
+        source_url: PRICING_SOURCE_LABEL.to_string(),
         updated_at: Some(updated_at),
-        model_count: catalog.len() as u64,
+        model_count,
     })
 }
 
