@@ -48,6 +48,8 @@ pub(crate) struct UsageSessionModelDetailRow {
     pub cost_usd: f64,
 }
 
+pub(crate) type UsageTotalsRow = (u64, u64, u64, u64, u64, u64, f64);
+
 impl Database {
     pub fn get_session(&self, id: &str) -> Result<Option<SessionMeta>, rusqlite::Error> {
         let conn = self.lock_read()?;
@@ -539,7 +541,7 @@ impl Database {
         providers: &[String],
         date_start: &str,
         date_end: &str,
-    ) -> Result<(u64, u64, u64, u64, u64, u64, f64), rusqlite::Error> {
+    ) -> Result<UsageTotalsRow, rusqlite::Error> {
         let conn = self.lock_read()?;
         if providers.is_empty() {
             return Ok((0, 0, 0, 0, 0, 0, 0.0));
