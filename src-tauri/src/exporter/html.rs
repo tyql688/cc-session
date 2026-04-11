@@ -3,6 +3,7 @@ use std::path::Path;
 
 use base64::engine::general_purpose::STANDARD as BASE64;
 use base64::Engine as _;
+use similar::{ChangeTag, TextDiff};
 
 use crate::models::{MessageRole, Provider, SessionDetail};
 
@@ -24,6 +25,68 @@ fn html_escape(s: &str) -> String {
         .replace('>', "&gt;")
         .replace('"', "&quot;")
         .replace('\'', "&#39;")
+}
+
+fn render_diff_line(kind: &str, text: &str) -> String {
+    let marker = match kind {
+        "add" => "+",
+        "remove" => "-",
+        "skip" => "⋯",
+        _ => " ",
+    };
+    format!(
+        r#"<div class="tool-diff-line {kind}"><span class="tool-diff-gutter"></span><span class="tool-diff-gutter"></span><span class="tool-diff-marker">{marker}</span><span class="tool-diff-code">{}</span></div>"#,
+        html_escape(if text.is_empty() { " " } else { text })
+    )
+}
+
+fn render_line_diff(old: &str, new: &str) -> String {
+    let diff = TextDiff::from_lines(old, new);
+    let mut html = String::from(r#"<div class="tool-line-diff">"#);
+
+    for change in diff.iter_all_changes() {
+        let kind = match change.tag() {
+            ChangeTag::Delete => "remove",
+            ChangeTag::Insert => "add",
+            ChangeTag::Equal => "context",
+        };
+        html.push_str(&render_diff_line(
+            kind,
+            change.value().trim_end_matches('\n'),
+        ));
+    }
+
+    html.push_str("</div>");
+    html
+}
+
+fn render_patch_diff(patch: &str) -> String {
+    let mut html = String::from(r#"<div class="tool-line-diff">"#);
+
+    for line in patch.lines() {
+        if line == "*** Begin Patch" || line == "*** End Patch" || line.is_empty() {
+            continue;
+        }
+        if line.starts_with("*** ")
+            || line.starts_with("@@")
+            || line.starts_with("*** Update File:")
+            || line.starts_with("*** Add File:")
+            || line.starts_with("*** Delete File:")
+        {
+            html.push_str(&render_diff_line("skip", line));
+        } else if let Some(rest) = line.strip_prefix('+') {
+            html.push_str(&render_diff_line("add", rest));
+        } else if let Some(rest) = line.strip_prefix('-') {
+            html.push_str(&render_diff_line("remove", rest));
+        } else if let Some(rest) = line.strip_prefix(' ') {
+            html.push_str(&render_diff_line("context", rest));
+        } else {
+            html.push_str(&render_diff_line("skip", line));
+        }
+    }
+
+    html.push_str("</div>");
+    html
 }
 
 fn is_allowed_image_path(path: &str) -> bool {
@@ -161,7 +224,8 @@ fn render_content(raw: &str) -> String {
 /// Render tool_input JSON as a structured HTML summary.
 pub(crate) fn render_tool_detail(tool_name: &str, tool_input: &str) -> String {
     // Apply_patch: raw patch text, not JSON
-    if tool_name == "Apply_patch" && tool_input.contains("*** Begin Patch") {
+    if (tool_name == "Apply_patch" || tool_name == "Edit") && tool_input.contains("*** Begin Patch")
+    {
         // Extract file path from patch header
         let file_line = tool_input
             .lines()
@@ -179,10 +243,7 @@ pub(crate) fn render_tool_detail(tool_name: &str, tool_input: &str) -> String {
                 html_escape(fp)
             ));
         }
-        html.push_str(&format!(
-            r#"<pre class="tool-raw">{}</pre>"#,
-            html_escape(tool_input)
-        ));
+        html.push_str(&render_patch_diff(tool_input));
         return html;
     }
 
@@ -204,17 +265,29 @@ pub(crate) fn render_tool_detail(tool_name: &str, tool_input: &str) -> String {
                     html_escape(fp)
                 ));
             }
-            if let Some(old) = obj.get("old_string").and_then(|v| v.as_str()) {
-                html.push_str(&format!(
-                    r#"<div class="tool-diff tool-diff-old"><span class="tool-diff-label">−</span><pre>{}</pre></div>"#,
-                    html_escape(old)
-                ));
-            }
-            if let Some(new) = obj.get("new_string").and_then(|v| v.as_str()) {
-                html.push_str(&format!(
-                    r#"<div class="tool-diff tool-diff-new"><span class="tool-diff-label">+</span><pre>{}</pre></div>"#,
-                    html_escape(new)
-                ));
+            let old = obj
+                .get("old_string")
+                .or_else(|| obj.get("oldString"))
+                .and_then(|v| v.as_str());
+            let new = obj
+                .get("new_string")
+                .or_else(|| obj.get("newString"))
+                .and_then(|v| v.as_str());
+            if let (Some(old), Some(new)) = (old, new) {
+                html.push_str(&render_line_diff(old, new));
+            } else {
+                if let Some(old) = old {
+                    html.push_str(&format!(
+                        r#"<div class="tool-diff tool-diff-old"><span class="tool-diff-label">−</span><pre>{}</pre></div>"#,
+                        html_escape(old)
+                    ));
+                }
+                if let Some(new) = new {
+                    html.push_str(&format!(
+                        r#"<div class="tool-diff tool-diff-new"><span class="tool-diff-label">+</span><pre>{}</pre></div>"#,
+                        html_escape(new)
+                    ));
+                }
             }
         }
         "Bash" => {

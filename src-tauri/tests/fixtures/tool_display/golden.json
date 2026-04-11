@@ -7,7 +7,14 @@
   {
     "tool_name": "Edit",
     "tool_input": "{\"file_path\":\"/src/main.rs\",\"old_string\":\"foo\",\"new_string\":\"bar\"}",
-    "expected_keywords": ["/src/main.rs", "foo", "bar"]
+    "expected_keywords": [
+      "/src/main.rs",
+      "foo",
+      "bar",
+      "tool-line-diff",
+      "tool-diff-line remove",
+      "tool-diff-line add"
+    ]
   },
   {
     "tool_name": "Read",
@@ -37,6 +44,13 @@
   {
     "tool_name": "Apply_patch",
     "tool_input": "*** Update File: /src/main.rs\n*** Begin Patch\n-old\n+new\n*** End Patch",
-    "expected_keywords": ["/src/main.rs", "old", "new"]
+    "expected_keywords": [
+      "/src/main.rs",
+      "old",
+      "new",
+      "tool-line-diff",
+      "tool-diff-line remove",
+      "tool-diff-line add"
+    ]
   }
 ]
