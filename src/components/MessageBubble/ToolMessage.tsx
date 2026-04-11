@@ -107,6 +107,9 @@ export function ToolMessage(props: { message: Message; provider?: string }) {
     formatToolResultMetadata(props.message.tool_metadata),
   );
   const persistedOutputPath = () => resultMetadata()?.persistedOutputPath;
+  const resultHasDiff = () =>
+    !!resultMetadata()?.diff || !!resultMetadata()?.patchDiff;
+  const showInputDetail = () => !!formatted() && !resultHasDiff();
   /** Extract nickname from Agent tool output (Codex: {"nickname":"Faraday"}) */
   const agentNickname = createMemo(() => {
     if (name() !== "Agent" || !hasOutput()) return undefined;
@@ -193,7 +196,7 @@ export function ToolMessage(props: { message: Message; provider?: string }) {
         </Show>
       </div>
       <Show when={expanded()}>
-        <Show when={formatted()}>
+        <Show when={showInputDetail()}>
           <div class="msg-tool-detail">
             <For each={formatted()!.lines}>
               {(line) => (
@@ -254,7 +257,7 @@ export function ToolMessage(props: { message: Message; provider?: string }) {
             </Show>
           </div>
         </Show>
-        <Show when={!formatted() && hasInput()}>
+        <Show when={!showInputDetail() && !resultHasDiff() && hasInput()}>
           <pre class="msg-tool-input">{props.message.tool_input!}</pre>
         </Show>
         <Show when={hasOutput() && !suppressRawOutput()}>
