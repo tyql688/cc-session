@@ -4,6 +4,7 @@ import {
   buildDailyChartData,
   buildHoveredDaySummary,
   compareUsageValues,
+  filterScannedProviderSnapshots,
   makeEmptyUsageStats,
   totalUsageTokens,
 } from "./usage";
@@ -37,6 +38,35 @@ describe("compareUsageValues", () => {
   it("falls back to numeric comparison", () => {
     expect(compareUsageValues(1, 2, true)).toBeLessThan(0);
     expect(compareUsageValues(1, 2, false)).toBeGreaterThan(0);
+  });
+});
+
+describe("filterScannedProviderSnapshots", () => {
+  it("keeps only providers that have indexed sessions", () => {
+    expect(
+      filterScannedProviderSnapshots([
+        {
+          key: "claude",
+          label: "Claude Code",
+          color: "var(--claude)",
+          sort_order: 0,
+          watch_strategy: "fs",
+          path: "/claude",
+          exists: true,
+          session_count: 2,
+        },
+        {
+          key: "codex",
+          label: "Codex",
+          color: "var(--codex)",
+          sort_order: 1,
+          watch_strategy: "fs",
+          path: "/codex",
+          exists: true,
+          session_count: 0,
+        },
+      ]).map((snapshot) => snapshot.key),
+    ).toEqual(["claude"]);
   });
 });
 

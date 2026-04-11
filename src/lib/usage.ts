@@ -1,4 +1,9 @@
-import type { DailyUsage, PrevPeriodTotals, UsageStats } from "./types";
+import type {
+  DailyUsage,
+  PrevPeriodTotals,
+  ProviderSnapshot,
+  UsageStats,
+} from "./types";
 
 export type UsageSortState = { col: string; asc: boolean };
 export type ChartMetric = "tokens" | "cost";
@@ -44,6 +49,12 @@ export function makeEmptyUsageStats(): UsageStats {
     recent_sessions: [],
     prev_period: undefined,
   };
+}
+
+export function filterScannedProviderSnapshots(
+  snapshots: ProviderSnapshot[],
+): ProviderSnapshot[] {
+  return snapshots.filter((snapshot) => snapshot.session_count > 0);
 }
 
 export function compareUsageValues(

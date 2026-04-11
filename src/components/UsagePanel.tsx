@@ -18,7 +18,11 @@ import {
   getSessionCount,
   refreshPricingCatalog,
 } from "../lib/tauri";
-import { listProviderSnapshots } from "../stores/providerSnapshots";
+import {
+  getProviderSnapshotVersion,
+  listProviderSnapshots,
+  refreshProviderSnapshots,
+} from "../stores/providerSnapshots";
 import { ConfirmDialog } from "./ConfirmDialog";
 import { toast, toastError, toastInfo } from "../stores/toast";
 import { formatLocalDateTime, shortenHomePath } from "../lib/formatters";
@@ -26,6 +30,7 @@ import {
   buildDailyChartData,
   buildHoveredDaySummary,
   compareUsageValues,
+  filterScannedProviderSnapshots,
   makeEmptyUsageStats,
   ROW_LIMIT_OPTIONS,
   totalUsageTokens,
@@ -65,6 +70,8 @@ export function UsagePanel() {
     new Set(),
   );
   const [didInitProviders, setDidInitProviders] = createSignal(false);
+  const [providerSelectionTouched, setProviderSelectionTouched] =
+    createSignal(false);
   const [projectLimit, setProjectLimit] = createSignal<LimitOption>(10);
   const [sessionLimit, setSessionLimit] = createSignal<LimitOption>(10);
   const [hoveredDate, setHoveredDate] = createSignal<string | null>(null);
@@ -75,11 +82,11 @@ export function UsagePanel() {
     createSignal<MaintenanceJob | null>(null);
 
   const providerSnapshots = createMemo(() => listProviderSnapshots());
-  const existingProviderSnapshots = createMemo(() =>
-    providerSnapshots().filter((snapshot) => snapshot.exists),
+  const scannedProviderSnapshots = createMemo(() =>
+    filterScannedProviderSnapshots(providerSnapshots()),
   );
-  const existingProviderKeys = createMemo(() =>
-    existingProviderSnapshots().map((snapshot) => snapshot.key),
+  const scannedProviderKeys = createMemo(() =>
+    scannedProviderSnapshots().map((snapshot) => snapshot.key),
   );
   const providerSnapshotMap = createMemo(
     () =>
@@ -87,23 +94,27 @@ export function UsagePanel() {
   );
 
   createEffect(() => {
-    if (didInitProviders()) return;
-    if (existingProviderSnapshots().length === 0) return;
-    setSelectedProviders(new Set(existingProviderKeys()));
+    const keys = scannedProviderKeys();
+    const snapshotsLoaded = getProviderSnapshotVersion() > 0;
+    if (!snapshotsLoaded && keys.length === 0) return;
+    if (!providerSelectionTouched()) {
+      setSelectedProviders(new Set(keys));
+    }
     setDidInitProviders(true);
   });
 
   const selectedProviderKeys = createMemo(() => {
     const selected = selectedProviders();
-    return existingProviderKeys().filter((key) => selected.has(key));
+    return scannedProviderKeys().filter((key) => selected.has(key));
   });
   const allProvidersSelected = createMemo(
     () =>
-      existingProviderKeys().length > 0 &&
-      selectedProviderKeys().length === existingProviderKeys().length,
+      scannedProviderKeys().length > 0 &&
+      selectedProviderKeys().length === scannedProviderKeys().length,
   );
 
   const toggleProvider = (key: string) => {
+    setProviderSelectionTouched(true);
     setSelectedProviders((prev) => {
       const next = new Set(prev);
       if (next.has(key)) next.delete(key);
@@ -113,11 +124,12 @@ export function UsagePanel() {
   };
 
   const selectAllProviders = () => {
+    setProviderSelectionTouched(true);
     if (allProvidersSelected()) {
       setSelectedProviders(new Set<string>());
       return;
     }
-    setSelectedProviders(new Set<string>(existingProviderKeys()));
+    setSelectedProviders(new Set<string>(scannedProviderKeys()));
   };
 
   const [stats, { refetch: refetchStats }] = createResource(
@@ -133,7 +145,9 @@ export function UsagePanel() {
     },
   );
 
-  const [sessionCount] = createResource(() => getSessionCount());
+  const [sessionCount, { refetch: refetchSessionCount }] = createResource(() =>
+    getSessionCount(),
+  );
   const [indexStats, { refetch: refetchIndexStats }] = createResource(
     async () => {
       try {
@@ -159,7 +173,9 @@ export function UsagePanel() {
 
   let unlistenMaintenance: UnlistenFn | undefined;
   const handleUsageDataChanged = () => {
+    void refreshProviderSnapshots();
     void refetchStats();
+    void refetchSessionCount();
     void refetchPricingStatus();
     void refetchIndexStats();
   };
@@ -365,6 +381,7 @@ export function UsagePanel() {
   });
 
   const emptyMessage = createMemo(() => {
+    if (scannedProviderKeys().length === 0) return t("usage.noData");
     if (selectedProviderKeys().length === 0) return t("usage.selectProvider");
     if (showRebuildHint()) return t("usage.rebuildHint");
     if ((sessionCount() ?? 0) === 0) return t("usage.noData");
@@ -604,11 +621,9 @@ export function UsagePanel() {
             type="button"
           >
             <span class="usage-chip-label">{t("usage.allProviders")}</span>
-            <span class="usage-chip-count">
-              {existingProviderKeys().length}
-            </span>
+            <span class="usage-chip-count">{scannedProviderKeys().length}</span>
           </button>
-          <For each={existingProviderSnapshots()}>
+          <For each={scannedProviderSnapshots()}>
             {(snapshot) => {
               const info = providerInfo(snapshot.key);
               const active = () => selectedProviders().has(snapshot.key);
