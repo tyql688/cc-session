@@ -7,9 +7,21 @@ versioned with [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.3.9] - 2026-04-11
+
+### Added
+
+- Structured tool displays for Claude and Codex with line-level diffs in the timeline and HTML exports (#16)
+- Codex `apply_patch` tool calls now render as diffs alongside Claude edits (#16)
+
 ### Fixed
 
-- macOS release apps now raise the file descriptor soft limit before starting kqueue watchers, so live follow continues to work with large local session archives launched from Finder.
+- Hide usage-only assistant placeholders from the rendered timeline and exports (#16)
+- Preserve Claude tool names and task status labels in merged tool rows (#16)
+- Redact home paths in diff headers without breaking diff rendering (#16)
+- Avoid duplicate Claude edit diffs when tool results echo the patch (#16)
+- macOS release apps now raise the file descriptor soft limit before starting kqueue watchers, so live follow continues to work with large local session archives launched from Finder (51bcb4a)
+- Usage filters now only apply to indexed providers (ae042ba)
 
 ## [0.3.8] - 2026-04-11
 
