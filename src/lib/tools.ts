@@ -246,7 +246,10 @@ export function formatToolInput(message: Message): ToolDetail | null {
         };
     }
   } catch {
-    if (name === "Apply_patch" && inputJson.includes("*** Begin Patch")) {
+    if (
+      (name === "Apply_patch" || name === "Edit") &&
+      inputJson.includes("*** Begin Patch")
+    ) {
       const files = extractPatchedFiles(inputJson);
       return {
         lines: [

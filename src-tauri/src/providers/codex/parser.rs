@@ -11,6 +11,9 @@ use crate::provider_utils::{
     is_system_content, parse_rfc3339_timestamp, project_name_from_path, session_title,
     truncate_to_bytes, FTS_CONTENT_LIMIT, NO_PROJECT,
 };
+use crate::tool_metadata::{
+    build_tool_metadata, enrich_tool_metadata, ToolCallFacts, ToolResultFacts,
+};
 
 use super::tools::*;
 use super::CodexProvider;
@@ -36,6 +39,47 @@ struct PendingCodexUserMessage {
     content: String,
     timestamp: Option<String>,
     image_segments: Vec<String>,
+}
+
+fn parse_json_str(value: Option<&str>) -> Option<Value> {
+    serde_json::from_str(value?).ok()
+}
+
+fn codex_tool_input_value(
+    raw_name: &str,
+    raw_input: Option<&str>,
+    tool_input: Option<&str>,
+) -> Option<Value> {
+    if raw_name == "apply_patch" {
+        return tool_input.map(|patch| json!({ "patch": patch }));
+    }
+
+    parse_json_str(tool_input).or_else(|| parse_json_str(raw_input))
+}
+
+fn codex_tool_result_value(raw_output: &str, output: &str) -> Option<Value> {
+    if let Ok(value) = serde_json::from_str::<Value>(raw_output.trim()) {
+        if let Some(obj) = value.as_object() {
+            if let Some(metadata) = obj.get("metadata").and_then(|v| v.as_object()) {
+                let mut result = serde_json::Map::new();
+                result.insert("stdout".to_string(), json!(output));
+                if let Some(exit_code) = metadata.get("exit_code") {
+                    result.insert("exitCode".to_string(), exit_code.clone());
+                }
+                if let Some(duration) = metadata.get("duration_seconds") {
+                    result.insert("durationSeconds".to_string(), duration.clone());
+                }
+                return Some(Value::Object(result));
+            }
+        }
+        return Some(value);
+    }
+
+    if output.trim().is_empty() {
+        None
+    } else {
+        Some(json!({ "stdout": output }))
+    }
 }
 
 impl CodexProvider {
@@ -244,9 +288,6 @@ impl CodexProvider {
                                 .unwrap_or("unknown");
                             let arguments_str = payload.get("arguments").and_then(|v| v.as_str());
 
-                            // Map Codex tool names to our display names
-                            let display_name = map_codex_tool_name(raw_name);
-
                             // For exec_command, remap arguments to match Bash tool format
                             let tool_input = match raw_name {
                                 "exec_command" => {
@@ -299,6 +340,19 @@ impl CodexProvider {
                                 }
                                 _ => arguments_str.map(|s| s.to_string()),
                             };
+                            let input_value = codex_tool_input_value(
+                                raw_name,
+                                arguments_str,
+                                tool_input.as_deref(),
+                            );
+                            let metadata = build_tool_metadata(ToolCallFacts {
+                                provider: Provider::Codex,
+                                raw_name,
+                                input: input_value.as_ref(),
+                                call_id: payload.get("call_id").and_then(|v| v.as_str()),
+                                assistant_id: None,
+                            });
+                            let display_name = metadata.canonical_name.clone();
 
                             let idx = messages.len();
                             if let Some(cid) = payload.get("call_id").and_then(|v| v.as_str()) {
@@ -310,10 +364,10 @@ impl CodexProvider {
                                 timestamp: entry.timestamp.clone(),
                                 tool_name: Some(display_name.to_string()),
                                 tool_input,
+                                tool_metadata: Some(metadata),
                                 token_usage: None,
                                 model: None,
                                 usage_hash: None,
-                                tool_metadata: None,
                             });
                         }
                         "function_call_output" => {
@@ -333,7 +387,26 @@ impl CodexProvider {
                             if let Some(idx) = call_id.and_then(|cid| call_id_map.get(cid)).copied()
                             {
                                 if idx < messages.len() {
+                                    let result_value =
+                                        codex_tool_result_value(&raw_output, &output);
                                     messages[idx].content = output;
+                                    if let Some(metadata) = messages[idx].tool_metadata.as_mut() {
+                                        let is_error = result_value.as_ref().and_then(|value| {
+                                            value
+                                                .get("exitCode")
+                                                .and_then(|code| code.as_i64())
+                                                .map(|code| code != 0)
+                                        });
+                                        enrich_tool_metadata(
+                                            metadata,
+                                            ToolResultFacts {
+                                                raw_result: result_value.as_ref(),
+                                                is_error,
+                                                status: None,
+                                                artifact_path: None,
+                                            },
+                                        );
+                                    }
                                     continue;
                                 }
                             }
@@ -355,7 +428,6 @@ impl CodexProvider {
                                 .get("name")
                                 .and_then(|v| v.as_str())
                                 .unwrap_or("tool");
-                            let display_name = map_codex_tool_name(raw_name);
                             let input = payload.get("input").map(|v| {
                                 if let Some(s) = v.as_str() {
                                     s.to_string()
@@ -363,6 +435,16 @@ impl CodexProvider {
                                     serde_json::to_string(v).unwrap_or_default()
                                 }
                             });
+                            let input_value =
+                                codex_tool_input_value(raw_name, None, input.as_deref());
+                            let metadata = build_tool_metadata(ToolCallFacts {
+                                provider: Provider::Codex,
+                                raw_name,
+                                input: input_value.as_ref(),
+                                call_id: payload.get("call_id").and_then(|v| v.as_str()),
+                                assistant_id: None,
+                            });
+                            let display_name = metadata.canonical_name.clone();
 
                             let idx = messages.len();
                             if let Some(cid) = payload.get("call_id").and_then(|v| v.as_str()) {
@@ -374,10 +456,10 @@ impl CodexProvider {
                                 timestamp: entry.timestamp.clone(),
                                 tool_name: Some(display_name.to_string()),
                                 tool_input: input,
+                                tool_metadata: Some(metadata),
                                 token_usage: None,
                                 model: None,
                                 usage_hash: None,
-                                tool_metadata: None,
                             });
                         }
                         "custom_tool_call_output" => {
@@ -392,7 +474,26 @@ impl CodexProvider {
                             if let Some(idx) = call_id.and_then(|cid| call_id_map.get(cid)).copied()
                             {
                                 if idx < messages.len() {
+                                    let result_value =
+                                        codex_tool_result_value(&raw_output, &output);
                                     messages[idx].content = output;
+                                    if let Some(metadata) = messages[idx].tool_metadata.as_mut() {
+                                        let is_error = result_value.as_ref().and_then(|value| {
+                                            value
+                                                .get("exitCode")
+                                                .and_then(|code| code.as_i64())
+                                                .map(|code| code != 0)
+                                        });
+                                        enrich_tool_metadata(
+                                            metadata,
+                                            ToolResultFacts {
+                                                raw_result: result_value.as_ref(),
+                                                is_error,
+                                                status: None,
+                                                artifact_path: None,
+                                            },
+                                        );
+                                    }
                                     continue;
                                 }
                             }

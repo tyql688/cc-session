@@ -380,6 +380,32 @@ fn codex_function_call_output_merged_into_tool_message() {
 }
 
 #[test]
+fn codex_exec_command_has_structured_tool_metadata() {
+    let provider = CodexProvider::new().expect("home dir must be available");
+    let path = fixtures_dir().join("codex_session.jsonl");
+    let session = provider
+        .parse_session_file(&path)
+        .expect("codex fixture must parse");
+
+    let tool_msg = session
+        .messages
+        .iter()
+        .find(|m| m.role == MessageRole::Tool)
+        .expect("expected a Tool message");
+    let metadata = tool_msg
+        .tool_metadata
+        .as_ref()
+        .expect("Codex tool metadata must be present");
+
+    assert_eq!(metadata.raw_name, "exec_command");
+    assert_eq!(metadata.canonical_name, "Bash");
+    assert_eq!(metadata.category, "shell");
+    assert_eq!(metadata.summary.as_deref(), Some("cat hello.py"));
+    assert_eq!(metadata.status.as_deref(), Some("success"));
+    assert_eq!(metadata.result_kind.as_deref(), Some("terminal_output"));
+}
+
+#[test]
 fn codex_token_usage_attached_to_assistant_message() {
     let provider = CodexProvider::new().expect("home dir must be available");
     let path = fixtures_dir().join("codex_session.jsonl");

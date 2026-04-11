@@ -35,10 +35,15 @@ pub fn canonical_tool_name(_provider: Provider, name: &str) -> String {
         "Shell" | "exec_command" | "run_in_terminal" => "Bash",
         "ReadFile" | "read_file" | "view" => "Read",
         "WriteFile" | "write_file" => "Write",
-        "ApplyPatch" | "Apply_patch" | "MultiEdit" | "str_replace_editor" => "Edit",
+        "ApplyPatch" | "Apply_patch" | "MultiEdit" | "str_replace_editor" | "apply_patch" => "Edit",
         "Search" | "SemanticSearch" | "grep_search" => "Grep",
         "file_search" => "Glob",
-        "Task" | "Subagent" => "Agent",
+        "Task" | "Subagent" | "spawn_agent" | "wait_agent" | "send_input" | "close_agent" => {
+            "Agent"
+        }
+        "update_plan" => "Plan",
+        "request_user_input" => "AskUserQuestion",
+        "write_stdin" => "Bash",
         other => other,
     }
     .to_string()
@@ -66,9 +71,20 @@ fn tool_category(canonical_name: &str, raw_name: &str) -> String {
 }
 
 fn display_tool_name(raw_name: &str, canonical_name: &str) -> String {
-    parse_mcp_tool_name(raw_name)
-        .map(|mcp| mcp.display)
-        .unwrap_or_else(|| canonical_name.to_string())
+    if let Some(mcp) = parse_mcp_tool_name(raw_name) {
+        return mcp.display;
+    }
+    match raw_name {
+        "write_stdin" => "write stdin".to_string(),
+        "update_plan" => "update plan".to_string(),
+        "request_user_input" => "request user input".to_string(),
+        "apply_patch" => "apply patch".to_string(),
+        "spawn_agent" => "spawn agent".to_string(),
+        "wait_agent" => "wait agent".to_string(),
+        "send_input" => "send input".to_string(),
+        "close_agent" => "close agent".to_string(),
+        _ => canonical_name.to_string(),
+    }
 }
 
 fn compact_string(value: &str, limit: usize) -> String {
@@ -147,6 +163,31 @@ fn input_summary(canonical_name: &str, raw_name: &str, input: Option<&Value>) ->
         "WebFetch" => string_field(input, &["url"])
             .unwrap_or_default()
             .to_string(),
+        "AskUserQuestion" => input
+            .get("questions")
+            .and_then(|v| v.as_array())
+            .map(|questions| format!("{} question(s)", questions.len()))
+            .unwrap_or_default(),
+        "Plan" => {
+            if let Some(explanation) = string_field(input, &["explanation"]) {
+                compact_string(explanation, 80)
+            } else {
+                input
+                    .get("plan")
+                    .and_then(|v| v.as_array())
+                    .map(|steps| format!("{} step(s)", steps.len()))
+                    .unwrap_or_default()
+            }
+        }
+        _ if raw_name == "write_stdin" => {
+            if let Some(session_id) = input.get("session_id").and_then(|v| v.as_u64()) {
+                format!("session {session_id}")
+            } else {
+                string_field(input, &["chars"])
+                    .map(|s| compact_string(s, 80))
+                    .unwrap_or_default()
+            }
+        }
         _ if raw_name.starts_with("mcp__") => {
             string_field(input, &["element", "url", "filter", "level"])
                 .map(|s| compact_string(s, 80))
@@ -204,7 +245,10 @@ fn result_kind_for_tool(raw_name: &str, result: Option<&Value>) -> Option<String
     if result.get("persistedOutputPath").is_some() {
         return Some("persisted_output".to_string());
     }
-    if result.get("stdout").is_some() || result.get("stderr").is_some() {
+    if result.get("stdout").is_some()
+        || result.get("stderr").is_some()
+        || result.get("exitCode").is_some()
+    {
         return Some("terminal_output".to_string());
     }
     if result.get("structuredPatch").is_some()
@@ -312,9 +356,14 @@ mod tests {
             ("Shell", "Bash"),
             ("exec_command", "Bash"),
             ("ReadFile", "Read"),
+            ("apply_patch", "Edit"),
             ("ApplyPatch", "Edit"),
+            ("update_plan", "Plan"),
+            ("write_stdin", "Bash"),
+            ("request_user_input", "AskUserQuestion"),
             ("SemanticSearch", "Grep"),
             ("Subagent", "Agent"),
+            ("spawn_agent", "Agent"),
         ] {
             let metadata = build_tool_metadata(ToolCallFacts {
                 provider: Provider::Claude,
