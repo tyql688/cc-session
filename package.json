@@ -24,6 +24,7 @@
     "@tauri-apps/plugin-process": "^2.3.1",
     "@tauri-apps/plugin-shell": "^2.3.5",
     "@tauri-apps/plugin-updater": "^2.10.0",
+    "diff": "^8.0.4",
     "highlight.js": "^11.11.1",
     "katex": "^0.16.44",
     "mermaid": "^11.13.0",

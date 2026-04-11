@@ -1,6 +1,7 @@
 import { createSignal, createMemo, Show, For } from "solid-js";
 import type { Message } from "../../lib/types";
 import { readToolResultText } from "../../lib/tauri";
+import { buildToolLineDiff } from "../../lib/diff";
 import {
   formatToolInput,
   formatToolResultMetadata,
@@ -40,6 +41,35 @@ const SUBAGENT_FILE_PROVIDERS = new Set([
   "cursor",
   "cc-mirror",
 ]);
+
+function LineDiff(props: { oldText: string; newText: string }) {
+  return (
+    <div class="msg-tool-line-diff">
+      <For each={buildToolLineDiff(props.oldText, props.newText)}>
+        {(line) => (
+          <div class={`msg-tool-diff-line ${line.type}`}>
+            <span class="msg-tool-diff-gutter msg-tool-diff-gutter-old">
+              {line.oldLine ?? ""}
+            </span>
+            <span class="msg-tool-diff-gutter msg-tool-diff-gutter-new">
+              {line.newLine ?? ""}
+            </span>
+            <span class="msg-tool-diff-marker">
+              {line.type === "add"
+                ? "+"
+                : line.type === "remove"
+                  ? "-"
+                  : line.type === "skip"
+                    ? "⋯"
+                    : " "}
+            </span>
+            <span class="msg-tool-diff-code">{line.text || " "}</span>
+          </div>
+        )}
+      </For>
+    </div>
+  );
+}
 
 export function ToolMessage(props: { message: Message; provider?: string }) {
   const [expanded, setExpanded] = createSignal(false);
@@ -170,16 +200,10 @@ export function ToolMessage(props: { message: Message; provider?: string }) {
               )}
             </For>
             <Show when={formatted()!.diff}>
-              <div class="msg-tool-diff">
-                <div class="msg-tool-diff-old">
-                  <span class="msg-tool-diff-label">-</span>
-                  <pre>{formatted()!.diff!.old}</pre>
-                </div>
-                <div class="msg-tool-diff-new">
-                  <span class="msg-tool-diff-label">+</span>
-                  <pre>{formatted()!.diff!.new}</pre>
-                </div>
-              </div>
+              <LineDiff
+                oldText={formatted()!.diff!.old}
+                newText={formatted()!.diff!.new}
+              />
             </Show>
           </div>
         </Show>
@@ -194,16 +218,10 @@ export function ToolMessage(props: { message: Message; provider?: string }) {
               )}
             </For>
             <Show when={resultMetadata()!.diff}>
-              <div class="msg-tool-diff">
-                <div class="msg-tool-diff-old">
-                  <span class="msg-tool-diff-label">-</span>
-                  <pre>{resultMetadata()!.diff!.old}</pre>
-                </div>
-                <div class="msg-tool-diff-new">
-                  <span class="msg-tool-diff-label">+</span>
-                  <pre>{resultMetadata()!.diff!.new}</pre>
-                </div>
-              </div>
+              <LineDiff
+                oldText={resultMetadata()!.diff!.old}
+                newText={resultMetadata()!.diff!.new}
+              />
             </Show>
             <Show when={persistedOutputPath()}>
               <button
