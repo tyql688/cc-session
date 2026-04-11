@@ -86,6 +86,7 @@ body {{ font-family: -apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Helveti
 .tool-name {{ font-family: 'SF Mono',Menlo,monospace; font-weight: 600; color: var(--text); }}
 .tool-hint {{ color: var(--text3); font-size: 0.9em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }}
 .tool-content {{ padding: 8px 14px; border-top: 1px solid var(--border); }}
+.tool-result-detail {{ border-top: 1px solid var(--border); padding-top: 6px; margin-top: 6px; }}
 .tool-field {{ display: flex; gap: 8px; padding: 3px 0; font-size: 0.9em; }}
 .tool-field-label {{ color: var(--text3); font-size: 0.85em; font-weight: 600; text-transform: uppercase; min-width: 50px; flex-shrink: 0; }}
 .tool-field-value {{ font-family: 'SF Mono',Menlo,monospace; color: var(--text); word-break: break-all; }}
@@ -97,6 +98,16 @@ body {{ font-family: -apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Helveti
 .tool-diff-label {{ padding: 6px; font-family: 'SF Mono',Menlo,monospace; font-weight: 700; flex-shrink: 0; }}
 .tool-diff-old .tool-diff-label {{ color: #ef4444; }}
 .tool-diff-new .tool-diff-label {{ color: #22c55e; }}
+.tool-line-diff {{ margin: 6px 0; border: 1px solid var(--border); border-radius: 6px; overflow: auto; max-height: 360px; background: var(--bg); font-family: 'SF Mono',Menlo,monospace; font-size: 0.88em; line-height: 1.45; }}
+.tool-diff-line {{ display: grid; grid-template-columns: 42px 42px 20px minmax(0,1fr); min-width: max-content; }}
+.tool-diff-line.add {{ background: var(--diff-new); }}
+.tool-diff-line.remove {{ background: var(--diff-old); }}
+.tool-diff-line.skip {{ background: var(--code-bg); color: var(--text3); }}
+.tool-diff-gutter,.tool-diff-marker {{ padding: 1px 6px; color: var(--text3); user-select: none; text-align: right; border-right: 1px solid var(--border); }}
+.tool-diff-marker {{ text-align: center; font-weight: 700; }}
+.tool-diff-line.add .tool-diff-marker {{ color: #22c55e; }}
+.tool-diff-line.remove .tool-diff-marker {{ color: #ef4444; }}
+.tool-diff-code {{ padding: 1px 10px; white-space: pre-wrap; word-break: break-word; }}
 .tool-output {{ border-top: 1px solid var(--border); padding: 6px 0; font-family: 'SF Mono',Menlo,monospace; font-size: 0.88em; color: var(--text2); white-space: pre-wrap; max-height: 200px; overflow-y: auto; }}
 .tool-raw {{ margin: 0; font-size: 0.88em; white-space: pre-wrap; word-break: break-word; color: var(--text2); }}
 .system-text {{ font-size: 0.8em; color: var(--text3); text-align: center; padding: 4px 16px; max-width: 70%; }}

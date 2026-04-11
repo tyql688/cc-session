@@ -862,6 +862,10 @@
   border-top: 1px solid var(--border-subtle);
 }
 
+.msg-tool-result-detail {
+  background: color-mix(in srgb, var(--bg-tab-hover) 45%, transparent);
+}
+
 .msg-tool-field {
   display: flex;
   gap: 8px;
@@ -947,6 +951,66 @@
 }
 .msg-tool-diff-new .msg-tool-diff-label {
   color: var(--diff-new-border);
+}
+
+.msg-tool-line-diff {
+  margin-top: 6px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  overflow: auto;
+  max-height: 360px;
+  background: var(--bg-main);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.msg-tool-diff-line {
+  display: grid;
+  grid-template-columns: 42px 42px 20px minmax(0, 1fr);
+  min-width: max-content;
+  color: var(--text-primary);
+}
+
+.msg-tool-diff-line.add {
+  background: var(--diff-new-bg);
+}
+
+.msg-tool-diff-line.remove {
+  background: var(--diff-old-bg);
+}
+
+.msg-tool-diff-line.skip {
+  background: var(--bg-tab-hover);
+  color: var(--text-tertiary);
+}
+
+.msg-tool-diff-gutter,
+.msg-tool-diff-marker {
+  padding: 1px 6px;
+  color: var(--text-tertiary);
+  user-select: none;
+  text-align: right;
+  border-right: 1px solid var(--border-subtle);
+}
+
+.msg-tool-diff-marker {
+  text-align: center;
+  font-weight: 700;
+}
+
+.msg-tool-diff-line.add .msg-tool-diff-marker {
+  color: var(--diff-new-border);
+}
+
+.msg-tool-diff-line.remove .msg-tool-diff-marker {
+  color: var(--diff-old-border);
+}
+
+.msg-tool-diff-code {
+  padding: 1px 10px;
+  white-space: pre-wrap;
+  word-break: break-word;
 }
 
 /* Blockquote */

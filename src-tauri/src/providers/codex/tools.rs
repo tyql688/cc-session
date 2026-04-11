@@ -84,23 +84,6 @@ pub fn extract_tool_output(raw: &str) -> String {
     raw.to_string()
 }
 
-/// Map Codex function names to display names matching our UI conventions.
-pub fn map_codex_tool_name(name: &str) -> &str {
-    match name {
-        "exec_command" => "Bash",
-        "apply_patch" => "Apply_patch",
-        "view_image" => "Image",
-        "update_plan" => "Plan",
-        "spawn_agent" | "wait_agent" | "close_agent" => "Agent",
-        "write_stdin" => "Stdin",
-        _ if name.starts_with("mcp__") => {
-            // e.g. mcp__playwright__browser_click -> last segment
-            name.rsplit("__").next().unwrap_or(name)
-        }
-        _ => name,
-    }
-}
-
 pub fn strip_inline_image_sources(text: &str) -> String {
     if !text.contains("[Image: source:") {
         return text.to_string();

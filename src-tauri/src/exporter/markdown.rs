@@ -1,7 +1,7 @@
 use std::fs;
 use std::path::Path;
 
-use crate::models::{MessageRole, SessionDetail};
+use crate::models::{Message, MessageRole, SessionDetail};
 
 fn role_label(role: &MessageRole) -> &'static str {
     match role {
@@ -22,6 +22,17 @@ fn format_date(epoch: i64) -> String {
         .unwrap_or_default()
 }
 
+fn should_render_message(msg: &Message) -> bool {
+    match msg.role {
+        MessageRole::Tool => {
+            msg.tool_name.as_deref().is_some_and(|s| !s.is_empty())
+                || msg.tool_input.as_deref().is_some_and(|s| !s.is_empty())
+                || !msg.content.trim().is_empty()
+        }
+        _ => !msg.content.trim().is_empty(),
+    }
+}
+
 pub fn render(detail: &SessionDetail) -> String {
     let mut out = String::new();
 
@@ -38,7 +49,11 @@ pub fn render(detail: &SessionDetail) -> String {
     out.push_str(&format!("- **Session ID**: {}\n\n", detail.meta.id));
     out.push_str("---\n\n");
 
-    for msg in &detail.messages {
+    for msg in detail
+        .messages
+        .iter()
+        .filter(|msg| should_render_message(msg))
+    {
         let role = role_label(&msg.role);
         let ts = msg.timestamp.as_deref().unwrap_or("");
         out.push_str(&format!("### {role} {ts}\n\n"));

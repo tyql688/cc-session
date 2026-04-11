@@ -1,29 +1,7 @@
 import { createSignal, Show, For } from "solid-js";
 import type { Message, Provider } from "../lib/types";
-import { MessageBubble, formatMcpLabel } from "./MessageBubble";
-
-const TOOL_ICONS: Record<string, string> = {
-  Read: "📄",
-  Edit: "✏️",
-  Apply_patch: "✏️",
-  Plan: "📋",
-  Write: "📝",
-  Bash: "💻",
-  Glob: "🔍",
-  Grep: "🔎",
-  Agent: "🤖",
-  WebSearch: "🌐",
-  WebFetch: "🌐",
-  TaskCreate: "📋",
-  TaskUpdate: "📋",
-  Skill: "⚡",
-  mcp: "🔌",
-};
-
-function toolIcon(name: string): string {
-  if (name.startsWith("mcp__")) return TOOL_ICONS.mcp;
-  return TOOL_ICONS[name] || "⚙";
-}
+import { toolDisplayName, toolIcon } from "../lib/tools";
+import { MessageBubble } from "./MessageBubble";
 
 export function MergedToolRow(props: {
   tools: string[];
@@ -36,9 +14,12 @@ export function MergedToolRow(props: {
   const label = () =>
     props.tools.length > 0
       ? props.tools
-          .map((t) => {
-            const name = formatMcpLabel(t);
-            return `${toolIcon(name)} ${name}`;
+          .map((toolName, index) => {
+            const metadata = props.messages[index]?.tool_metadata;
+            return `${toolIcon(toolName, metadata)} ${toolDisplayName(
+              toolName,
+              metadata,
+            )}`;
           })
           .join(", ")
       : "tools";

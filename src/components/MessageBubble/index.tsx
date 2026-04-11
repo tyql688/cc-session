@@ -85,7 +85,9 @@ export function MessageBubble(props: {
     const msg = props.message;
     if (msg.role === "tool") {
       // Hide tool_result entries (toulu_ IDs from Anthropic API)
-      if (msg.tool_name?.startsWith("toolu_")) return true;
+      if (msg.tool_name?.startsWith("toolu_") && !msg.tool_metadata) {
+        return true;
+      }
       return !msg.content && !msg.tool_input && !msg.tool_name;
     }
     return !msg.content || msg.content.trim().length === 0;

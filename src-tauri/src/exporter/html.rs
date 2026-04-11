@@ -4,19 +4,7 @@ use std::path::Path;
 use base64::engine::general_purpose::STANDARD as BASE64;
 use base64::Engine as _;
 
-use crate::models::{MessageRole, Provider, SessionDetail};
-
-/// Truncate a string at a char boundary, avoiding panic on multi-byte UTF-8.
-fn truncate_char_boundary(s: &str, max: usize) -> &str {
-    if s.len() <= max {
-        return s;
-    }
-    let mut end = max;
-    while end > 0 && !s.is_char_boundary(end) {
-        end -= 1;
-    }
-    &s[..end]
-}
+use crate::models::{Message, MessageRole, Provider, SessionDetail};
 
 fn html_escape(s: &str) -> String {
     s.replace('&', "&amp;")
@@ -160,245 +148,7 @@ fn render_content(raw: &str) -> String {
 
 /// Render tool_input JSON as a structured HTML summary.
 pub(crate) fn render_tool_detail(tool_name: &str, tool_input: &str) -> String {
-    // Apply_patch: raw patch text, not JSON
-    if tool_name == "Apply_patch" && tool_input.contains("*** Begin Patch") {
-        // Extract file path from patch header
-        let file_line = tool_input
-            .lines()
-            .find(|l| {
-                l.starts_with("*** Add File:")
-                    || l.starts_with("*** Update File:")
-                    || l.starts_with("*** Delete File:")
-            })
-            .and_then(|l| l.split(':').nth(1))
-            .map(|s| s.trim());
-        let mut html = String::new();
-        if let Some(fp) = file_line {
-            html.push_str(&format!(
-                r#"<div class="tool-field"><span class="tool-field-label">file</span><span class="tool-field-value">{}</span></div>"#,
-                html_escape(fp)
-            ));
-        }
-        html.push_str(&format!(
-            r#"<pre class="tool-raw">{}</pre>"#,
-            html_escape(tool_input)
-        ));
-        return html;
-    }
-
-    let parsed: Result<serde_json::Value, _> = serde_json::from_str(tool_input);
-    let obj = match parsed {
-        Ok(serde_json::Value::Object(m)) => m,
-        _ => {
-            return format!(r#"<pre class="tool-raw">{}</pre>"#, html_escape(tool_input));
-        }
-    };
-
-    let mut html = String::new();
-
-    match tool_name {
-        "Edit" => {
-            if let Some(fp) = obj.get("file_path").and_then(|v| v.as_str()) {
-                html.push_str(&format!(
-                    r#"<div class="tool-field"><span class="tool-field-label">file</span><span class="tool-field-value">{}</span></div>"#,
-                    html_escape(fp)
-                ));
-            }
-            if let Some(old) = obj.get("old_string").and_then(|v| v.as_str()) {
-                html.push_str(&format!(
-                    r#"<div class="tool-diff tool-diff-old"><span class="tool-diff-label">−</span><pre>{}</pre></div>"#,
-                    html_escape(old)
-                ));
-            }
-            if let Some(new) = obj.get("new_string").and_then(|v| v.as_str()) {
-                html.push_str(&format!(
-                    r#"<div class="tool-diff tool-diff-new"><span class="tool-diff-label">+</span><pre>{}</pre></div>"#,
-                    html_escape(new)
-                ));
-            }
-        }
-        "Bash" => {
-            let cmd = obj
-                .get("command")
-                .or_else(|| obj.get("cmd"))
-                .and_then(|v| v.as_str());
-            if let Some(cmd) = cmd {
-                html.push_str(&format!(
-                    r#"<div class="tool-field"><span class="tool-field-label">$</span><pre class="tool-cmd">{}</pre></div>"#,
-                    html_escape(cmd)
-                ));
-            }
-        }
-        "Plan" => {
-            if let Some(explanation) = obj.get("explanation").and_then(|v| v.as_str()) {
-                html.push_str(&format!(
-                    r#"<div class="tool-field"><span class="tool-field-label">explanation</span><span class="tool-field-value">{}</span></div>"#,
-                    html_escape(explanation)
-                ));
-            }
-            if let Some(plan) = obj.get("plan").and_then(|v| v.as_array()) {
-                html.push_str(r#"<div class="tool-plan">"#);
-                for step in plan {
-                    let text = step.get("step").and_then(|s| s.as_str()).unwrap_or("");
-                    let status = step.get("status").and_then(|s| s.as_str()).unwrap_or("");
-                    let icon = match status {
-                        "completed" => "✓",
-                        "in_progress" => "▸",
-                        _ => "○",
-                    };
-                    let cls = match status {
-                        "completed" => "plan-done",
-                        "in_progress" => "plan-active",
-                        _ => "plan-pending",
-                    };
-                    html.push_str(&format!(
-                        r#"<div class="plan-step {cls}"><span class="plan-icon">{icon}</span> {}</div>"#,
-                        html_escape(text)
-                    ));
-                }
-                html.push_str("</div>");
-            }
-        }
-        "Read" | "Write" => {
-            if let Some(fp) = obj.get("file_path").and_then(|v| v.as_str()) {
-                html.push_str(&format!(
-                    r#"<div class="tool-field"><span class="tool-field-label">file</span><span class="tool-field-value">{}</span></div>"#,
-                    html_escape(fp)
-                ));
-            }
-        }
-        "Grep" | "Glob" => {
-            if let Some(p) = obj.get("pattern").and_then(|v| v.as_str()) {
-                html.push_str(&format!(
-                    r#"<div class="tool-field"><span class="tool-field-label">pattern</span><span class="tool-field-value">{}</span></div>"#,
-                    html_escape(p)
-                ));
-            }
-            if let Some(path) = obj.get("path").and_then(|v| v.as_str()) {
-                html.push_str(&format!(
-                    r#"<div class="tool-field"><span class="tool-field-label">path</span><span class="tool-field-value">{}</span></div>"#,
-                    html_escape(path)
-                ));
-            }
-        }
-        _ => {
-            // Generic: show first few string fields
-            let mut count = 0;
-            for (k, v) in &obj {
-                if count >= 3 {
-                    break;
-                }
-                if let Some(s) = v.as_str() {
-                    html.push_str(&format!(
-                        r#"<div class="tool-field"><span class="tool-field-label">{}</span><span class="tool-field-value">{}</span></div>"#,
-                        html_escape(k), html_escape(s)
-                    ));
-                    count += 1;
-                }
-            }
-        }
-    }
-
-    html
-}
-
-fn tool_icon(name: &str) -> &'static str {
-    match name {
-        "Read" => "📄",
-        "Edit" | "Apply_patch" => "✏️",
-        "Write" => "📝",
-        "Bash" => "💻",
-        "Glob" => "🔍",
-        "Grep" => "🔎",
-        "Agent" => "🤖",
-        "Plan" => "📋",
-        _ => "⚙",
-    }
-}
-
-/// Short display name from file_path or command.
-fn tool_summary(name: &str, input: &str) -> String {
-    // Apply_patch: raw patch text, extract file path
-    if name == "Apply_patch" {
-        return input
-            .lines()
-            .find(|l| {
-                l.starts_with("*** Add File:")
-                    || l.starts_with("*** Update File:")
-                    || l.starts_with("*** Delete File:")
-            })
-            .and_then(|l| l.split(':').nth(1))
-            .map(|s| {
-                let p = s.trim();
-                let path = Path::new(p);
-                let components: Vec<&str> = path
-                    .iter()
-                    .rev()
-                    .take(2)
-                    .collect::<Vec<_>>()
-                    .into_iter()
-                    .rev()
-                    .map(|c| c.to_str().unwrap_or(""))
-                    .collect();
-                components.join("/")
-            })
-            .unwrap_or_default();
-    }
-
-    let parsed: Result<serde_json::Value, _> = serde_json::from_str(input);
-    let obj = match parsed {
-        Ok(serde_json::Value::Object(m)) => m,
-        _ => return String::new(),
-    };
-    match name {
-        "Read" | "Edit" | "Write" => obj
-            .get("file_path")
-            .and_then(|v| v.as_str())
-            .map(|p| {
-                let path = Path::new(p);
-                let components: Vec<&str> = path
-                    .iter()
-                    .rev()
-                    .take(2)
-                    .collect::<Vec<_>>()
-                    .into_iter()
-                    .rev()
-                    .map(|c| c.to_str().unwrap_or(""))
-                    .collect();
-                components.join("/")
-            })
-            .unwrap_or_default(),
-        "Bash" => obj
-            .get("description")
-            .or_else(|| obj.get("command"))
-            .or_else(|| obj.get("cmd"))
-            .and_then(|v| v.as_str())
-            .map(|s| {
-                if s.len() > 60 {
-                    format!("{}...", truncate_char_boundary(s, 57))
-                } else {
-                    s.to_string()
-                }
-            })
-            .unwrap_or_default(),
-        "Grep" | "Glob" => obj
-            .get("pattern")
-            .and_then(|v| v.as_str())
-            .unwrap_or("")
-            .to_string(),
-        "Plan" => obj
-            .get("explanation")
-            .and_then(|v| v.as_str())
-            .map(|s| {
-                if s.len() > 60 {
-                    format!("{}...", truncate_char_boundary(s, 57))
-                } else {
-                    s.to_string()
-                }
-            })
-            .unwrap_or_default(),
-        _ => String::new(),
-    }
+    super::tool_html::render_tool_input_detail(tool_name, tool_input)
 }
 
 fn user_avatar_svg() -> &'static str {
@@ -416,6 +166,10 @@ fn role_label(role: &MessageRole) -> &'static str {
         MessageRole::Tool => "Tool",
         MessageRole::System => "System",
     }
+}
+
+fn should_render_non_tool_message(msg: &Message) -> bool {
+    !msg.content.trim().is_empty()
 }
 
 fn format_timestamp(epoch: i64) -> String {
@@ -509,6 +263,10 @@ pub fn render(detail: &SessionDetail) -> String {
 
     let mut messages_html = String::new();
     for (i, msg) in detail.messages.iter().enumerate() {
+        if msg.role != MessageRole::Tool && !should_render_non_tool_message(msg) {
+            continue;
+        }
+
         let ts = msg
             .timestamp
             .as_deref()
@@ -573,18 +331,23 @@ pub fn render(detail: &SessionDetail) -> String {
             }
             MessageRole::Tool => {
                 let name = msg.tool_name.as_deref().unwrap_or("tool");
-                // Skip tool_result entries (toolu_ IDs from Anthropic API)
-                if name.starts_with("toolu_") {
+                let metadata = msg.tool_metadata.as_ref();
+                if super::tool_html::should_skip_tool(name, metadata) {
                     continue;
                 }
-                let icon = tool_icon(name);
+                let icon = super::tool_html::tool_icon(name, metadata);
+                let display_name = super::tool_html::tool_display_name(name, metadata);
                 let has_input = msg
                     .tool_input
                     .as_ref()
                     .is_some_and(|s| !s.trim().is_empty());
                 let has_output = !msg.content.trim().is_empty();
-                let summary = if has_input {
-                    tool_summary(name, msg.tool_input.as_deref().unwrap_or(""))
+                let summary = if has_input || metadata.is_some() {
+                    super::tool_html::tool_summary(
+                        name,
+                        msg.tool_input.as_deref().unwrap_or(""),
+                        metadata,
+                    )
                 } else {
                     String::new()
                 };
@@ -598,13 +361,22 @@ pub fn render(detail: &SessionDetail) -> String {
                 };
 
                 let mut detail_html = String::new();
+                let result_detail = super::tool_html::render_tool_result_detail(metadata);
+                let result_has_diff =
+                    result_detail.contains("tool-line-diff") || result_detail.contains("tool-diff");
                 if has_input {
-                    detail_html.push_str(&render_tool_detail(
-                        name,
-                        msg.tool_input.as_deref().unwrap_or(""),
+                    let input_detail =
+                        render_tool_detail(name, msg.tool_input.as_deref().unwrap_or(""));
+                    if !result_has_diff {
+                        detail_html.push_str(&input_detail);
+                    }
+                }
+                if !result_detail.is_empty() {
+                    detail_html.push_str(&format!(
+                        r#"<div class="tool-result-detail">{result_detail}</div>"#
                     ));
                 }
-                if has_output {
+                if has_output && !super::tool_html::suppress_raw_output(metadata, result_has_diff) {
                     let content_html = render_content(&msg.content);
                     detail_html
                         .push_str(&format!(r#"<div class="tool-output">{content_html}</div>"#));
@@ -613,14 +385,14 @@ pub fn render(detail: &SessionDetail) -> String {
                 if detail_html.is_empty() {
                     messages_html.push_str(&format!(
                         r#"<div class="msg msg-tool">
-  <div class="tool-block-closed"><span class="tool-icon">{icon}</span><span class="tool-name">{name}</span>{summary_html}</div>
+  <div class="tool-block-closed"><span class="tool-icon">{icon}</span><span class="tool-name">{display_name}</span>{summary_html}</div>
 </div>"#
                     ));
                 } else {
                     messages_html.push_str(&format!(
                         r#"<div class="msg msg-tool">
   <details class="tool-block">
-    <summary class="tool-summary"><span class="tool-icon">{icon}</span><span class="tool-name">{name}</span>{summary_html}</summary>
+    <summary class="tool-summary"><span class="tool-icon">{icon}</span><span class="tool-name">{display_name}</span>{summary_html}</summary>
     <div class="tool-content">{detail_html}</div>
   </details>
 </div>"#

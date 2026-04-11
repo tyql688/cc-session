@@ -390,6 +390,7 @@ impl SessionProvider for OpenCodeProvider {
                             token_usage: None,
                             model: None,
                             usage_hash: None,
+                            tool_metadata: None,
                         });
                     }
 
@@ -409,6 +410,7 @@ impl SessionProvider for OpenCodeProvider {
                                         token_usage: None,
                                         model: None,
                                         usage_hash: None,
+                                        tool_metadata: None,
                                     });
                                 }
                             }
@@ -451,6 +453,7 @@ impl SessionProvider for OpenCodeProvider {
                                             token_usage: None,
                                             model: None,
                                             usage_hash: None,
+                                            tool_metadata: None,
                                         });
                                     }
                                 }
@@ -503,6 +506,7 @@ impl SessionProvider for OpenCodeProvider {
                                     token_usage: None,
                                     model: None,
                                     usage_hash: None,
+                                    tool_metadata: None,
                                 });
                             }
                             // Skip step-start, step-finish, reasoning, snapshot, patch, etc.
@@ -530,6 +534,7 @@ impl SessionProvider for OpenCodeProvider {
                             },
                             model: msg_model.clone(),
                             usage_hash: None,
+                            tool_metadata: None,
                         });
                     }
 
@@ -562,6 +567,7 @@ impl SessionProvider for OpenCodeProvider {
                             token_usage,
                             model: msg_model,
                             usage_hash: None,
+                            tool_metadata: None,
                         });
                     }
                 }

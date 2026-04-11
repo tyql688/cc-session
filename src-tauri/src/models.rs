@@ -1,4 +1,6 @@
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
+use std::collections::BTreeMap;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
 #[serde(rename_all = "lowercase")]
@@ -64,6 +66,33 @@ pub struct TokenUsage {
     pub cache_read_input_tokens: u32,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct McpToolMetadata {
+    pub server: String,
+    pub tool: String,
+    pub display: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct ToolMetadata {
+    pub raw_name: String,
+    pub canonical_name: String,
+    pub display_name: String,
+    pub category: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub summary: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub status: Option<String>,
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub ids: BTreeMap<String, String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub mcp: Option<McpToolMetadata>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub result_kind: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub structured: Option<Value>,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Message {
     pub role: MessageRole,
@@ -71,6 +100,8 @@ pub struct Message {
     pub timestamp: Option<String>,
     pub tool_name: Option<String>,
     pub tool_input: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub tool_metadata: Option<ToolMetadata>,
     pub token_usage: Option<TokenUsage>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub model: Option<String>,
