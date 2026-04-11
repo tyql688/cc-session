@@ -6,19 +6,33 @@ export type ProcessedEntry =
   | { key: string; type: "time-sep"; time: string }
   | { key: string; type: "merged-tools"; tools: string[]; messages: Message[] };
 
+export function isRenderableMessage(msg: Message): boolean {
+  if (msg.role === "tool") {
+    // Hide orphaned Anthropic tool result ids when no metadata could recover
+    // a useful display name.
+    if (msg.tool_name?.startsWith("toolu_") && !msg.tool_metadata) {
+      return false;
+    }
+    return !!msg.content || !!msg.tool_input || !!msg.tool_name;
+  }
+
+  return msg.content.trim().length > 0;
+}
+
 export function processMessages(msgs: Message[]): ProcessedEntry[] {
   const entries: ProcessedEntry[] = [];
+  const renderableMsgs = msgs.filter(isRenderableMessage);
   let i = 0;
 
-  while (i < msgs.length) {
-    const msg = msgs[i];
+  while (i < renderableMsgs.length) {
+    const msg = renderableMsgs[i];
 
     // Try to merge consecutive tool messages
     if (msg.role === "tool") {
       const toolGroup: Message[] = [msg];
       let j = i + 1;
-      while (j < msgs.length && msgs[j].role === "tool") {
-        toolGroup.push(msgs[j]);
+      while (j < renderableMsgs.length && renderableMsgs[j].role === "tool") {
+        toolGroup.push(renderableMsgs[j]);
         j++;
       }
       if (toolGroup.length > 1) {

@@ -5,7 +5,7 @@ use serde::Deserialize;
 use serde_json::json;
 
 use cc_session_lib::models::{
-    Message, MessageRole, Provider, SessionDetail, SessionMeta, ToolMetadata,
+    Message, MessageRole, Provider, SessionDetail, SessionMeta, TokenUsage, ToolMetadata,
 };
 
 #[derive(Deserialize)]
@@ -98,6 +98,25 @@ fn tool_message_with_content(
         token_usage: None,
         model: None,
         usage_hash: None,
+    }
+}
+
+fn assistant_message(content: &str) -> Message {
+    Message {
+        role: MessageRole::Assistant,
+        content: content.to_string(),
+        timestamp: Some("2026-04-11T02:25:16.628Z".to_string()),
+        tool_name: None,
+        tool_input: None,
+        tool_metadata: None,
+        token_usage: Some(TokenUsage {
+            input_tokens: 1,
+            output_tokens: 2,
+            cache_creation_input_tokens: 3,
+            cache_read_input_tokens: 4,
+        }),
+        model: Some("claude-opus-4-6".to_string()),
+        usage_hash: Some("msg:req".to_string()),
     }
 }
 
@@ -214,6 +233,33 @@ fn test_render_session_html_uses_tool_metadata() {
         1,
         "structured file_patch output should appear only for the MCP sample, not the Edit diff"
     );
+}
+
+#[test]
+fn test_render_session_html_skips_usage_only_assistant_placeholders() {
+    let detail = test_session(vec![
+        assistant_message(""),
+        assistant_message("Visible reply"),
+    ]);
+
+    let html = cc_session_lib::exporter_test_helpers::render_session_html_pub(&detail);
+
+    assert_eq!(html.matches("msg-assistant").count(), 1);
+    assert!(html.contains("Visible reply"));
+    assert!(!html.contains(r#"<div class="msg-body"></div>"#));
+}
+
+#[test]
+fn test_render_session_markdown_skips_usage_only_assistant_placeholders() {
+    let detail = test_session(vec![
+        assistant_message(""),
+        assistant_message("Visible reply"),
+    ]);
+
+    let markdown = cc_session_lib::exporter_test_helpers::render_session_markdown_pub(&detail);
+
+    assert_eq!(markdown.matches("### Assistant").count(), 1);
+    assert!(markdown.contains("Visible reply"));
 }
 
 #[test]

@@ -4,7 +4,7 @@ use std::path::Path;
 use base64::engine::general_purpose::STANDARD as BASE64;
 use base64::Engine as _;
 
-use crate::models::{MessageRole, Provider, SessionDetail};
+use crate::models::{Message, MessageRole, Provider, SessionDetail};
 
 fn html_escape(s: &str) -> String {
     s.replace('&', "&amp;")
@@ -168,6 +168,10 @@ fn role_label(role: &MessageRole) -> &'static str {
     }
 }
 
+fn should_render_non_tool_message(msg: &Message) -> bool {
+    !msg.content.trim().is_empty()
+}
+
 fn format_timestamp(epoch: i64) -> String {
     chrono::DateTime::from_timestamp(epoch, 0).map_or_else(
         || "—".to_string(),
@@ -259,6 +263,10 @@ pub fn render(detail: &SessionDetail) -> String {
 
     let mut messages_html = String::new();
     for (i, msg) in detail.messages.iter().enumerate() {
+        if msg.role != MessageRole::Tool && !should_render_non_tool_message(msg) {
+            continue;
+        }
+
         let ts = msg
             .timestamp
             .as_deref()

@@ -22,6 +22,10 @@ pub mod exporter_test_helpers {
         crate::exporter::html::render(detail)
     }
 
+    pub fn render_session_markdown_pub(detail: &crate::models::SessionDetail) -> String {
+        crate::exporter::markdown::render(detail)
+    }
+
     pub fn render_tool_detail_pub(tool_name: &str, tool_input: &str) -> String {
         crate::exporter::html::render_tool_detail(tool_name, tool_input)
     }
