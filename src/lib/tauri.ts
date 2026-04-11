@@ -162,6 +162,10 @@ export async function readImageBase64(path: string): Promise<string> {
   return invoke<string>("read_image_base64", { path });
 }
 
+export async function readToolResultText(path: string): Promise<string> {
+  return invoke<string>("read_tool_result_text", { path });
+}
+
 export async function openInFolder(path: string): Promise<void> {
   return invoke<void>("open_in_folder", { path });
 }

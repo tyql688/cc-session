@@ -9,6 +9,7 @@ pub mod provider_utils;
 pub mod providers;
 mod services;
 mod terminal;
+pub mod tool_metadata;
 pub mod trash_state;
 mod watcher;
 
@@ -279,6 +280,7 @@ pub fn run() {
             commands::list_favorites,
             commands::is_favorite,
             commands::read_image_base64,
+            commands::read_tool_result_text,
             commands::open_in_folder,
             commands::open_external,
             commands::get_usage_stats,

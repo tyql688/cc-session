@@ -49,12 +49,32 @@ export interface TokenUsage {
   cache_read_input_tokens: number;
 }
 
+export interface McpToolMetadata {
+  server: string;
+  tool: string;
+  display: string;
+}
+
+export interface ToolMetadata {
+  raw_name: string;
+  canonical_name: string;
+  display_name: string;
+  category: string;
+  summary?: string;
+  status?: string;
+  ids?: Record<string, string>;
+  mcp?: McpToolMetadata;
+  result_kind?: string;
+  structured?: unknown;
+}
+
 export interface Message {
   role: MessageRole;
   content: string;
   timestamp: string | null;
   tool_name: string | null;
   tool_input: string | null;
+  tool_metadata?: ToolMetadata;
   token_usage: TokenUsage | null;
   model?: string;
 }

@@ -300,6 +300,59 @@ pub fn read_image_base64(path: String) -> Result<String, String> {
     Ok(format!("data:{mime};base64,{b64}"))
 }
 
+fn read_tool_result_canonical_allowed(canonical: &Path) -> bool {
+    if !canonical
+        .components()
+        .any(|component| component.as_os_str() == "tool-results")
+    {
+        return false;
+    }
+
+    let Some(home) = dirs::home_dir() else {
+        return false;
+    };
+    [home.join(".claude"), home.join(".cc-mirror")]
+        .iter()
+        .any(|base| match base.canonicalize() {
+            Ok(base) => canonical.starts_with(base),
+            Err(_) => canonical.starts_with(base),
+        })
+}
+
+#[tauri::command]
+pub fn read_tool_result_text(path: String) -> Result<String, String> {
+    const MAX_TOOL_RESULT_BYTES: u64 = 1_000_000;
+
+    let path = path.trim().trim_start_matches('\u{feff}').to_string();
+    let p = Path::new(&path);
+    if !p.exists() {
+        return Err(format!("tool result not found: {path}"));
+    }
+
+    let canonical = p
+        .canonicalize()
+        .map_err(|e| format!("failed to resolve tool result '{path}': {e}"))?;
+    if !read_tool_result_canonical_allowed(&canonical) {
+        log::warn!(
+            "read_tool_result_text denied (outside tool-results): {}",
+            canonical.display()
+        );
+        return Err(format!("tool result path not allowed: {path}"));
+    }
+
+    let metadata = std::fs::metadata(&canonical)
+        .map_err(|e| format!("failed to inspect tool result {path}: {e}"))?;
+    if metadata.len() > MAX_TOOL_RESULT_BYTES {
+        return Err(format!(
+            "tool result is too large to preview ({} bytes)",
+            metadata.len()
+        ));
+    }
+
+    std::fs::read_to_string(&canonical)
+        .map_err(|e| format!("failed to read tool result {path}: {e}"))
+}
+
 #[tauri::command]
 pub fn open_in_folder(path: String) -> Result<(), String> {
     let p = Path::new(&path);

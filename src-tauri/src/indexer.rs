@@ -487,6 +487,7 @@ mod tests {
                 token_usage: token_usage(100, 50),
                 model: None,
                 usage_hash: None,
+                tool_metadata: None,
             }],
         );
 
@@ -508,6 +509,7 @@ mod tests {
                 token_usage: token_usage(25, 10),
                 model: None,
                 usage_hash: None,
+                tool_metadata: None,
             }],
         );
 
@@ -535,6 +537,7 @@ mod tests {
                     token_usage: None,
                     model: Some("claude-opus-4-6".into()),
                     usage_hash: None,
+                    tool_metadata: None,
                 },
                 Message {
                     role: MessageRole::Tool,
@@ -545,6 +548,7 @@ mod tests {
                     token_usage: token_usage(100, 50),
                     model: None,
                     usage_hash: None,
+                    tool_metadata: None,
                 },
             ],
         );
@@ -574,6 +578,7 @@ mod tests {
                 token_usage: token_usage(10, 5),
                 model: Some("claude-opus-4-6".into()),
                 usage_hash: None,
+                tool_metadata: None,
             }],
         );
 
@@ -593,6 +598,7 @@ mod tests {
             token_usage: token_usage(100, 50),
             model: Some("claude-opus-4-6".into()),
             usage_hash: Some("msg-1:req-1".into()),
+            tool_metadata: None,
         };
 
         let first = make_session(Some("claude-opus-4-6"), vec![make_message()]);

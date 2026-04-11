@@ -180,6 +180,7 @@ pub fn parse_session_file(path: &PathBuf) -> Option<ParsedSession> {
                         token_usage: None,
                         model: None,
                         usage_hash: None,
+                        tool_metadata: None,
                     });
                 }
             }
@@ -196,6 +197,7 @@ pub fn parse_session_file(path: &PathBuf) -> Option<ParsedSession> {
                             token_usage: None,
                             model: None,
                             usage_hash: None,
+                            tool_metadata: None,
                         });
                     }
                 }
@@ -231,6 +233,7 @@ pub fn parse_session_file(path: &PathBuf) -> Option<ParsedSession> {
                         token_usage: token_usage.clone(),
                         model: None,
                         usage_hash: None,
+                        tool_metadata: None,
                     });
                 }
 
@@ -272,6 +275,7 @@ pub fn parse_session_file(path: &PathBuf) -> Option<ParsedSession> {
                             token_usage: tool_usage,
                             model: None,
                             usage_hash: None,
+                            tool_metadata: None,
                         });
                         if !call_id.is_empty() {
                             call_id_map.insert(call_id, idx);
@@ -332,6 +336,7 @@ pub fn parse_session_file(path: &PathBuf) -> Option<ParsedSession> {
                     token_usage: None,
                     model: None,
                     usage_hash: None,
+                    tool_metadata: None,
                 });
                 if !call_id.is_empty() {
                     call_id_map.insert(call_id, idx);

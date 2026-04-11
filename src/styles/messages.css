@@ -862,6 +862,10 @@
   border-top: 1px solid var(--border-subtle);
 }
 
+.msg-tool-result-detail {
+  background: color-mix(in srgb, var(--bg-tab-hover) 45%, transparent);
+}
+
 .msg-tool-field {
   display: flex;
   gap: 8px;

@@ -234,6 +234,7 @@ impl CodexProvider {
                                 token_usage: None,
                                 model: msg_model,
                                 usage_hash: None,
+                                tool_metadata: None,
                             });
                         }
                         "function_call" => {
@@ -275,6 +276,7 @@ impl CodexProvider {
                                             token_usage: None,
                                             model: None,
                                             usage_hash: None,
+                                            tool_metadata: None,
                                         });
                                         continue;
                                     }
@@ -311,6 +313,7 @@ impl CodexProvider {
                                 token_usage: None,
                                 model: None,
                                 usage_hash: None,
+                                tool_metadata: None,
                             });
                         }
                         "function_call_output" => {
@@ -344,6 +347,7 @@ impl CodexProvider {
                                 token_usage: None,
                                 model: None,
                                 usage_hash: None,
+                                tool_metadata: None,
                             });
                         }
                         "custom_tool_call" => {
@@ -373,6 +377,7 @@ impl CodexProvider {
                                 token_usage: None,
                                 model: None,
                                 usage_hash: None,
+                                tool_metadata: None,
                             });
                         }
                         "custom_tool_call_output" => {
@@ -401,6 +406,7 @@ impl CodexProvider {
                                     token_usage: None,
                                     model: None,
                                     usage_hash: None,
+                                    tool_metadata: None,
                                 });
                             }
                         }
@@ -770,6 +776,7 @@ fn append_user_message(
         token_usage: None,
         model: None,
         usage_hash: None,
+        tool_metadata: None,
     });
 }
 

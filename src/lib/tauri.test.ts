@@ -73,6 +73,16 @@ describe("tauri api wrappers", () => {
     expect(invoke).toHaveBeenCalledWith("get_provider_snapshots");
   });
 
+  it("readToolResultText sends path", async () => {
+    const { readToolResultText } = await import("./tauri");
+
+    await readToolResultText("/tmp/tool-results/out.txt");
+
+    expect(invoke).toHaveBeenCalledWith("read_tool_result_text", {
+      path: "/tmp/tool-results/out.txt",
+    });
+  });
+
   it("exportSessionsBatch sends string ids instead of tuple payloads", async () => {
     const { exportSessionsBatch } = await import("./tauri");
 

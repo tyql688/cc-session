@@ -5,18 +5,20 @@ use std::path::{Path, PathBuf};
 
 use serde_json::Value;
 
-use crate::models::{Message, MessageRole, TokenUsage};
+use crate::models::{Message, MessageRole, Provider, TokenUsage};
 use crate::provider::ParsedSession;
 use crate::provider_utils::{
     is_system_content, parse_rfc3339_timestamp, project_name_from_path, session_title,
     truncate_to_bytes, FTS_CONTENT_LIMIT,
+};
+use crate::tool_metadata::{
+    build_tool_metadata, canonical_tool_name, enrich_tool_metadata, ToolCallFacts, ToolResultFacts,
 };
 
 use super::images::{
     contains_image_placeholder_without_source, contains_image_source,
     merge_image_placeholders_with_sources, normalize_image_source_segments,
 };
-use crate::models::Provider;
 
 /// Shared mutable state threaded through the per-message-type handlers.
 struct ParseState {
@@ -25,6 +27,7 @@ struct ParseState {
     first_user_message: Option<String>,
     pending_user_message: Option<(String, Option<String>)>,
     tool_use_id_map: HashMap<String, usize>,
+    assistant_tool_indices_by_uuid: HashMap<String, Vec<usize>>,
 }
 
 fn preserves_pending_user_message(line_type: &str) -> bool {
@@ -63,6 +66,7 @@ pub fn parse_session_file(path: &PathBuf) -> Option<ParsedSession> {
         first_user_message: None,
         pending_user_message: None,
         tool_use_id_map: HashMap::new(),
+        assistant_tool_indices_by_uuid: HashMap::new(),
     };
     let mut summary_text: Option<String> = None;
     let mut custom_title: Option<String> = None;
@@ -322,6 +326,49 @@ fn unique_hash_from_entry(entry: &Value) -> Option<String> {
     Some(format!("{message_id}:{request_id}"))
 }
 
+fn infer_tool_name_from_result(result: Option<&Value>) -> Option<String> {
+    let result = result?;
+    if result.get("oldString").is_some() && result.get("newString").is_some() {
+        return Some("Edit".to_string());
+    }
+    if result.get("stdout").is_some() || result.get("stderr").is_some() {
+        return Some("Bash".to_string());
+    }
+    if result.get("matches").is_some() && result.get("total_deferred_tools").is_some() {
+        return Some("ToolSearch".to_string());
+    }
+    if result.get("taskId").is_some() && result.get("updatedFields").is_some() {
+        return Some("TaskUpdate".to_string());
+    }
+    if result.get("task").is_some() {
+        return Some("TaskCreate".to_string());
+    }
+    if result.get("agentId").is_some() {
+        return Some("Agent".to_string());
+    }
+    if result.get("url").is_some() && result.get("durationMs").is_some() {
+        return Some("WebFetch".to_string());
+    }
+    if result.get("filePath").is_some() {
+        return Some("Write".to_string());
+    }
+    None
+}
+
+fn tool_result_facts<'a>(
+    result_item: &'a Value,
+    top_level_result: Option<&'a Value>,
+) -> ToolResultFacts<'a> {
+    ToolResultFacts {
+        raw_result: top_level_result,
+        is_error: result_item.get("is_error").and_then(|v| v.as_bool()),
+        status: None,
+        artifact_path: top_level_result
+            .and_then(|v| v.get("persistedOutputPath"))
+            .and_then(|v| v.as_str()),
+    }
+}
+
 /// Handle a "user" line, which may be a real user message or a tool_result turn.
 fn handle_user_message(entry: &Value, state: &mut ParseState, timestamp: Option<String>) {
     let msg = match entry.get("message") {
@@ -332,7 +379,7 @@ fn handle_user_message(entry: &Value, state: &mut ParseState, timestamp: Option<
     // Check if this "user" entry is actually a tool_result
     // (the Anthropic API sends tool results as user-role turns)
     if is_tool_result_message(msg) {
-        handle_tool_result(msg, state, &timestamp);
+        handle_tool_result(entry, msg, state, &timestamp);
         return;
     }
 
@@ -386,8 +433,14 @@ fn handle_user_message(entry: &Value, state: &mut ParseState, timestamp: Option<
 }
 
 /// Merge tool_result blocks from a user-role turn into their matching tool_use messages.
-fn handle_tool_result(msg: &Value, state: &mut ParseState, timestamp: &Option<String>) {
+fn handle_tool_result(
+    entry: &Value,
+    msg: &Value,
+    state: &mut ParseState,
+    timestamp: &Option<String>,
+) {
     flush_pending(state);
+    let top_level_result = entry.get("toolUseResult");
     // Merge each tool_result into its matching tool_use message
     if let Some(Value::Array(arr)) = msg.get("content") {
         for result_item in arr {
@@ -395,22 +448,70 @@ fn handle_tool_result(msg: &Value, state: &mut ParseState, timestamp: &Option<St
                 continue;
             }
             let result_text = extract_tool_result_content(result_item);
-            if result_text.trim().is_empty() {
+            if result_text.trim().is_empty() && top_level_result.is_none() {
                 continue;
             }
-            state.content_parts.push(result_text.clone());
+            if !result_text.trim().is_empty() {
+                state.content_parts.push(result_text.clone());
+            }
             let use_id = result_item.get("tool_use_id").and_then(|i| i.as_str());
             if let Some(idx) = use_id.and_then(|id| state.tool_use_id_map.get(id)) {
                 // Merge result into the existing tool_use message
                 state.messages[*idx].content = result_text;
+                if let Some(metadata) = state.messages[*idx].tool_metadata.as_mut() {
+                    enrich_tool_metadata(
+                        metadata,
+                        tool_result_facts(result_item, top_level_result),
+                    );
+                }
+            } else if let Some(idx) = entry
+                .get("sourceToolAssistantUUID")
+                .and_then(|id| id.as_str())
+                .and_then(|uuid| state.assistant_tool_indices_by_uuid.get(uuid))
+                .and_then(|indices| {
+                    if indices.len() == 1 {
+                        indices.first().copied()
+                    } else {
+                        None
+                    }
+                })
+            {
+                state.messages[idx].content = result_text;
+                if let Some(metadata) = state.messages[idx].tool_metadata.as_mut() {
+                    enrich_tool_metadata(
+                        metadata,
+                        tool_result_facts(result_item, top_level_result),
+                    );
+                }
             } else {
+                let inferred_name = infer_tool_name_from_result(top_level_result);
+                let raw_name = inferred_name
+                    .as_deref()
+                    .or(use_id)
+                    .unwrap_or("UnknownToolResult");
+                let canonical_name = canonical_tool_name(Provider::Claude, raw_name);
+                let mut metadata = build_tool_metadata(ToolCallFacts {
+                    provider: Provider::Claude,
+                    raw_name,
+                    input: None,
+                    call_id: use_id,
+                    assistant_id: entry
+                        .get("sourceToolAssistantUUID")
+                        .and_then(|id| id.as_str()),
+                });
+                enrich_tool_metadata(
+                    &mut metadata,
+                    tool_result_facts(result_item, top_level_result),
+                );
+
                 // No matching tool_use found -- emit as standalone
                 state.messages.push(Message {
                     role: MessageRole::Tool,
                     content: result_text,
                     timestamp: timestamp.clone(),
-                    tool_name: use_id.map(std::string::ToString::to_string),
+                    tool_name: Some(canonical_name),
                     tool_input: None,
+                    tool_metadata: Some(metadata),
                     token_usage: None,
                     model: None,
                     usage_hash: None,
@@ -437,6 +538,7 @@ fn handle_assistant_message(entry: &Value, state: &mut ParseState, timestamp: Op
     // Extract token usage for this assistant turn
     let turn_usage = extract_token_usage(msg);
     let turn_start = state.messages.len();
+    let mut tool_indices = Vec::new();
 
     // Split assistant messages: text parts as assistant, tool_use as tool
     if let Some(Value::Array(arr)) = msg.get("content") {
@@ -457,6 +559,7 @@ fn handle_assistant_message(entry: &Value, state: &mut ParseState, timestamp: Op
                                 token_usage: None,
                                 model: None,
                                 usage_hash: None,
+                                tool_metadata: None,
                             });
                         }
                     }
@@ -482,29 +585,48 @@ fn handle_assistant_message(entry: &Value, state: &mut ParseState, timestamp: Op
                             token_usage: None,
                             model: per_message_model.clone(),
                             usage_hash: None,
+                            tool_metadata: None,
                         });
                         text_parts.clear();
                     }
                     // Emit tool_use as a Tool message
                     let name = item.get("name").and_then(|n| n.as_str()).unwrap_or("tool");
+                    let use_id = item.get("id").and_then(|i| i.as_str());
+                    let metadata = build_tool_metadata(ToolCallFacts {
+                        provider: Provider::Claude,
+                        raw_name: name,
+                        input: item.get("input"),
+                        call_id: use_id,
+                        assistant_id: entry.get("uuid").and_then(|u| u.as_str()),
+                    });
+                    let canonical_name = metadata.canonical_name.clone();
                     let input = item.get("input").map(std::string::ToString::to_string);
                     let msg_idx = state.messages.len();
                     state.messages.push(Message {
                         role: MessageRole::Tool,
                         content: String::new(),
                         timestamp: timestamp.clone(),
-                        tool_name: Some(name.to_string()),
+                        tool_name: Some(canonical_name),
                         tool_input: input,
+                        tool_metadata: Some(metadata),
                         token_usage: None,
                         model: None,
                         usage_hash: None,
                     });
+                    tool_indices.push(msg_idx);
                     // Record tool_use_id for merging results later
-                    if let Some(id) = item.get("id").and_then(|i| i.as_str()) {
+                    if let Some(id) = use_id {
                         state.tool_use_id_map.insert(id.to_string(), msg_idx);
                     }
                 }
                 _ => {}
+            }
+        }
+        if let Some(uuid) = entry.get("uuid").and_then(|u| u.as_str()) {
+            if !tool_indices.is_empty() {
+                state
+                    .assistant_tool_indices_by_uuid
+                    .insert(uuid.to_string(), tool_indices);
             }
         }
         // Flush remaining text
@@ -520,6 +642,7 @@ fn handle_assistant_message(entry: &Value, state: &mut ParseState, timestamp: Op
                 token_usage: None,
                 model: per_message_model,
                 usage_hash: None,
+                tool_metadata: None,
             });
         }
     } else {
@@ -536,6 +659,7 @@ fn handle_assistant_message(entry: &Value, state: &mut ParseState, timestamp: Op
                 token_usage: None,
                 model: per_message_model,
                 usage_hash: None,
+                tool_metadata: None,
             });
         }
     }
@@ -570,6 +694,7 @@ fn handle_assistant_message(entry: &Value, state: &mut ParseState, timestamp: Op
                 token_usage: Some(usage),
                 model: fallback_model,
                 usage_hash: hash,
+                tool_metadata: None,
             });
         }
     }
@@ -695,6 +820,7 @@ fn handle_system_message(entry: &Value, state: &mut ParseState, timestamp: Optio
         token_usage: None,
         model: None,
         usage_hash: None,
+        tool_metadata: None,
     });
 }
 
@@ -741,6 +867,7 @@ fn append_user_message(
         token_usage: None,
         model: None,
         usage_hash: None,
+        tool_metadata: None,
     });
 }
 
@@ -970,5 +1097,57 @@ mod tests {
         assert_eq!(usage.output_tokens, 50);
         assert_eq!(usage.cache_creation_input_tokens, 10);
         assert_eq!(usage.cache_read_input_tokens, 20);
+    }
+
+    #[test]
+    fn parse_session_file_adds_claude_tool_metadata() {
+        let dir = TempDir::new().unwrap();
+        let file = dir.path().join("session.jsonl");
+        let assistant = r#"{"type":"assistant","uuid":"assistant-1","timestamp":"2026-04-10T10:00:00Z","message":{"id":"msg-1","model":"claude-opus-4-6","role":"assistant","content":[{"type":"tool_use","id":"toolu_1","name":"ToolSearch","input":{"query":"select:TaskCreate","max_results":2}}]}}"#;
+        let result = r#"{"type":"user","timestamp":"2026-04-10T10:00:01Z","sourceToolAssistantUUID":"assistant-1","toolUseResult":{"matches":[{"tool_name":"TaskCreate"}],"query":"select:TaskCreate","total_deferred_tools":1},"message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"toolu_1","content":[{"type":"text","text":"TaskCreate found"}]}]}}"#;
+        fs::write(&file, format!("{assistant}\n{result}\n")).unwrap();
+
+        let parsed = parse_session_file(&file).expect("parsed");
+        let tool = parsed
+            .messages
+            .iter()
+            .find(|message| message.tool_name.as_deref() == Some("ToolSearch"))
+            .expect("tool message");
+        let metadata = tool.tool_metadata.as_ref().expect("tool metadata");
+
+        assert_eq!(metadata.raw_name, "ToolSearch");
+        assert_eq!(metadata.category, "search");
+        assert_eq!(metadata.summary.as_deref(), Some("select:TaskCreate"));
+        assert_eq!(metadata.status.as_deref(), Some("success"));
+        assert_eq!(metadata.result_kind.as_deref(), None);
+        assert_eq!(tool.content, "TaskCreate found");
+    }
+
+    #[test]
+    fn parse_session_file_recovers_unmatched_edit_tool_result() {
+        let dir = TempDir::new().unwrap();
+        let file = dir.path().join("session.jsonl");
+        let result = r#"{"type":"user","timestamp":"2026-04-10T10:00:01Z","toolUseResult":{"filePath":"/project/src/App.tsx","oldString":"old","newString":"new","originalFile":"very large","structuredPatch":[],"userModified":false,"replaceAll":false},"message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"toolu_missing","content":"The file /project/src/App.tsx has been updated successfully."}]}}"#;
+        fs::write(&file, format!("{result}\n")).unwrap();
+
+        let parsed = parse_session_file(&file).expect("parsed");
+        let tool = parsed
+            .messages
+            .iter()
+            .find(|message| message.role == crate::models::MessageRole::Tool)
+            .expect("tool result");
+        let metadata = tool.tool_metadata.as_ref().expect("tool metadata");
+
+        assert_eq!(tool.tool_name.as_deref(), Some("Edit"));
+        assert_eq!(metadata.raw_name, "Edit");
+        assert_eq!(metadata.result_kind.as_deref(), Some("file_patch"));
+        assert_eq!(
+            metadata
+                .structured
+                .as_ref()
+                .and_then(|value| value.get("originalFile"))
+                .and_then(|value| value.as_str()),
+            Some("<omitted>")
+        );
     }
 }
