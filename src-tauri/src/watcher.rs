@@ -37,12 +37,24 @@ pub fn start_watcher(
     )
     .map_err(|e| format!("failed to create file watcher: {e}"))?;
 
+    let mut watched_count = 0usize;
     for path in &watch_paths {
-        watcher
-            .watch(path, RecursiveMode::Recursive)
-            .map_err(|e| format!("failed to watch {}: {}", path.display(), e))?;
+        match watcher.watch(path, RecursiveMode::Recursive) {
+            Ok(()) => watched_count += 1,
+            Err(e) => {
+                log::warn!("failed to watch {}: {}", path.display(), e);
+            }
+        }
     }
 
-    log::info!("Watching {} directories for changes", watch_paths.len());
+    if !watch_paths.is_empty() && watched_count == 0 {
+        return Err("failed to watch any provider directory".to_string());
+    }
+
+    log::info!(
+        "Watching {}/{} directories for changes",
+        watched_count,
+        watch_paths.len()
+    );
     Ok(watcher)
 }

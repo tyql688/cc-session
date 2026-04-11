@@ -7,6 +7,10 @@ versioned with [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixed
+
+- macOS release apps now raise the file descriptor soft limit before starting kqueue watchers, so live follow continues to work with large local session archives launched from Finder.
+
 ## [0.3.8] - 2026-04-11
 
 ### Added

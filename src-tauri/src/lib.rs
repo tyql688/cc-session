@@ -63,6 +63,102 @@ use db::Database;
 use indexer::Indexer;
 use tauri::Manager;
 
+#[cfg(target_os = "macos")]
+const MACOS_MIN_NOFILE_LIMIT: u64 = 65_536;
+#[cfg(target_os = "macos")]
+const MACOS_OPEN_MAX_COMPAT_LIMIT: u64 = 10_240;
+#[cfg(target_os = "macos")]
+const MACOS_RLIMIT_NOFILE: i32 = 8;
+#[cfg(target_os = "macos")]
+const MACOS_RLIM_INFINITY: u64 = i64::MAX as u64;
+
+#[cfg(target_os = "macos")]
+#[repr(C)]
+#[derive(Clone, Copy, Debug)]
+struct MacosRLimit {
+    rlim_cur: u64,
+    rlim_max: u64,
+}
+
+#[cfg(target_os = "macos")]
+extern "C" {
+    fn getrlimit(resource: i32, rlp: *mut MacosRLimit) -> i32;
+    fn setrlimit(resource: i32, rlp: *const MacosRLimit) -> i32;
+}
+
+#[cfg(target_os = "macos")]
+fn desired_nofile_soft_limit(current: u64, maximum: u64, target: u64) -> u64 {
+    if current >= target {
+        return current;
+    }
+
+    if maximum == MACOS_RLIM_INFINITY {
+        return target;
+    }
+
+    target.min(maximum).max(current)
+}
+
+#[cfg(target_os = "macos")]
+fn raise_file_descriptor_limit_for_macos_watchers() {
+    let mut limit = MacosRLimit {
+        rlim_cur: 0,
+        rlim_max: 0,
+    };
+
+    // SAFETY: getrlimit/setrlimit are called with RLIMIT_NOFILE and a valid
+    // MacosRLimit pointer matching Darwin's rlimit layout.
+    unsafe {
+        if getrlimit(MACOS_RLIMIT_NOFILE, &mut limit) != 0 {
+            log::warn!(
+                "failed to inspect macOS file descriptor limit: {}",
+                std::io::Error::last_os_error()
+            );
+            return;
+        }
+
+        let original = limit;
+        let next =
+            desired_nofile_soft_limit(original.rlim_cur, original.rlim_max, MACOS_MIN_NOFILE_LIMIT);
+        if next <= original.rlim_cur {
+            return;
+        }
+
+        limit.rlim_cur = next;
+        if setrlimit(MACOS_RLIMIT_NOFILE, &limit) == 0 {
+            return;
+        }
+
+        let first_error = std::io::Error::last_os_error();
+        let fallback = desired_nofile_soft_limit(
+            original.rlim_cur,
+            original.rlim_max,
+            MACOS_OPEN_MAX_COMPAT_LIMIT,
+        );
+        if fallback > original.rlim_cur && fallback != next {
+            limit.rlim_cur = fallback;
+            if setrlimit(MACOS_RLIMIT_NOFILE, &limit) == 0 {
+                log::warn!(
+                    "raised macOS file descriptor limit to fallback {} after {} failed: {}",
+                    fallback,
+                    next,
+                    first_error
+                );
+                return;
+            }
+        }
+
+        log::warn!(
+            "failed to raise macOS file descriptor limit to {}: {}",
+            next,
+            first_error
+        );
+    }
+}
+
+#[cfg(not(target_os = "macos"))]
+fn raise_file_descriptor_limit_for_macos_watchers() {}
+
 /// Detect and fix inconsistencies left by interrupted trash operations.
 /// Called once at app startup, after DB is opened.
 fn audit_trash_consistency(db: &db::Database) {
@@ -106,6 +202,8 @@ fn audit_trash_consistency(db: &db::Database) {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    raise_file_descriptor_limit_for_macos_watchers();
+
     let data_dir = match dirs::data_local_dir() {
         Some(d) => d.join("cc-session"),
         None => {
@@ -208,4 +306,32 @@ pub fn run() {
             log::error!("failed to run tauri application: {e}");
             std::process::exit(1);
         });
+}
+
+#[cfg(test)]
+mod tests {
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn nofile_soft_limit_is_raised_without_exceeding_finite_hard_limit() {
+        assert_eq!(
+            super::desired_nofile_soft_limit(256, 1024, super::MACOS_MIN_NOFILE_LIMIT),
+            1024
+        );
+        assert_eq!(
+            super::desired_nofile_soft_limit(
+                256,
+                super::MACOS_RLIM_INFINITY,
+                super::MACOS_MIN_NOFILE_LIMIT
+            ),
+            super::MACOS_MIN_NOFILE_LIMIT
+        );
+        assert_eq!(
+            super::desired_nofile_soft_limit(
+                super::MACOS_MIN_NOFILE_LIMIT + 1,
+                super::MACOS_RLIM_INFINITY,
+                super::MACOS_MIN_NOFILE_LIMIT
+            ),
+            super::MACOS_MIN_NOFILE_LIMIT + 1
+        );
+    }
 }
