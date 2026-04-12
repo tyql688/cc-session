@@ -184,3 +184,7 @@ export async function getUsageStats(
 ): Promise<UsageStats> {
   return invoke<UsageStats>("get_usage_stats", { providers, rangeDays });
 }
+
+export async function getTodayCost(): Promise<number> {
+  return invoke<number>("get_today_cost");
+}

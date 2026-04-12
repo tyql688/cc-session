@@ -25,6 +25,8 @@ import {
   trashSession,
   getChildSessions,
   startRebuildIndex,
+  getIndexStats,
+  getTodayCost,
 } from "../lib/tauri";
 import { isMac, isWindows } from "../lib/platform";
 import { disabledProviders } from "../stores/settings";
@@ -52,6 +54,26 @@ export default function App() {
   const [isLoading, setIsLoading] = createSignal(true);
   const [showKeyboardOverlay, setShowKeyboardOverlay] = createSignal(false);
   const [sidebarCollapsed, setSidebarCollapsed] = createSignal(false);
+  const [lastScanTime, setLastScanTime] = createSignal<number | undefined>();
+  const [todayCost, setTodayCost] = createSignal<number | undefined>();
+
+  async function refreshStatusBarStats() {
+    try {
+      const [stats, cost] = await Promise.all([
+        getIndexStats(),
+        getTodayCost(),
+      ]);
+      const ts = stats.last_index_time
+        ? Number(stats.last_index_time)
+        : undefined;
+      setLastScanTime(ts);
+      setTodayCost(cost);
+    } catch {
+      // non-critical, silently ignore
+    }
+  }
+
+  const handleUsageChanged = () => void refreshStatusBarStats();
 
   const debouncedChangedPaths = new Set<string>();
 
@@ -147,8 +169,10 @@ export default function App() {
     }
 
     void loadProviderSnapshots();
-    void sync.coldStart();
+    void sync.coldStart().then(() => void refreshStatusBarStats());
     setTimeout(() => void checkForUpdate(), 2000);
+
+    window.addEventListener("usage-data-changed", handleUsageChanged);
 
     document.addEventListener("keydown", handleGlobalKeyDown);
 
@@ -222,6 +246,7 @@ export default function App() {
 
   onCleanup(() => {
     document.removeEventListener("keydown", handleGlobalKeyDown);
+    window.removeEventListener("usage-data-changed", handleUsageChanged);
     unlistenWatcher?.();
     unlistenMaintenance?.();
     clearTimeout(debounceTimer);
@@ -430,6 +455,8 @@ export default function App() {
           sessionCount={sessionCount()}
           providerCount={filteredTree().length}
           isIndexing={isLoading()}
+          lastScanTime={lastScanTime()}
+          todayCost={todayCost()}
         />
         <KeyboardOverlay
           show={showKeyboardOverlay()}

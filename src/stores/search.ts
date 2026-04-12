@@ -78,7 +78,7 @@ function search(q: string) {
         setIsSearching(false);
       }
     }
-  }, 150);
+  }, 300);
 }
 
 function clearSearch() {

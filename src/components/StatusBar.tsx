@@ -1,4 +1,4 @@
-import { onMount, Show } from "solid-js";
+import { createMemo, onMount, Show } from "solid-js";
 import { useI18n } from "../i18n/index";
 import type { Locale } from "../i18n/index";
 import { theme, setTheme, applyTheme } from "../stores/theme";
@@ -9,11 +9,29 @@ export function StatusBar(props: {
   sessionCount: number;
   providerCount: number;
   isIndexing?: boolean;
+  lastScanTime?: number;
+  todayCost?: number;
 }) {
   const { t, locale, setLocale } = useI18n();
 
   onMount(() => {
     applyTheme(theme());
+  });
+
+  const lastScanLabel = createMemo(() => {
+    const ts = props.lastScanTime;
+    if (!ts) return null;
+    const diff = Math.floor((Date.now() - ts) / 1000);
+    if (diff < 60) return t("status.justNow");
+    if (diff < 3600) return `${Math.floor(diff / 60)}m`;
+    if (diff < 86400) return `${Math.floor(diff / 3600)}h`;
+    return `${Math.floor(diff / 86400)}d`;
+  });
+
+  const todayCostLabel = createMemo(() => {
+    const cost = props.todayCost;
+    if (cost === undefined || cost === 0) return null;
+    return cost < 0.01 ? "<$0.01" : `$${cost.toFixed(2)}`;
   });
 
   function cycleTheme() {
@@ -82,6 +100,24 @@ export function StatusBar(props: {
         <span>
           {props.providerCount} {t("status.providers")}
         </span>
+        <Show when={lastScanLabel()}>
+          <span class="status-separator">·</span>
+          <span
+            title={
+              props.lastScanTime
+                ? new Date(props.lastScanTime).toLocaleString()
+                : ""
+            }
+          >
+            {t("status.lastScan")} {lastScanLabel()}
+          </span>
+        </Show>
+        <Show when={todayCostLabel()}>
+          <span class="status-separator">·</span>
+          <span>
+            {t("status.todayCost")} {todayCostLabel()}
+          </span>
+        </Show>
       </div>
       <div class="statusbar-right">
         <Show when={updateLabel() !== null}>

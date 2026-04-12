@@ -582,6 +582,16 @@ impl Database {
             ))
         })
     }
+
+    /// Total cost for a single date (all providers).
+    pub fn cost_for_date(&self, date: &str) -> Result<f64, rusqlite::Error> {
+        let conn = self.lock_read()?;
+        conn.query_row(
+            "SELECT COALESCE(SUM(cost_usd), 0.0) FROM session_token_stats WHERE date = ?1",
+            [date],
+            |row| row.get(0),
+        )
+    }
 }
 
 fn build_usage_where(

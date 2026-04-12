@@ -326,7 +326,7 @@ fn compute_token_stats_dedup(
     let fallback_model = parsed.meta.model.as_deref().unwrap_or("").to_string();
     let mut last_seen_model = fallback_model.clone();
 
-    let mut stats_map: HashMap<(String, String), TokenStatRow> = HashMap::new();
+    let mut stats_map: HashMap<(String, String), TokenStatRow> = HashMap::with_capacity(32);
     for msg in &parsed.messages {
         if let Some(model) = msg.model.as_deref().filter(|model| !model.is_empty()) {
             last_seen_model = model.to_string();
@@ -399,7 +399,7 @@ fn compute_codex_token_stats(
     pricing_catalog: Option<&PricingCatalog>,
 ) -> Vec<TokenStatRow> {
     let path = PathBuf::from(&parsed.meta.source_path);
-    let mut stats_map: HashMap<(String, String), TokenStatRow> = HashMap::new();
+    let mut stats_map: HashMap<(String, String), TokenStatRow> = HashMap::with_capacity(16);
 
     for event in extract_usage_events_from_file(&path) {
         let Some(date) = timestamp_to_local_date(&event.timestamp) else {

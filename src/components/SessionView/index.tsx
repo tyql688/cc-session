@@ -90,8 +90,8 @@ export function SessionView(props: {
     const all = filteredEntries();
     const isSearching = sessionSearch().trim().length > 0;
     const count = isSearching ? all.length : visibleCount();
-    const slice = count >= all.length ? all : all.slice(all.length - count);
-    return [...slice].reverse();
+    const start = count >= all.length ? 0 : all.length - count;
+    return all.slice(start).reverse();
   });
   const hasMore = createMemo(() => visibleCount() < filteredEntries().length);
   const [loading, setLoading] = createSignal(true);

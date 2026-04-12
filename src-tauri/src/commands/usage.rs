@@ -18,6 +18,20 @@ pub async fn get_usage_stats(
         .map_err(|e| format!("task join error: {e}"))?
 }
 
+#[tauri::command]
+pub async fn get_today_cost(state: State<'_, AppState>) -> Result<f64, String> {
+    let state = state.inner().clone();
+    tokio::task::spawn_blocking(move || {
+        let today = chrono::Local::now().format("%Y-%m-%d").to_string();
+        state
+            .db
+            .cost_for_date(&today)
+            .map_err(|e| format!("failed to query today cost: {e}"))
+    })
+    .await
+    .map_err(|e| format!("task join error: {e}"))?
+}
+
 fn build_usage_stats(
     state: &AppState,
     providers: &[String],

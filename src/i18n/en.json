@@ -121,6 +121,7 @@
     "sessions": "sessions",
     "providers": "providers",
     "lastScan": "Last scan",
+    "todayCost": "Today",
     "justNow": "just now",
     "indexing": "Indexing...",
     "themeLight": "Light",
