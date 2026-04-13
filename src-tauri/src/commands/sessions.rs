@@ -261,15 +261,27 @@ fn tmp_dir_allows_image(canonical: &Path) -> bool {
 
 #[tauri::command]
 pub fn read_image_base64(path: String) -> Result<String, String> {
+    use crate::services::image_cache::ImageCacheService;
     use base64::{engine::general_purpose::STANDARD, Engine};
 
     let path = path.trim().trim_start_matches('\u{feff}').to_string();
     let p = Path::new(&path);
-    if !p.exists() {
-        return Err(format!("image not found: {path}"));
-    }
 
-    if let Ok(canonical) = p.canonicalize() {
+    // Determine which file to read: original if it exists, else cached copy
+    let resolved = if p.exists() {
+        p.to_path_buf()
+    } else {
+        // Try cache fallback
+        let data_dir = dirs::data_local_dir()
+            .map(|d| d.join("cc-session"))
+            .ok_or_else(|| format!("image not found: {path}"))?;
+        let service = ImageCacheService::new(&data_dir);
+        service
+            .resolve_cached_path(&path)
+            .ok_or_else(|| format!("image not found: {path}"))?
+    };
+
+    if let Ok(canonical) = resolved.canonicalize() {
         if !read_image_canonical_allowed(&canonical) {
             log::warn!(
                 "read_image_base64 denied (not under home/temp): {}",
@@ -279,7 +291,7 @@ pub fn read_image_base64(path: String) -> Result<String, String> {
         }
     }
 
-    let ext = p
+    let ext = resolved
         .extension()
         .and_then(|e| e.to_str())
         .unwrap_or("png")
@@ -293,7 +305,8 @@ pub fn read_image_base64(path: String) -> Result<String, String> {
         _ => "image/png",
     };
 
-    let data = std::fs::read(p).map_err(|e| format!("failed to read image {path}: {e}"))?;
+    let data = std::fs::read(&resolved)
+        .map_err(|e| format!("failed to read image {}: {e}", resolved.display()))?;
     let b64 = STANDARD.encode(&data);
     Ok(format!("data:{mime};base64,{b64}"))
 }

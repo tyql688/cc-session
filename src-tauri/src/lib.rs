@@ -238,7 +238,7 @@ pub fn run() {
 
     let providers = provider::all_runtimes();
 
-    let indexer = Indexer::new(Arc::clone(&db), providers);
+    let indexer = Indexer::new(Arc::clone(&db), providers, data_dir.clone());
 
     let state = AppState {
         db: Arc::clone(&db),

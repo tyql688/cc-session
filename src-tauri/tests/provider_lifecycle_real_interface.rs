@@ -69,7 +69,8 @@ struct MirrorVariantMeta {
 fn build_app() -> (TempDir, App<MockRuntime>, tauri::WebviewWindow<MockRuntime>) {
     let temp_dir = TempDir::new().expect("temp dir");
     let db = Arc::new(Database::open(temp_dir.path()).expect("open temp db"));
-    let indexer = Indexer::new(Arc::clone(&db), provider::all_runtimes());
+    let data_dir = temp_dir.path().to_path_buf();
+    let indexer = Indexer::new(Arc::clone(&db), provider::all_runtimes(), data_dir);
     let state = AppState {
         db,
         indexer,

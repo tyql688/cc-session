@@ -9,18 +9,25 @@ use crate::models::{Provider, SessionMeta, TreeNode, TreeNodeType};
 use crate::pricing::{self, PricingCatalog, PRICING_CATALOG_JSON_KEY};
 use crate::provider::{ParsedSession, SessionProvider};
 use crate::providers::codex::parser::extract_usage_events_from_file;
+use crate::services::image_cache::{image_cache_provider_for, ImageCacheService};
 
 #[derive(Clone)]
 pub struct Indexer {
     db: Arc<Database>,
     providers: Arc<Vec<Box<dyn SessionProvider>>>,
+    data_dir: PathBuf,
 }
 
 impl Indexer {
-    pub fn new(db: Arc<Database>, providers: Vec<Box<dyn SessionProvider>>) -> Self {
+    pub fn new(
+        db: Arc<Database>,
+        providers: Vec<Box<dyn SessionProvider>>,
+        data_dir: PathBuf,
+    ) -> Self {
         Self {
             db,
             providers: Arc::new(providers),
+            data_dir,
         }
     }
 
@@ -98,6 +105,14 @@ impl Indexer {
                 );
                 if let Err(e) = self.db.replace_token_stats(&parsed.meta.id, &stat_rows) {
                     log::warn!("failed to write token stats for {}: {e}", parsed.meta.id);
+                }
+            }
+
+            // Cache images for providers that support it
+            if let Some(cache_provider) = image_cache_provider_for(&provider_kind) {
+                let image_service = ImageCacheService::new(&self.data_dir);
+                for parsed in parents.iter().chain(children.iter()) {
+                    image_service.cache_images(cache_provider.as_ref(), &parsed.messages);
                 }
             }
 
