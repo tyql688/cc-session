@@ -204,7 +204,7 @@ Your personal knowledge base for AI coding sessions — unified access, searchab
 - Status: mostly compliant, a few hardcoded strings remain (e.g., keyboard shortcuts)
 - 审查硬编码字符串，全部走 `t()`
 
-### Image Cache Persistence — 图片缓存持久化
+### Image Cache Persistence — 图片缓存持久化 `✅ done`
 - Copy temp file images to `~/.cc-session/cache/images/{hash}.ext`
 - Prevent image loss from OS temp cleanup
 - 将临时目录图片缓存到持久路径，防止 OS 清理丢失
