@@ -1,3 +1,4 @@
+pub mod image_cache;
 mod provider_snapshots;
 mod session_lifecycle;
 mod session_resolution;

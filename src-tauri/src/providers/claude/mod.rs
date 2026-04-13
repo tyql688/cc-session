@@ -1,4 +1,4 @@
-mod images;
+pub(crate) mod images;
 pub mod parser;
 
 use std::fs;
