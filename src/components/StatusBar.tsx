@@ -4,6 +4,14 @@ import type { Locale } from "../i18n/index";
 import { theme, setTheme, applyTheme } from "../stores/theme";
 import type { Theme } from "../stores/theme";
 import { phase, availableVersion, downloadAndInstall } from "../stores/updater";
+import { fmtK } from "../lib/formatters";
+
+interface TodayTokens {
+  input: number;
+  output: number;
+  cache_read: number;
+  cache_write: number;
+}
 
 export function StatusBar(props: {
   sessionCount: number;
@@ -11,6 +19,7 @@ export function StatusBar(props: {
   isIndexing?: boolean;
   lastScanTime?: number;
   todayCost?: number;
+  todayTokens?: TodayTokens;
 }) {
   const { t, locale, setLocale } = useI18n();
 
@@ -32,6 +41,11 @@ export function StatusBar(props: {
     const cost = props.todayCost;
     if (cost === undefined || cost === 0) return null;
     return cost < 0.01 ? "<$0.01" : `$${cost.toFixed(2)}`;
+  });
+
+  const hasTokens = createMemo(() => {
+    const t = props.todayTokens;
+    return t && (t.input > 0 || t.output > 0);
   });
 
   function cycleTheme() {
@@ -112,10 +126,44 @@ export function StatusBar(props: {
             {t("status.lastScan")} {lastScanLabel()}
           </span>
         </Show>
-        <Show when={todayCostLabel()}>
+        <Show when={hasTokens() || todayCostLabel()}>
           <span class="status-separator">·</span>
-          <span>
-            {t("status.todayCost")} {todayCostLabel()}
+          <span class="status-today">
+            <Show when={hasTokens()}>
+              <span
+                class="status-badge status-badge-tokens"
+                title={(() => {
+                  const tk = props.todayTokens!;
+                  return `${t("common.inputTokens")}: ${tk.input.toLocaleString()}, ${t("common.outputTokens")}: ${tk.output.toLocaleString()}${tk.cache_read > 0 ? `, ${t("common.cacheReadTokens")}: ${tk.cache_read.toLocaleString()}` : ""}${tk.cache_write > 0 ? `, ${t("common.cacheWriteTokens")}: ${tk.cache_write.toLocaleString()}` : ""}`;
+                })()}
+              >
+                {"\u2191"}
+                {fmtK(props.todayTokens!.input)}
+                {" \u2193"}
+                {fmtK(props.todayTokens!.output)} {t("common.tokens")}
+                <Show
+                  when={
+                    props.todayTokens!.cache_read +
+                      props.todayTokens!.cache_write >
+                    0
+                  }
+                >
+                  {" · "}
+                  <span class="cache-read-label">
+                    {t("common.cacheRead")}{" "}
+                    {fmtK(props.todayTokens!.cache_read)}
+                  </span>
+                  {" · "}
+                  {t("common.cacheWrite")}{" "}
+                  {fmtK(props.todayTokens!.cache_write)}
+                </Show>
+              </span>
+            </Show>
+            <Show when={todayCostLabel()}>
+              <span class="status-badge status-badge-cost">
+                {todayCostLabel()}
+              </span>
+            </Show>
           </span>
         </Show>
       </div>

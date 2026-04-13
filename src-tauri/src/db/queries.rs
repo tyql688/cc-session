@@ -592,6 +592,20 @@ impl Database {
             |row| row.get(0),
         )
     }
+
+    /// Token breakdown for a single date (all providers).
+    pub fn tokens_for_date(&self, date: &str) -> Result<(u64, u64, u64, u64), rusqlite::Error> {
+        let conn = self.lock_read()?;
+        conn.query_row(
+            "SELECT COALESCE(SUM(input_tokens), 0), \
+                    COALESCE(SUM(output_tokens), 0), \
+                    COALESCE(SUM(cache_read_tokens), 0), \
+                    COALESCE(SUM(cache_write_tokens), 0) \
+             FROM session_token_stats WHERE date = ?1",
+            [date],
+            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?)),
+        )
+    }
 }
 
 fn build_usage_where(

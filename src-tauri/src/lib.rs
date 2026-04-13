@@ -296,6 +296,7 @@ pub fn run() {
             commands::open_external,
             commands::get_usage_stats,
             commands::get_today_cost,
+            commands::get_today_tokens,
         ])
         .setup(|app| {
             // On Windows, hide native decorations so the custom titlebar is the only one.

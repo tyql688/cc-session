@@ -213,3 +213,14 @@ export async function getUsageStats(
 export async function getTodayCost(): Promise<number> {
   return invoke<number>("get_today_cost");
 }
+
+export interface TodayTokens {
+  input: number;
+  output: number;
+  cache_read: number;
+  cache_write: number;
+}
+
+export async function getTodayTokens(): Promise<TodayTokens> {
+  return invoke<TodayTokens>("get_today_tokens");
+}

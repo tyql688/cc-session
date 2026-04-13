@@ -32,6 +32,34 @@ pub async fn get_today_cost(state: State<'_, AppState>) -> Result<f64, String> {
     .map_err(|e| format!("task join error: {e}"))?
 }
 
+#[derive(serde::Serialize)]
+pub struct TodayTokens {
+    pub input: u64,
+    pub output: u64,
+    pub cache_read: u64,
+    pub cache_write: u64,
+}
+
+#[tauri::command]
+pub async fn get_today_tokens(state: State<'_, AppState>) -> Result<TodayTokens, String> {
+    let state = state.inner().clone();
+    tokio::task::spawn_blocking(move || {
+        let today = chrono::Local::now().format("%Y-%m-%d").to_string();
+        let (input, output, cache_read, cache_write) = state
+            .db
+            .tokens_for_date(&today)
+            .map_err(|e| format!("failed to query today tokens: {e}"))?;
+        Ok(TodayTokens {
+            input,
+            output,
+            cache_read,
+            cache_write,
+        })
+    })
+    .await
+    .map_err(|e| format!("task join error: {e}"))?
+}
+
 fn build_usage_stats(
     state: &AppState,
     providers: &[String],

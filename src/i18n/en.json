@@ -256,6 +256,7 @@
     "cacheHit": "cache hit",
     "estCost": "estimated cost",
     "allProviders": "All",
+    "rangeToday": "Today",
     "range7d": "7d",
     "range30d": "30d",
     "range90d": "90d",

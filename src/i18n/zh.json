@@ -254,6 +254,7 @@
     "cacheHit": "缓存命中",
     "estCost": "预估费用",
     "allProviders": "全部",
+    "rangeToday": "今天",
     "range7d": "7天",
     "range30d": "30天",
     "range90d": "90天",

@@ -27,6 +27,7 @@ import {
   startRebuildIndex,
   getIndexStats,
   getTodayCost,
+  getTodayTokens,
 } from "../lib/tauri";
 import { isMac, isWindows } from "../lib/platform";
 import { disabledProviders } from "../stores/settings";
@@ -56,18 +57,24 @@ export default function App() {
   const [sidebarCollapsed, setSidebarCollapsed] = createSignal(false);
   const [lastScanTime, setLastScanTime] = createSignal<number | undefined>();
   const [todayCost, setTodayCost] = createSignal<number | undefined>();
+  const [todayTokens, setTodayTokens] = createSignal<
+    | { input: number; output: number; cache_read: number; cache_write: number }
+    | undefined
+  >();
 
   async function refreshStatusBarStats() {
     try {
-      const [stats, cost] = await Promise.all([
+      const [stats, cost, tokens] = await Promise.all([
         getIndexStats(),
         getTodayCost(),
+        getTodayTokens(),
       ]);
       const ts = stats.last_index_time
         ? Number(stats.last_index_time)
         : undefined;
       setLastScanTime(ts);
       setTodayCost(cost);
+      setTodayTokens(tokens);
     } catch {
       // non-critical, silently ignore
     }
@@ -457,6 +464,7 @@ export default function App() {
           isIndexing={isLoading()}
           lastScanTime={lastScanTime()}
           todayCost={todayCost()}
+          todayTokens={todayTokens()}
         />
         <KeyboardOverlay
           show={showKeyboardOverlay()}

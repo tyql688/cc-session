@@ -358,6 +358,8 @@ export function UsagePanel() {
 
   const activeRangeLabel = createMemo(() => {
     switch (rangeDays()) {
+      case 1:
+        return t("usage.rangeToday");
       case 7:
         return t("usage.range7d");
       case 30:
@@ -499,6 +501,7 @@ export function UsagePanel() {
   }
 
   const ranges: { days: number | null; label: () => string }[] = [
+    { days: 1, label: () => t("usage.rangeToday") },
     { days: 7, label: () => t("usage.range7d") },
     { days: 30, label: () => t("usage.range30d") },
     { days: 90, label: () => t("usage.range90d") },

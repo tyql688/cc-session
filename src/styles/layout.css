@@ -423,6 +423,32 @@ body {
   color: var(--text-tertiary);
 }
 
+.status-today {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.status-badge {
+  font-weight: 600;
+}
+
+.status-badge-tokens {
+  color: #6366f1;
+}
+
+.status-badge-cost {
+  color: #f59e0b;
+}
+
+[data-theme="dark"] .status-badge-tokens {
+  color: #a5b4fc;
+}
+
+[data-theme="dark"] .status-badge-cost {
+  color: #fbbf24;
+}
+
 .locale-toggle {
   display: flex;
   align-items: center;
