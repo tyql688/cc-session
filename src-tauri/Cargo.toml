@@ -38,6 +38,7 @@ log = "0.4"
 pulldown-cmark = "0.13.3"
 reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
 similar = "3.0.0"
+sha2 = "0.10"
 
 [dev-dependencies]
 tempfile = "3"
