@@ -5,13 +5,7 @@ import { theme, setTheme, applyTheme } from "../stores/theme";
 import type { Theme } from "../stores/theme";
 import { phase, availableVersion, downloadAndInstall } from "../stores/updater";
 import { fmtK } from "../lib/formatters";
-
-interface TodayTokens {
-  input: number;
-  output: number;
-  cache_read: number;
-  cache_write: number;
-}
+import type { TodayTokens } from "../lib/tauri";
 
 export function StatusBar(props: {
   sessionCount: number;

@@ -230,13 +230,10 @@ fn fmt_k(n: u64) -> String {
 fn content_needs_katex(messages: &[Message]) -> bool {
     messages.iter().any(|msg| {
         let c = &msg.content;
-        // Inline math: $...$  or display math: $$...$$
-        // Also LaTeX delimiters: \( \) \[ \]
-        c.contains('$')
-            || c.contains("\\(")
-            || c.contains("\\)")
-            || c.contains("\\[")
-            || c.contains("\\]")
+        // Display math: $$...$$
+        // LaTeX delimiters: \( ... \) or \[ ... \]
+        // Single $ is too common in code (shell vars, template literals) — skip it.
+        c.contains("$$") || c.contains("\\(") || c.contains("\\[")
     })
 }
 
