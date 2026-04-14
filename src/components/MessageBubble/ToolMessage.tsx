@@ -120,6 +120,16 @@ export function ToolMessage(props: { message: Message; provider?: string }) {
       return undefined;
     }
   });
+  /** Full description from Agent tool input (not truncated, for subagent matching) */
+  const agentDescription = createMemo(() => {
+    if (name() !== "Agent" || !hasInput()) return undefined;
+    try {
+      const obj = JSON.parse(props.message.tool_input!);
+      return (obj.description ?? obj.prompt) as string | undefined;
+    } catch {
+      return undefined;
+    }
+  });
   /** Extract agent_id from Agent tool output (Kimi: "agent_id: xxx\n...") */
   const agentId = createMemo(() => {
     if (name() !== "Agent") return undefined;
@@ -184,7 +194,11 @@ export function ToolMessage(props: { message: Message; provider?: string }) {
             class="msg-tool-subagent-link"
             onClick={(e) => {
               e.stopPropagation();
-              openSubagent(summary(), agentNickname(), agentId());
+              openSubagent(
+                agentDescription() ?? summary(),
+                agentNickname(),
+                agentId(),
+              );
             }}
             title="Open subagent session"
           >
