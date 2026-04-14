@@ -12,7 +12,7 @@ import { ActivityBar } from "../components/ActivityBar";
 import { Explorer } from "../components/Explorer";
 import { EditorGroupsContainer } from "../components/EditorGroupsContainer";
 import { StatusBar } from "../components/StatusBar";
-import { SearchPanel } from "../components/SearchPanel";
+import { SearchOverlay } from "../components/SearchOverlay";
 import { SettingsPanel } from "../components/SettingsPanel";
 import { TrashView } from "../components/TrashView";
 
@@ -63,6 +63,7 @@ export default function App() {
   const [activeView, setActiveView] = createSignal("explorer");
   const [isLoading, setIsLoading] = createSignal(true);
   const [showKeyboardOverlay, setShowKeyboardOverlay] = createSignal(false);
+  const [showSearchOverlay, setShowSearchOverlay] = createSignal(false);
   const [sidebarCollapsed, setSidebarCollapsed] = createSignal(false);
   const [lastScanTime, setLastScanTime] = createSignal<number | undefined>();
   const [todayCost, setTodayCost] = createSignal<number | undefined>();
@@ -138,6 +139,7 @@ export default function App() {
       if (g && id) setActiveTabInGroup(g.id, id);
     },
     setShowKeyboardOverlay,
+    setShowSearchOverlay,
     setActiveView,
     closeTab,
     closeAllTabs,
@@ -328,9 +330,8 @@ export default function App() {
               <span class="app-name-bracket">/&gt;</span>
             </span>
           </div>
-          <div class="titlebar-right">
-            <SearchPanel onOpenSession={openSession} />
-          </div>
+          <div class="titlebar-right" />
+
           <Show when={isWindows}>
             <div class="win-controls">
               <button
@@ -461,6 +462,14 @@ export default function App() {
         <KeyboardOverlay
           show={showKeyboardOverlay()}
           onClose={() => setShowKeyboardOverlay(false)}
+        />
+        <SearchOverlay
+          show={showSearchOverlay()}
+          onClose={() => setShowSearchOverlay(false)}
+          onOpenSession={(s) => {
+            openSession(s);
+            setShowSearchOverlay(false);
+          }}
         />
         <ToastContainer />
       </div>

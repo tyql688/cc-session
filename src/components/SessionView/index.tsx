@@ -36,6 +36,10 @@ import { terminalApp } from "../../stores/settings";
 import { toast, toastError } from "../../stores/toast";
 import { errorMessage } from "../../lib/errors";
 import { favoriteVersion, bumpFavoriteVersion } from "../../stores/favorites";
+import {
+  pendingSessionSearch,
+  setPendingSessionSearch,
+} from "../../stores/search";
 import { processMessages } from "./hooks";
 import { SessionToolbar } from "./SessionToolbar";
 import { SessionSearch } from "./SessionSearch";
@@ -131,6 +135,30 @@ export function SessionView(props: {
       },
     ),
   );
+
+  // Consume a pending session search set by the global SearchOverlay.
+  // Runs after the session finishes loading; applies the query, opens the
+  // in-session search bar, and scrolls to the first match.
+  createEffect(() => {
+    const pending = pendingSessionSearch();
+    if (!pending || loading()) return;
+    if (pending.sessionId !== props.session.id) return;
+    setPendingSessionSearch(null);
+    setSessionSearch(pending.query);
+    setSearchMatchIdx(0);
+    setSearchBarOpen(true);
+    // Two RAFs: first for visibleEntries to re-render all entries (triggered
+    // by sessionSearch becoming non-empty), second for <mark> nodes to paint.
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        if (!messagesRef) return;
+        const first = messagesRef.querySelector("mark.search-highlight");
+        if (!first) return;
+        first.classList.add("search-active");
+        first.scrollIntoView({ behavior: "smooth", block: "center" });
+      });
+    });
+  });
 
   function toggleRole(role: MessageRole) {
     setHiddenRoles((prev) => {

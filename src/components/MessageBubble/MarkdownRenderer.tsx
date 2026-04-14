@@ -339,7 +339,7 @@ function renderBlockNode(
     case "table":
       return renderTable(node, context, key);
     case "code":
-      return renderCodeBlock(node, key);
+      return renderCodeBlock(node, key, context);
     case "math":
       return renderMathBlock(node, key);
     case "thematicBreak":
@@ -583,12 +583,22 @@ function renderTableCell(
   );
 }
 
-function renderCodeBlock(node: Code, _key: string): JSX.Element {
+function renderCodeBlock(
+  node: Code,
+  _key: string,
+  context: RenderContext,
+): JSX.Element {
   if (node.lang?.toLowerCase() === "mermaid") {
     return <MermaidBlock code={node.value} />;
   }
 
-  return <CodeBlock code={node.value} language={node.lang ?? undefined} />;
+  return (
+    <CodeBlock
+      code={node.value}
+      language={node.lang ?? undefined}
+      highlightTerm={context.highlightTerm}
+    />
+  );
 }
 
 function renderMathBlock(node: MathNode, _key: string): JSX.Element {

@@ -694,7 +694,7 @@ fn search_with_fts(
     );
     let mut param_values: Vec<Box<dyn rusqlite::types::ToSql>> = vec![Box::new(query.to_string())];
     append_search_filters(&mut sql, &mut param_values, filters);
-    sql.push_str(" ORDER BY rank LIMIT 100");
+    sql.push_str(" ORDER BY bm25(sessions_fts, 10.0, 1.0, 5.0) LIMIT 100");
     query_search_results(conn, &sql, &param_values)
 }
 
@@ -810,16 +810,28 @@ fn query_search_results(
 }
 
 fn build_fts_query(raw: &str) -> Option<String> {
+    // Trigram tokenizer requires each query term to have at least 3 characters
+    // (codepoints). If any token is shorter we bail out so the caller falls
+    // back to LIKE, which correctly handles short substrings (e.g. 2-char CJK).
     let tokens: Vec<String> = raw
         .split_whitespace()
         .map(str::trim)
         .filter(|token| !token.is_empty())
-        .map(|token| format!("\"{}\"", token.replace('"', "\"\"")))
+        .map(|token| token.to_string())
         .collect();
 
     if tokens.is_empty() {
-        None
-    } else {
-        Some(tokens.join(" AND "))
+        return None;
     }
+    if tokens.iter().any(|t| t.chars().count() < 3) {
+        return None;
+    }
+
+    Some(
+        tokens
+            .iter()
+            .map(|token| format!("\"{}\"", token.replace('"', "\"\"")))
+            .collect::<Vec<_>>()
+            .join(" AND "),
+    )
 }

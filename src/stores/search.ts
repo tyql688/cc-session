@@ -7,6 +7,14 @@ const [query, setQuery] = createSignal("");
 const [results, setResults] = createSignal<SearchResult[]>([]);
 const [isSearching, setIsSearching] = createSignal(false);
 
+// Pending in-session search: set by global SearchOverlay when opening a session
+// so the SessionView can auto-apply the query and scroll to the first match.
+// Cleared by SessionView after consuming.
+const [pendingSessionSearch, setPendingSessionSearch] = createSignal<{
+  sessionId: string;
+  query: string;
+} | null>(null);
+
 let debounceTimer: ReturnType<typeof setTimeout>;
 let searchVersion = 0;
 
@@ -96,4 +104,6 @@ export {
   search,
   clearSearch,
   parseSearchQuery,
+  pendingSessionSearch,
+  setPendingSessionSearch,
 };

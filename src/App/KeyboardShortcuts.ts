@@ -6,6 +6,7 @@ export interface KeyboardDeps {
   showKeyboardOverlay: () => boolean;
   setActiveTabId: (id: string | null) => void;
   setShowKeyboardOverlay: (v: boolean | ((prev: boolean) => boolean)) => void;
+  setShowSearchOverlay: (v: boolean | ((prev: boolean) => boolean)) => void;
   setActiveView: (view: string) => void;
   closeTab: (id: string) => void;
   closeAllTabs: () => void;
@@ -71,17 +72,11 @@ export function createKeyboardHandler(
       return;
     }
 
-    // Escape: Close keyboard overlay or search dropdown
+    // Escape: Close keyboard overlay
     if (e.key === "Escape") {
       if (deps.showKeyboardOverlay()) {
         deps.setShowKeyboardOverlay(false);
         return;
-      }
-      const searchEl = document.querySelector<HTMLElement>(
-        "[data-focus-search]",
-      );
-      if (searchEl && document.activeElement?.closest("[data-focus-search]")) {
-        (document.activeElement as HTMLElement)?.blur();
       }
       return;
     }
@@ -147,17 +142,13 @@ export function createKeyboardHandler(
       return;
     }
 
-    // Cmd+Shift+F: Focus global search
-    if (mod && e.shiftKey && (e.key === "f" || e.key === "F")) {
+    // Cmd+K or Cmd+Shift+F: Open global search overlay
+    if (
+      (mod && !e.shiftKey && (e.key === "k" || e.key === "K")) ||
+      (mod && e.shiftKey && (e.key === "f" || e.key === "F"))
+    ) {
       e.preventDefault();
-      const searchEl = document.querySelector<HTMLElement>(
-        "[data-focus-search]",
-      );
-      if (searchEl) {
-        (
-          searchEl as HTMLElement & { __focusInput?: () => void }
-        ).__focusInput?.();
-      }
+      deps.setShowSearchOverlay(true);
       return;
     }
 

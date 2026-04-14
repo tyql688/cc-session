@@ -91,7 +91,7 @@ impl Database {
                 title, content_text, project_name,
                 content='sessions',
                 content_rowid='rowid',
-                tokenize='unicode61 remove_diacritics 0 tokenchars ''./_-'''
+                tokenize='trigram'
             );
 
             CREATE TRIGGER IF NOT EXISTS sessions_ai AFTER INSERT ON sessions BEGIN
@@ -252,7 +252,7 @@ impl Database {
 
         // Migration: rebuild FTS index when tokenizer configuration changes.
         // Bump FTS_TOKENIZER_VERSION whenever the tokenizer config in the CREATE VIRTUAL TABLE above changes.
-        const FTS_TOKENIZER_VERSION: &str = "unicode61_v1";
+        const FTS_TOKENIZER_VERSION: &str = "trigram_v1";
         let current_fts_version: Option<String> = {
             let mut stmt =
                 write_conn.prepare("SELECT value FROM meta WHERE key = 'fts_tokenizer_version'")?;
@@ -269,7 +269,7 @@ impl Database {
                      title, content_text, project_name,
                      content='sessions',
                      content_rowid='rowid',
-                     tokenize='unicode61 remove_diacritics 0 tokenchars ''./_-'''
+                     tokenize='trigram'
                  );
 
                  CREATE TRIGGER sessions_ai AFTER INSERT ON sessions BEGIN
@@ -291,7 +291,7 @@ impl Database {
 
                  INSERT INTO sessions_fts(sessions_fts) VALUES('rebuild');
 
-                 INSERT INTO meta (key, value) VALUES ('fts_tokenizer_version', 'unicode61_v1')
+                 INSERT INTO meta (key, value) VALUES ('fts_tokenizer_version', 'trigram_v1')
                      ON CONFLICT(key) DO UPDATE SET value = excluded.value;",
             )?;
         }

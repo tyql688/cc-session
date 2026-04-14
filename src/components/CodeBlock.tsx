@@ -75,7 +75,11 @@ hljs.registerLanguage("elixir", elixir);
 hljs.registerLanguage("makefile", makefile);
 hljs.registerLanguage("graphql", graphql);
 
-export function CodeBlock(props: { code: string; language?: string }) {
+export function CodeBlock(props: {
+  code: string;
+  language?: string;
+  highlightTerm?: string;
+}) {
   const { t } = useI18n();
   const [copied, setCopied] = createSignal(false);
   let copyTimer: ReturnType<typeof setTimeout> | undefined;
@@ -99,6 +103,15 @@ export function CodeBlock(props: { code: string; language?: string }) {
         console.warn(`Failed to auto-highlight code block (${lang}):`, error);
         codeRef.textContent = props.code;
       }
+    }
+
+    // Wrap matches of `highlightTerm` in <mark class="search-highlight">,
+    // preserving existing hljs markup. Matches that cross span boundaries
+    // (e.g. a keyword that's partially colored) are not highlighted — this
+    // covers the common "search for plain substring" case.
+    const term = props.highlightTerm?.trim();
+    if (term && term.length > 0) {
+      highlightMatchesInElement(codeRef, term);
     }
   });
 
@@ -160,4 +173,39 @@ export function CodeBlock(props: { code: string; language?: string }) {
       </pre>
     </div>
   );
+}
+
+function highlightMatchesInElement(root: HTMLElement, term: string): void {
+  const lower = term.toLowerCase();
+  const termLen = term.length;
+  const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+  const nodes: Text[] = [];
+  let current: Node | null = walker.nextNode();
+  while (current) {
+    nodes.push(current as Text);
+    current = walker.nextNode();
+  }
+  for (const textNode of nodes) {
+    const text = textNode.nodeValue ?? "";
+    const lowerText = text.toLowerCase();
+    let idx = lowerText.indexOf(lower);
+    if (idx < 0) continue;
+    const frag = document.createDocumentFragment();
+    let cursor = 0;
+    while (idx >= 0) {
+      if (idx > cursor) {
+        frag.appendChild(document.createTextNode(text.slice(cursor, idx)));
+      }
+      const mark = document.createElement("mark");
+      mark.className = "search-highlight";
+      mark.textContent = text.slice(idx, idx + termLen);
+      frag.appendChild(mark);
+      cursor = idx + termLen;
+      idx = lowerText.indexOf(lower, cursor);
+    }
+    if (cursor < text.length) {
+      frag.appendChild(document.createTextNode(text.slice(cursor)));
+    }
+    textNode.parentNode?.replaceChild(frag, textNode);
+  }
 }

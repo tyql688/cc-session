@@ -19,7 +19,7 @@ const shortcuts: ShortcutCategory[] = [
   {
     categoryKey: "keyboard.navigation",
     items: [
-      { keys: `${shift}${mod}F`, descKey: "keyboard.globalSearch" },
+      { keys: `${mod}K`, descKey: "keyboard.globalSearch" },
       { keys: `${mod}1-9`, descKey: "keyboard.switchTab" },
       { keys: isMac ? `${mod}]` : "Ctrl+Tab", descKey: "keyboard.nextTab" },
       {

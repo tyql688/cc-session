@@ -1,4 +1,4 @@
-import { createSignal, Show, For } from "solid-js";
+import { createSignal, createMemo, Show, For } from "solid-js";
 import type { Message, Provider } from "../lib/types";
 import { toolDisplayName, toolIcon } from "../lib/tools";
 import { MessageBubble } from "./MessageBubble";
@@ -9,7 +9,13 @@ export function MergedToolRow(props: {
   provider?: Provider;
   highlightTerm?: string;
 }) {
-  const [expanded, setExpanded] = createSignal(false);
+  const [manualExpanded, setManualExpanded] = createSignal(false);
+  // Force-expand while an in-session search is active, so matches inside
+  // tool output are actually rendered (and counted) in the DOM.
+  const searchActive = createMemo(
+    () => (props.highlightTerm ?? "").trim().length > 0,
+  );
+  const expanded = () => manualExpanded() || searchActive();
 
   const label = () =>
     props.tools.length > 0
@@ -26,7 +32,10 @@ export function MergedToolRow(props: {
 
   return (
     <div class="merged-tools">
-      <div class="merged-tools-header" onClick={() => setExpanded(!expanded())}>
+      <div
+        class="merged-tools-header"
+        onClick={() => setManualExpanded((v) => !v)}
+      >
         <span class="merged-tools-label">{label()}</span>
         <span class="merged-tools-chevron">
           {expanded() ? "\u25BE" : "\u25B8"}

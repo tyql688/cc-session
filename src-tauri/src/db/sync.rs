@@ -2,10 +2,32 @@ use std::collections::{HashMap, HashSet};
 
 use rusqlite::{params, Connection};
 
-use crate::models::{Provider, SessionMeta};
+use crate::models::{Message, MessageRole, Provider, SessionMeta};
 use crate::provider::ParsedSession;
+use crate::provider_utils::{truncate_to_bytes, FTS_CONTENT_LIMIT};
 
 use super::Database;
+
+/// Rebuild the FTS content text from typed messages, keeping only the
+/// dialogue roles (user + assistant). This excludes tool calls, tool output,
+/// and system/thinking messages so the global search matches what the user
+/// actually said or what the model actually replied. Falls back to the
+/// provider-supplied content_text when messages carry no real content
+/// (e.g. OpenCode emits Assistant stubs only for token accounting).
+fn dialogue_content_text(messages: &[Message], fallback: &str) -> String {
+    let parts: Vec<&str> = messages
+        .iter()
+        .filter(|m| matches!(m.role, MessageRole::User | MessageRole::Assistant))
+        .map(|m| m.content.as_str())
+        .filter(|c| !c.trim().is_empty())
+        .collect();
+
+    if parts.is_empty() {
+        return fallback.to_string();
+    }
+
+    truncate_to_bytes(&parts.join("\n"), FTS_CONTENT_LIMIT)
+}
 
 /// A single row in session_token_stats, keyed by (date, model).
 pub struct TokenStatRow {
@@ -74,7 +96,8 @@ impl Database {
 
         self.with_transaction(|conn| {
             for parsed in sessions {
-                upsert_session_on(conn, &parsed.meta, &parsed.content_text)?;
+                let content = dialogue_content_text(&parsed.messages, &parsed.content_text);
+                upsert_session_on(conn, &parsed.meta, &content)?;
             }
 
             if should_delete {
@@ -121,7 +144,8 @@ impl Database {
 
         self.with_transaction(|conn| {
             for parsed in sessions {
-                upsert_session_on(conn, &parsed.meta, &parsed.content_text)?;
+                let content = dialogue_content_text(&parsed.messages, &parsed.content_text);
+                upsert_session_on(conn, &parsed.meta, &content)?;
             }
 
             if should_delete {
