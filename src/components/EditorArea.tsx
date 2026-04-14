@@ -194,8 +194,10 @@ export function EditorArea(props: {
               <div
                 class="editor-tab-pane"
                 style={{
-                  display:
-                    session.id === props.activeTabId ? "contents" : "none",
+                  display: session.id === props.activeTabId ? "flex" : "none",
+                  flex: "1",
+                  "flex-direction": "column",
+                  "min-height": "0",
                 }}
               >
                 <SessionView
