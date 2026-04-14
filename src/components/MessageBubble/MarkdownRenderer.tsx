@@ -267,7 +267,8 @@ function splitTextWithImages(value: string): Array<Text | Image> {
 function renderKatex(tex: string, displayMode: boolean): string | null {
   try {
     return katex.renderToString(tex, { displayMode, throwOnError: false });
-  } catch {
+  } catch (error) {
+    console.warn("Failed to render KaTeX:", error);
     return null;
   }
 }
@@ -298,7 +299,8 @@ function isSafeUrl(url: string): boolean {
   try {
     const parsed = new URL(url, "https://placeholder");
     return ["http:", "https:", "mailto:"].includes(parsed.protocol);
-  } catch {
+  } catch (error) {
+    console.warn("Failed to parse markdown URL:", error);
     return false;
   }
 }

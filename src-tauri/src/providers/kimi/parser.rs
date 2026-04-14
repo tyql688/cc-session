@@ -75,8 +75,31 @@ fn subagent_title_from_meta(session_dir: &std::path::Path, agent_id: &str) -> Op
         .join("subagents")
         .join(agent_id)
         .join("meta.json");
-    let content = fs::read_to_string(&meta_path).ok()?;
-    let json: Value = serde_json::from_str(&content).ok()?;
+    if !meta_path.exists() {
+        return None;
+    }
+    let content = match fs::read_to_string(&meta_path) {
+        Ok(content) => content,
+        Err(error) => {
+            log::warn!(
+                "failed to read Kimi subagent meta '{}': {}",
+                meta_path.display(),
+                error
+            );
+            return None;
+        }
+    };
+    let json: Value = match serde_json::from_str(&content) {
+        Ok(json) => json,
+        Err(error) => {
+            log::warn!(
+                "failed to parse Kimi subagent meta '{}': {}",
+                meta_path.display(),
+                error
+            );
+            return None;
+        }
+    };
     json.get("description")
         .and_then(|d| d.as_str())
         .filter(|s| !s.is_empty())
@@ -119,8 +142,28 @@ impl KimiProvider {
         path: &PathBuf,
         project_map: &HashMap<String, String>,
     ) -> Option<ParsedSession> {
-        let file = File::open(path).ok()?;
-        let metadata = fs::metadata(path).ok()?;
+        let file = match File::open(path) {
+            Ok(file) => file,
+            Err(error) => {
+                log::warn!(
+                    "failed to open Kimi session '{}': {}",
+                    path.display(),
+                    error
+                );
+                return None;
+            }
+        };
+        let metadata = match fs::metadata(path) {
+            Ok(metadata) => metadata,
+            Err(error) => {
+                log::warn!(
+                    "failed to read Kimi session metadata '{}': {}",
+                    path.display(),
+                    error
+                );
+                return None;
+            }
+        };
         let file_size = metadata.len();
 
         let reader = BufReader::new(file);
@@ -135,7 +178,14 @@ impl KimiProvider {
         for line in reader.lines() {
             let line = match line {
                 Ok(l) => l,
-                Err(_) => continue,
+                Err(error) => {
+                    log::warn!(
+                        "failed to read Kimi session line from '{}': {}",
+                        path.display(),
+                        error
+                    );
+                    continue;
+                }
             };
             if line.trim().is_empty() {
                 continue;
@@ -143,7 +193,14 @@ impl KimiProvider {
 
             let entry: Value = match serde_json::from_str(&line) {
                 Ok(v) => v,
-                Err(_) => continue,
+                Err(error) => {
+                    log::warn!(
+                        "skipping malformed Kimi JSONL in '{}': {}",
+                        path.display(),
+                        error
+                    );
+                    continue;
+                }
             };
 
             // Extract timestamp (float seconds)
@@ -428,8 +485,20 @@ impl KimiProvider {
             .unwrap_or_else(|| NO_PROJECT.to_string());
         let project_name = project_name_from_path(&project_path);
 
-        let created_at = first_timestamp.unwrap_or(0);
-        let updated_at = last_timestamp.unwrap_or(0);
+        let Some(created_at) = first_timestamp else {
+            log::warn!(
+                "skipping Kimi session without first timestamp '{}': no usable timestamp found",
+                path.display()
+            );
+            return None;
+        };
+        let Some(updated_at) = last_timestamp else {
+            log::warn!(
+                "skipping Kimi session without last timestamp '{}': no usable timestamp found",
+                path.display()
+            );
+            return None;
+        };
 
         let full_content = content_parts.join("\n");
         let content_text = truncate_to_bytes(&full_content, FTS_CONTENT_LIMIT);
@@ -473,7 +542,14 @@ impl KimiProvider {
     ) -> Vec<ParsedSession> {
         let file = match File::open(path) {
             Ok(f) => f,
-            Err(_) => return Vec::new(),
+            Err(error) => {
+                log::warn!(
+                    "failed to open Kimi session for subagent extraction '{}': {}",
+                    path.display(),
+                    error
+                );
+                return Vec::new();
+            }
         };
 
         // Collect SubagentEvent entries grouped by agent_id
@@ -483,14 +559,28 @@ impl KimiProvider {
         for line in reader.lines() {
             let line = match line {
                 Ok(l) => l,
-                Err(_) => continue,
+                Err(error) => {
+                    log::warn!(
+                        "failed to read Kimi subagent extraction line from '{}': {}",
+                        path.display(),
+                        error
+                    );
+                    continue;
+                }
             };
             if !line.contains("SubagentEvent") {
                 continue;
             }
             let entry: Value = match serde_json::from_str(&line) {
                 Ok(v) => v,
-                Err(_) => continue,
+                Err(error) => {
+                    log::warn!(
+                        "skipping malformed Kimi subagent JSONL in '{}': {}",
+                        path.display(),
+                        error
+                    );
+                    continue;
+                }
             };
             let ts = entry
                 .get("timestamp")
@@ -809,14 +899,31 @@ impl KimiProvider {
         let full_content = content_parts.join("\n");
         let content_text = truncate_to_bytes(&full_content, FTS_CONTENT_LIMIT);
 
+        let Some(created_at) = first_timestamp else {
+            log::warn!(
+                "skipping Kimi subagent '{}' without first timestamp from '{}'",
+                agent_id,
+                source_path
+            );
+            return None;
+        };
+        let Some(updated_at) = last_timestamp else {
+            log::warn!(
+                "skipping Kimi subagent '{}' without last timestamp from '{}'",
+                agent_id,
+                source_path
+            );
+            return None;
+        };
+
         let meta = SessionMeta {
             id: agent_id.to_string(),
             provider: Provider::Kimi,
             title,
             project_path: project_path.to_string(),
             project_name: project_name.to_string(),
-            created_at: first_timestamp.unwrap_or(0),
-            updated_at: last_timestamp.unwrap_or(0),
+            created_at,
+            updated_at,
             message_count: messages.len() as u32,
             file_size_bytes: 0,
             source_path: source_path.to_string(),

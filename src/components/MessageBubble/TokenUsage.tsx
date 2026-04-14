@@ -1,6 +1,7 @@
 import { createSignal, Show } from "solid-js";
 import type { TokenUsage } from "../../lib/types";
 import { useI18n } from "../../i18n/index";
+import { toastError } from "../../stores/toast";
 
 export function CopyMessageButton(props: {
   content: string;
@@ -14,8 +15,9 @@ export function CopyMessageButton(props: {
       await navigator.clipboard.writeText(props.copyText ?? props.content);
       setCopied(true);
       setTimeout(() => setCopied(false), 1500);
-    } catch {
-      // clipboard unavailable
+    } catch (error) {
+      console.error("Failed to copy message:", error);
+      toastError(t("toast.copyFailed"));
     }
   }
 

@@ -1,5 +1,6 @@
 import { createSignal } from "solid-js";
 import type { Provider } from "../lib/types";
+import { errorMessage } from "../lib/errors";
 import { detectTerminal } from "../lib/tauri";
 
 export type TerminalApp =
@@ -16,6 +17,51 @@ export type TerminalApp =
   | "gnome-terminal"
   | "konsole"
   | "xterm"; // Linux
+
+const VALID_PROVIDERS: Provider[] = [
+  "claude",
+  "codex",
+  "gemini",
+  "cursor",
+  "opencode",
+  "kimi",
+  "cc-mirror",
+  "qwen",
+  "copilot",
+];
+
+function parseStoredStringArray<T extends string>(
+  storageKey: string,
+  label: string,
+  isValid: (value: string) => value is T,
+): { value: T[]; error: string | null } {
+  const raw = localStorage.getItem(storageKey);
+  if (raw === null) {
+    return { value: [], error: null };
+  }
+
+  try {
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) {
+      throw new Error(`${label} must be a JSON array`);
+    }
+
+    const invalidValue = parsed.find(
+      (value) => typeof value !== "string" || !isValid(value),
+    );
+    if (invalidValue !== undefined) {
+      throw new Error(
+        `invalid ${label} entry: ${JSON.stringify(invalidValue)}`,
+      );
+    }
+
+    return { value: parsed as T[], error: null };
+  } catch (error) {
+    const message = `Failed to parse ${label}: ${errorMessage(error)}`;
+    console.error(message, error);
+    return { value: [], error: message };
+  }
+}
 
 const storedTerminal = localStorage.getItem(
   "cc-session-terminal",
@@ -49,7 +95,9 @@ if (!storedTerminal) {
         localStorage.setItem("cc-session-terminal", detected);
       }
     })
-    .catch(() => {});
+    .catch((error) => {
+      console.error("Failed to detect terminal app:", error);
+    });
 }
 
 export function setTerminalApp(t: TerminalApp) {
@@ -60,31 +108,31 @@ export function setTerminalApp(t: TerminalApp) {
 export { terminalApp };
 
 // Provider toggle: store disabled providers in localStorage
+const initialDisabledProviders = parseStoredStringArray<Provider>(
+  "cc-session-disabled-providers",
+  "disabled providers setting",
+  (value): value is Provider => VALID_PROVIDERS.includes(value as Provider),
+);
+
 const [disabledProviders, setDisabledProvidersSignal] = createSignal<
   Provider[]
->(
-  (() => {
-    try {
-      return JSON.parse(
-        localStorage.getItem("cc-session-disabled-providers") || "[]",
-      ) as Provider[];
-    } catch {
-      return [] as Provider[];
-    }
-  })(),
-);
+>(initialDisabledProviders.value);
+const [disabledProvidersError, setDisabledProvidersError] = createSignal<
+  string | null
+>(initialDisabledProviders.error);
 
 export function toggleProvider(id: Provider) {
   setDisabledProvidersSignal((prev) => {
     const next = prev.includes(id)
       ? prev.filter((p) => p !== id)
       : [...prev, id];
+    setDisabledProvidersError(null);
     localStorage.setItem("cc-session-disabled-providers", JSON.stringify(next));
     return next;
   });
 }
 
-export { disabledProviders };
+export { disabledProviders, disabledProvidersError };
 
 // Time grouping toggle
 const [timeGrouping, setTimeGroupingSignal] = createSignal<boolean>(
@@ -111,22 +159,24 @@ export function setShowOrphans(v: boolean) {
 export { showOrphans };
 
 // Blocked folders: sessions from these project paths are hidden
-const [blockedFolders, setBlockedFoldersSignal] = createSignal<string[]>(
-  (() => {
-    try {
-      return JSON.parse(
-        localStorage.getItem("cc-session-blocked-folders") || "[]",
-      ) as string[];
-    } catch {
-      return [] as string[];
-    }
-  })(),
+const initialBlockedFolders = parseStoredStringArray<string>(
+  "cc-session-blocked-folders",
+  "blocked folders setting",
+  (value): value is string => value.length > 0,
 );
+
+const [blockedFolders, setBlockedFoldersSignal] = createSignal<string[]>(
+  initialBlockedFolders.value,
+);
+const [blockedFoldersError, setBlockedFoldersError] = createSignal<
+  string | null
+>(initialBlockedFolders.error);
 
 export function addBlockedFolder(path: string) {
   setBlockedFoldersSignal((prev) => {
     if (prev.includes(path)) return prev;
     const next = [...prev, path];
+    setBlockedFoldersError(null);
     localStorage.setItem("cc-session-blocked-folders", JSON.stringify(next));
     return next;
   });
@@ -135,6 +185,7 @@ export function addBlockedFolder(path: string) {
 export function removeBlockedFolder(path: string) {
   setBlockedFoldersSignal((prev) => {
     const next = prev.filter((p) => p !== path);
+    setBlockedFoldersError(null);
     localStorage.setItem("cc-session-blocked-folders", JSON.stringify(next));
     return next;
   });
@@ -146,4 +197,4 @@ export function isPathBlocked(path: string): boolean {
   );
 }
 
-export { blockedFolders };
+export { blockedFolders, blockedFoldersError };

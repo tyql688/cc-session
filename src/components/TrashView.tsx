@@ -36,13 +36,13 @@ export function TrashView(props: { onRefreshTree: () => void }) {
   );
   const [expandedIds, setExpandedIds] = createSignal<Set<string>>(new Set());
 
-  const [trashItems, { refetch }] = createResource<TrashMeta[]>(async () => {
-    try {
-      return await listTrash();
-    } catch {
-      return [];
-    }
-  });
+  const [trashItems, { refetch }] = createResource<TrashMeta[]>(() =>
+    listTrash(),
+  );
+
+  const trashError = createMemo(() =>
+    trashItems.error ? errorMessage(trashItems.error) : null,
+  );
 
   onMount(() => refetch());
 
@@ -338,7 +338,10 @@ export function TrashView(props: { onRefreshTree: () => void }) {
       <div class="trash-list">
         <Show
           when={
-            !trashItems.loading && trashItems() && trashItems()!.length === 0
+            !trashItems.loading &&
+            !trashError() &&
+            trashItems() &&
+            trashItems()!.length === 0
           }
         >
           <div class="trash-empty-state">
@@ -361,6 +364,13 @@ export function TrashView(props: { onRefreshTree: () => void }) {
         <Show when={trashItems.loading}>
           <div class="trash-empty-state">
             <div class="spinner spinner-sm" />
+          </div>
+        </Show>
+
+        <Show when={!trashItems.loading && trashError()}>
+          <div class="empty-state">
+            <p class="empty-state-text">{t("error.title")}</p>
+            <p class="empty-state-hint">{trashError()}</p>
           </div>
         </Show>
 

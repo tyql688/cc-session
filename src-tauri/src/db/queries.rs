@@ -499,10 +499,11 @@ impl Database {
         let session_refs: Vec<&dyn rusqlite::types::ToSql> =
             session_params.iter().map(|p| p.as_ref()).collect();
         let mut stmt = conn.prepare(&session_sql)?;
-        let session_ids: Vec<String> = stmt
-            .query_map(session_refs.as_slice(), |row| row.get::<_, String>(0))?
-            .filter_map(|r| r.ok())
-            .collect();
+        let rows = stmt.query_map(session_refs.as_slice(), |row| row.get::<_, String>(0))?;
+        let mut session_ids = Vec::new();
+        for row in rows {
+            session_ids.push(row?);
+        }
 
         if session_ids.is_empty() {
             return Ok(Vec::new());

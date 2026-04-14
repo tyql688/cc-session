@@ -1,6 +1,10 @@
 import { For, Show } from "solid-js";
 import { useI18n } from "../i18n/index";
-import { blockedFolders, removeBlockedFolder } from "../stores/settings";
+import {
+  blockedFolders,
+  blockedFoldersError,
+  removeBlockedFolder,
+} from "../stores/settings";
 
 export function BlockedView(props: { onRefreshTree?: () => void }) {
   const { t } = useI18n();
@@ -8,13 +12,18 @@ export function BlockedView(props: { onRefreshTree?: () => void }) {
   return (
     <div class="blocked-view">
       <div class="explorer-header">{t("settings.blockedFolders")}</div>
+      <Show when={blockedFoldersError()}>
+        <div class="session-error">{blockedFoldersError()}</div>
+      </Show>
       <Show
-        when={blockedFolders().length > 0}
+        when={!blockedFoldersError() && blockedFolders().length > 0}
         fallback={
-          <div class="empty-state">
-            <p class="empty-state-text">{t("settings.noBlockedFolders")}</p>
-            <p class="empty-state-hint">{t("blocked.hint")}</p>
-          </div>
+          <Show when={!blockedFoldersError()}>
+            <div class="empty-state">
+              <p class="empty-state-text">{t("settings.noBlockedFolders")}</p>
+              <p class="empty-state-hint">{t("blocked.hint")}</p>
+            </div>
+          </Show>
         }
       >
         <div class="blocked-list">

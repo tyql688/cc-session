@@ -17,7 +17,7 @@ export function SessionToolbar(props: {
   messages: Accessor<Message[]>;
   processedEntries: Accessor<ProcessedEntry[]>;
   watching: Accessor<boolean>;
-  starred: Accessor<boolean>;
+  starred: Accessor<boolean | null>;
   onToggleWatch: () => void;
   onToggleFavorite: () => void;
   onResume: () => void;
@@ -89,15 +89,21 @@ export function SessionToolbar(props: {
             {props.watching() ? "\u25C9" : "\u25CE"}
           </button>
           <button
-            class={`session-action-btn session-action-btn-icon${props.starred() ? " starred" : ""}`}
+            class={`session-action-btn session-action-btn-icon${props.starred() === true ? " starred" : ""}`}
             onClick={props.onToggleFavorite}
             title={
-              props.starred()
-                ? t("session.favoriteRemove")
-                : t("session.favoriteAdd")
+              props.starred() === null
+                ? t("common.loading")
+                : props.starred()
+                  ? t("session.favoriteRemove")
+                  : t("session.favoriteAdd")
             }
           >
-            {props.starred() ? "\u2605" : "\u2606"}
+            {props.starred() === null
+              ? "..."
+              : props.starred()
+                ? "\u2605"
+                : "\u2606"}
           </button>
           <button
             class="session-action-btn primary"

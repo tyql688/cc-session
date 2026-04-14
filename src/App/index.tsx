@@ -72,20 +72,37 @@ export default function App() {
   >();
 
   async function refreshStatusBarStats() {
-    try {
-      const [stats, cost, tokens] = await Promise.all([
-        getIndexStats(),
-        getTodayCost(),
-        getTodayTokens(),
-      ]);
-      const ts = stats.last_index_time
-        ? Number(stats.last_index_time)
+    const [statsResult, costResult, tokensResult] = await Promise.allSettled([
+      getIndexStats(),
+      getTodayCost(),
+      getTodayTokens(),
+    ]);
+
+    if (statsResult.status === "fulfilled") {
+      const ts = statsResult.value.last_index_time
+        ? Number(statsResult.value.last_index_time)
         : undefined;
       setLastScanTime(ts);
-      setTodayCost(cost);
-      setTodayTokens(tokens);
-    } catch {
-      // non-critical, silently ignore
+    } else {
+      console.error(
+        "Failed to refresh status bar index stats:",
+        statsResult.reason,
+      );
+      setLastScanTime(undefined);
+    }
+
+    if (costResult.status === "fulfilled") {
+      setTodayCost(costResult.value);
+    } else {
+      console.error("Failed to refresh today cost:", costResult.reason);
+      setTodayCost(undefined);
+    }
+
+    if (tokensResult.status === "fulfilled") {
+      setTodayTokens(tokensResult.value);
+    } else {
+      console.error("Failed to refresh today tokens:", tokensResult.reason);
+      setTodayTokens(undefined);
     }
   }
 
@@ -167,8 +184,11 @@ export default function App() {
             openSession(match);
             return;
           }
-        } catch {
-          // continue to next group
+        } catch (error) {
+          console.error(
+            `Failed to load child sessions for parent ${parentId}:`,
+            error,
+          );
         }
       }
     };

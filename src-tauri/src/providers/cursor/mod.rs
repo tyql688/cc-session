@@ -159,15 +159,57 @@ impl CursorProvider {
             .map_err(|e| ProviderError::Parse(format!("failed to read transcript: {e}")))?;
         Ok(crate::providers::cursor::parser::parse_transcript_messages(
             &content,
+            source_path,
         ))
     }
 
     fn extract_workspace_path_from_store_db(&self, store_db_path: &Path) -> Option<String> {
-        let conn = Connection::open(store_db_path).ok()?;
-        let mut stmt = conn.prepare("SELECT data FROM blobs").ok()?;
-        let rows = stmt.query_map([], |row| row.get::<_, Vec<u8>>(0)).ok()?;
+        let conn = match Connection::open(store_db_path) {
+            Ok(conn) => conn,
+            Err(error) => {
+                log::warn!(
+                    "failed to open Cursor store DB '{}': {}",
+                    store_db_path.display(),
+                    error
+                );
+                return None;
+            }
+        };
+        let mut stmt = match conn.prepare("SELECT data FROM blobs") {
+            Ok(stmt) => stmt,
+            Err(error) => {
+                log::warn!(
+                    "failed to query Cursor store DB '{}': {}",
+                    store_db_path.display(),
+                    error
+                );
+                return None;
+            }
+        };
+        let rows = match stmt.query_map([], |row| row.get::<_, Vec<u8>>(0)) {
+            Ok(rows) => rows,
+            Err(error) => {
+                log::warn!(
+                    "failed to read Cursor store DB rows '{}': {}",
+                    store_db_path.display(),
+                    error
+                );
+                return None;
+            }
+        };
 
-        for row in rows.flatten() {
+        for row in rows {
+            let row = match row {
+                Ok(row) => row,
+                Err(error) => {
+                    log::warn!(
+                        "failed to decode Cursor store DB row '{}': {}",
+                        store_db_path.display(),
+                        error
+                    );
+                    continue;
+                }
+            };
             if let Ok(value) = serde_json::from_slice::<Value>(&row) {
                 if let Some(content) = value.get("content").and_then(Value::as_str) {
                     if let Some(path) =

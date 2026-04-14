@@ -70,6 +70,13 @@ fn opencode_tool_result_value(
     Some(result)
 }
 
+fn opencode_patch_part_value(part: &serde_json::Value) -> Option<serde_json::Value> {
+    Some(serde_json::json!({
+        "hash": part.get("hash")?.as_str()?,
+        "files": part.get("files")?.clone(),
+    }))
+}
+
 pub struct OpenCodeProvider {
     db_path: PathBuf,
 }
@@ -126,10 +133,7 @@ impl SessionProvider for OpenCodeProvider {
     }
 
     fn scan_all(&self) -> Result<Vec<ParsedSession>, ProviderError> {
-        let conn = match self.open_db() {
-            Ok(c) => c,
-            Err(_) => return Ok(Vec::new()),
-        };
+        let conn = self.open_db()?;
 
         // Batch: message counts per session (avoids N+1)
         let mut msg_count_map: std::collections::HashMap<String, u32> =
@@ -140,7 +144,8 @@ impl SessionProvider for OpenCodeProvider {
             let rows = stmt.query_map([], |row| {
                 Ok((row.get::<_, String>(0)?, row.get::<_, i64>(1)?))
             })?;
-            for r in rows.flatten() {
+            for r in rows {
+                let r = r?;
                 msg_count_map.insert(r.0, r.1 as u32);
             }
         }
@@ -160,7 +165,8 @@ impl SessionProvider for OpenCodeProvider {
             })?;
             let mut counts: std::collections::HashMap<String, usize> =
                 std::collections::HashMap::new();
-            for r in rows.flatten() {
+            for r in rows {
+                let r = r?;
                 let (sid, text) = r;
                 let count = counts.entry(sid.clone()).or_insert(0);
                 if *count >= 50 {
@@ -182,8 +188,7 @@ impl SessionProvider for OpenCodeProvider {
         {
             let has_model_col: bool = conn
                 .prepare("SELECT COUNT(*) FROM pragma_table_info('message') WHERE name = 'data'")
-                .and_then(|mut s| s.query_row([], |row| row.get::<_, i64>(0)))
-                .unwrap_or(0)
+                .and_then(|mut s| s.query_row([], |row| row.get::<_, i64>(0)))?
                 > 0;
             if has_model_col {
                 let mut stmt = conn.prepare(
@@ -195,7 +200,8 @@ impl SessionProvider for OpenCodeProvider {
                 let rows = stmt.query_map([], |row| {
                     Ok((row.get::<_, String>(0)?, row.get::<_, Option<String>>(1)?))
                 })?;
-                for r in rows.flatten() {
+                for r in rows {
+                    let r = r?;
                     if let Some(m) = r.1 {
                         model_map.insert(r.0, m);
                     }
@@ -238,7 +244,8 @@ impl SessionProvider for OpenCodeProvider {
                     row.get::<_, Option<i64>>(7)?,
                 ))
             })?;
-            for r in rows.flatten() {
+            for r in rows {
+                let r = r?;
                 let (sid, msg_id, model, input, output, cache_read, cache_write, time_created) = r;
                 let usage = crate::models::TokenUsage {
                     input_tokens: input.unwrap_or(0) as u32,
@@ -265,8 +272,7 @@ impl SessionProvider for OpenCodeProvider {
                 .prepare(
                     "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='workspace'",
                 )
-                .and_then(|mut s| s.query_row([], |row| row.get::<_, i64>(0)))
-                .unwrap_or(0)
+                .and_then(|mut s| s.query_row([], |row| row.get::<_, i64>(0)))?
                 > 0;
             if has_workspace {
                 let mut stmt = conn.prepare(
@@ -279,7 +285,8 @@ impl SessionProvider for OpenCodeProvider {
                 let rows = stmt.query_map([], |row| {
                     Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
                 })?;
-                for r in rows.flatten() {
+                for r in rows {
+                    let r = r?;
                     branch_map.insert(r.0, r.1);
                 }
             }
@@ -288,8 +295,7 @@ impl SessionProvider for OpenCodeProvider {
         // Check if session table has 'version' column (may not exist in older DBs/test fixtures)
         let has_version: bool = conn
             .prepare("SELECT COUNT(*) FROM pragma_table_info('session') WHERE name = 'version'")
-            .and_then(|mut s| s.query_row([], |row| row.get::<_, i64>(0)))
-            .unwrap_or(0)
+            .and_then(|mut s| s.query_row([], |row| row.get::<_, i64>(0)))?
             > 0;
 
         let query = if has_version {
@@ -308,21 +314,22 @@ impl SessionProvider for OpenCodeProvider {
 
         let mut stmt = conn.prepare(query)?;
 
-        let sessions: Vec<ParsedSession> = stmt
-            .query_map([], |row| {
-                Ok((
-                    row.get::<_, String>(0)?,         // id
-                    row.get::<_, String>(1)?,         // title
-                    row.get::<_, String>(2)?,         // directory
-                    row.get::<_, i64>(3)?,            // time_created
-                    row.get::<_, i64>(4)?,            // time_updated
-                    row.get::<_, Option<String>>(5)?, // parent_id
-                    row.get::<_, Option<String>>(6)?, // worktree
-                    row.get::<_, Option<String>>(7)?, // project name
-                    row.get::<_, Option<String>>(8)?, // version
-                ))
-            })?
-            .filter_map(|r| r.ok())
+        let rows = stmt.query_map([], |row| {
+            Ok((
+                row.get::<_, String>(0)?,         // id
+                row.get::<_, String>(1)?,         // title
+                row.get::<_, String>(2)?,         // directory
+                row.get::<_, i64>(3)?,            // time_created
+                row.get::<_, i64>(4)?,            // time_updated
+                row.get::<_, Option<String>>(5)?, // parent_id
+                row.get::<_, Option<String>>(6)?, // worktree
+                row.get::<_, Option<String>>(7)?, // project name
+                row.get::<_, Option<String>>(8)?, // version
+            ))
+        })?;
+        let sessions: Vec<ParsedSession> = rows
+            .collect::<Result<Vec<_>, _>>()?
+            .into_iter()
             .map(
                 |(
                     id,
@@ -420,12 +427,11 @@ impl SessionProvider for OpenCodeProvider {
              ORDER BY m.time_created",
         )?;
 
-        let msg_rows: Vec<(String, String)> = msg_stmt
+        let msg_rows = msg_stmt
             .query_map(params![session_id], |row| {
                 Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
             })?
-            .filter_map(|r| r.ok())
-            .collect();
+            .collect::<Result<Vec<_>, _>>()?;
 
         // Load all parts for this session, grouped by message_id
         let mut part_stmt = conn.prepare(
@@ -436,23 +442,43 @@ impl SessionProvider for OpenCodeProvider {
 
         let mut parts_by_msg: std::collections::HashMap<String, Vec<serde_json::Value>> =
             std::collections::HashMap::new();
-        let part_rows: Vec<(String, String)> = part_stmt
+        let part_rows = part_stmt
             .query_map(params![session_id], |row| {
                 Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
             })?
-            .filter_map(|r| r.ok())
-            .collect();
+            .collect::<Result<Vec<_>, _>>()?;
 
         for (mid, data) in part_rows {
-            if let Ok(v) = serde_json::from_str::<serde_json::Value>(&data) {
-                parts_by_msg.entry(mid).or_default().push(v);
+            match serde_json::from_str::<serde_json::Value>(&data) {
+                Ok(value) => {
+                    parts_by_msg.entry(mid).or_default().push(value);
+                }
+                Err(error) => {
+                    log::warn!(
+                        "skipping malformed OpenCode part JSON for session {} message {}: {}",
+                        session_id,
+                        mid,
+                        error
+                    );
+                }
             }
         }
 
         let mut messages = Vec::new();
 
         for (msg_id, msg_data) in &msg_rows {
-            let msg_json: serde_json::Value = serde_json::from_str(msg_data).unwrap_or_default();
+            let msg_json: serde_json::Value = match serde_json::from_str(msg_data) {
+                Ok(value) => value,
+                Err(error) => {
+                    log::warn!(
+                        "skipping malformed OpenCode message JSON for session {} message {}: {}",
+                        session_id,
+                        msg_id,
+                        error
+                    );
+                    continue;
+                }
+            };
             let role_str = msg_json
                 .get("role")
                 .and_then(|r| r.as_str())
@@ -519,6 +545,7 @@ impl SessionProvider for OpenCodeProvider {
                     let mut text_parts: Vec<String> = Vec::new();
                     // Collect tool parts to emit after the text message
                     let mut tool_messages: Vec<Message> = Vec::new();
+                    let mut patch_parts: Vec<serde_json::Value> = Vec::new();
 
                     for part in &parts {
                         let part_type = part.get("type").and_then(|t| t.as_str()).unwrap_or("");
@@ -630,8 +657,44 @@ impl SessionProvider for OpenCodeProvider {
                                     tool_metadata: Some(metadata),
                                 });
                             }
+                            "patch" => {
+                                if let Some(patch) = opencode_patch_part_value(part) {
+                                    patch_parts.push(patch);
+                                }
+                            }
                             // Skip step-start, step-finish, reasoning, snapshot, patch, etc.
                             _ => {}
+                        }
+                    }
+
+                    if !patch_parts.is_empty() {
+                        for tool_message in tool_messages.iter_mut().rev() {
+                            let Some(metadata) = tool_message.tool_metadata.as_mut() else {
+                                continue;
+                            };
+                            if metadata.raw_name != "apply_patch" {
+                                continue;
+                            }
+
+                            let mut structured = metadata
+                                .structured
+                                .take()
+                                .unwrap_or_else(|| serde_json::json!({}));
+                            if !structured.is_object() {
+                                structured = serde_json::json!({});
+                            }
+                            if let Some(obj) = structured.as_object_mut() {
+                                if patch_parts.len() == 1 {
+                                    obj.insert("patch".to_string(), patch_parts[0].clone());
+                                } else {
+                                    obj.insert(
+                                        "patches".to_string(),
+                                        serde_json::Value::Array(patch_parts.clone()),
+                                    );
+                                }
+                            }
+                            metadata.structured = Some(structured);
+                            break;
                         }
                     }
 
@@ -744,13 +807,13 @@ impl SessionProvider for OpenCodeProvider {
         )?;
 
         // Delete child sessions (subagents)
-        let child_ids: Vec<String> = tx
-            .prepare("SELECT id FROM session WHERE parent_id = ?1")
-            .and_then(|mut stmt| {
-                let rows = stmt.query_map(params![session_id], |row| row.get(0))?;
-                Ok(rows.filter_map(|r| r.ok()).collect())
-            })
-            .unwrap_or_default();
+        let child_ids = {
+            let mut child_stmt = tx.prepare("SELECT id FROM session WHERE parent_id = ?1")?;
+            let ids = child_stmt
+                .query_map(params![session_id], |row| row.get(0))?
+                .collect::<Result<Vec<String>, _>>()?;
+            ids
+        };
         for cid in &child_ids {
             tx.execute("DELETE FROM part WHERE session_id = ?1", params![cid])?;
             tx.execute("DELETE FROM message WHERE session_id = ?1", params![cid])?;

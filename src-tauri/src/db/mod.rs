@@ -55,7 +55,8 @@ impl Database {
     }
 
     pub fn open(data_dir: &Path) -> Result<Self, rusqlite::Error> {
-        std::fs::create_dir_all(data_dir).ok();
+        std::fs::create_dir_all(data_dir)
+            .map_err(|e| rusqlite::Error::ToSqlConversionFailure(Box::new(e)))?;
         let db_path = data_dir.join("sessions.db");
 
         let write_conn = Connection::open(&db_path)?;

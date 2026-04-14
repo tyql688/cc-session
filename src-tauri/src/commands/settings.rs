@@ -78,20 +78,25 @@ pub fn get_pricing_catalog_status(state: State<AppState>) -> Result<PricingCatal
         .db
         .get_meta(PRICING_CATALOG_UPDATED_AT_KEY)
         .map_err(|e| format!("failed to read pricing updated_at: {e}"))?;
-    let model_count = state
+    let model_count = if let Some(raw_count) = state
         .db
         .get_meta(PRICING_CATALOG_MODEL_COUNT_KEY)
         .map_err(|e| format!("failed to read pricing model count: {e}"))?
-        .and_then(|count| count.parse::<u64>().ok())
-        .or_else(|| {
-            state
-                .db
-                .get_meta(PRICING_CATALOG_JSON_KEY)
-                .ok()
-                .flatten()
-                .and_then(|json| parse_catalog(&json).map(|catalog| catalog.len() as u64))
-        })
-        .unwrap_or(0);
+    {
+        raw_count
+            .parse::<u64>()
+            .map_err(|e| format!("invalid stored pricing model count '{raw_count}': {e}"))?
+    } else if let Some(json) = state
+        .db
+        .get_meta(PRICING_CATALOG_JSON_KEY)
+        .map_err(|e| format!("failed to read pricing catalog JSON: {e}"))?
+    {
+        parse_catalog(&json)
+            .map_err(|e| format!("invalid stored pricing catalog JSON: {e}"))?
+            .len() as u64
+    } else {
+        0
+    };
 
     Ok(PricingCatalogStatus {
         updated_at,
@@ -114,8 +119,8 @@ pub async fn refresh_pricing_catalog(
         .await
         .map_err(|e| format!("failed to read pricing catalog body: {e}"))?;
     let model_count =
-        count_models_dev_models(&body).ok_or_else(|| "invalid models.dev JSON".to_string())?;
-    let catalog = parse_models_dev(&body).ok_or_else(|| "invalid models.dev JSON".to_string())?;
+        count_models_dev_models(&body).map_err(|e| format!("invalid models.dev JSON: {e}"))?;
+    let catalog = parse_models_dev(&body).map_err(|e| format!("invalid models.dev JSON: {e}"))?;
     let body = serde_json::to_string(&catalog)
         .map_err(|e| format!("failed to serialize pricing catalog: {e}"))?;
     let updated_at = chrono::Utc::now().to_rfc3339();

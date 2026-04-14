@@ -253,7 +253,8 @@ function labelImageSource(source: string, t: (key: string) => string): string {
       const pathSegments = url.pathname.split("/").filter(Boolean);
       const tail = pathSegments.slice(-2).join("/");
       return tail ? `${url.hostname}/${tail}` : url.hostname;
-    } catch {
+    } catch (error) {
+      console.warn("Failed to parse image source URL:", error);
       return source;
     }
   }

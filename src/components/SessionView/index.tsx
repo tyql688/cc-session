@@ -234,7 +234,7 @@ export function SessionView(props: {
 
   const [showDeleteConfirm, setShowDeleteConfirm] = createSignal(false);
   const [showExportDialog, setShowExportDialog] = createSignal(false);
-  const [starred, setStarred] = createSignal(false);
+  const [starred, setStarred] = createSignal<boolean | null>(null);
   const [watching, setWatching] = createSignal(false);
 
   // Stable memos so the live-watch effect only re-runs when these values
@@ -333,8 +333,11 @@ export function SessionView(props: {
         try {
           const fav = await isFavorite(props.session.id);
           setStarred(fav);
-        } catch {
-          setStarred(false);
+        } catch (error) {
+          console.error(
+            `Failed to refresh favorite state for session ${props.session.id}:`,
+            error,
+          );
         }
       },
     ),
@@ -368,7 +371,8 @@ export function SessionView(props: {
     try {
       await navigator.clipboard.writeText(text);
       toast(t("toast.copied"));
-    } catch {
+    } catch (error) {
+      console.error("Failed to copy session transcript:", error);
       toastError(t("toast.copyFailed"));
     }
   };

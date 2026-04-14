@@ -64,8 +64,28 @@ fn parent_id_from_path(path: &Path) -> Option<String> {
 }
 
 pub fn parse_session_file(path: &PathBuf) -> Option<ParsedSession> {
-    let file = File::open(path).ok()?;
-    let metadata = fs::metadata(path).ok()?;
+    let file = match File::open(path) {
+        Ok(file) => file,
+        Err(error) => {
+            log::warn!(
+                "failed to open Claude session '{}': {}",
+                path.display(),
+                error
+            );
+            return None;
+        }
+    };
+    let metadata = match fs::metadata(path) {
+        Ok(metadata) => metadata,
+        Err(error) => {
+            log::warn!(
+                "failed to read Claude session metadata '{}': {}",
+                path.display(),
+                error
+            );
+            return None;
+        }
+    };
     let file_size = metadata.len();
 
     let reader = BufReader::new(file);
@@ -88,8 +108,31 @@ pub fn parse_session_file(path: &PathBuf) -> Option<ParsedSession> {
     let parent_id = parent_id_from_path(path);
     let subagent_title = parent_id.as_ref().and_then(|_| {
         let meta_path = path.with_extension("meta.json");
-        let meta_content = fs::read_to_string(&meta_path).ok()?;
-        let meta_json: Value = serde_json::from_str(&meta_content).ok()?;
+        if !meta_path.exists() {
+            return None;
+        }
+        let meta_content = match fs::read_to_string(&meta_path) {
+            Ok(content) => content,
+            Err(error) => {
+                log::warn!(
+                    "failed to read Claude subagent meta '{}': {}",
+                    meta_path.display(),
+                    error
+                );
+                return None;
+            }
+        };
+        let meta_json: Value = match serde_json::from_str(&meta_content) {
+            Ok(json) => json,
+            Err(error) => {
+                log::warn!(
+                    "failed to parse Claude subagent meta '{}': {}",
+                    meta_path.display(),
+                    error
+                );
+                return None;
+            }
+        };
         meta_json
             .get("description")
             .and_then(|d| d.as_str())
@@ -103,7 +146,14 @@ pub fn parse_session_file(path: &PathBuf) -> Option<ParsedSession> {
     for line in reader.lines() {
         let line = match line {
             Ok(l) => l,
-            Err(_) => continue,
+            Err(error) => {
+                log::warn!(
+                    "failed to read Claude session line from '{}': {}",
+                    path.display(),
+                    error
+                );
+                continue;
+            }
         };
         if line.trim().is_empty() {
             continue;
@@ -262,15 +312,45 @@ pub fn parse_session_file(path: &PathBuf) -> Option<ParsedSession> {
                 // (first line may be file-history-snapshot without cwd)
                 let parent_jsonl =
                     project_dir.join(format!("{}.jsonl", parent_id.as_ref().unwrap()));
-                let file = std::fs::File::open(&parent_jsonl).ok()?;
+                let file = match std::fs::File::open(&parent_jsonl) {
+                    Ok(file) => file,
+                    Err(error) => {
+                        log::warn!(
+                            "failed to open Claude parent transcript '{}': {}",
+                            parent_jsonl.display(),
+                            error
+                        );
+                        return None;
+                    }
+                };
                 let reader = std::io::BufReader::new(file);
                 use std::io::BufRead;
-                for line in reader.lines().take(10).flatten() {
-                    if let Ok(entry) = serde_json::from_str::<serde_json::Value>(&line) {
-                        if let Some(c) = entry.get("cwd").and_then(|c| c.as_str()) {
-                            if !c.is_empty() {
-                                return Some(c.to_string());
+                for line in reader.lines().take(10) {
+                    let line = match line {
+                        Ok(line) => line,
+                        Err(error) => {
+                            log::warn!(
+                                "failed to read Claude parent transcript line from '{}': {}",
+                                parent_jsonl.display(),
+                                error
+                            );
+                            continue;
+                        }
+                    };
+                    match serde_json::from_str::<serde_json::Value>(&line) {
+                        Ok(entry) => {
+                            if let Some(c) = entry.get("cwd").and_then(|c| c.as_str()) {
+                                if !c.is_empty() {
+                                    return Some(c.to_string());
+                                }
                             }
+                        }
+                        Err(error) => {
+                            log::warn!(
+                                "failed to parse Claude parent transcript line in '{}': {}",
+                                parent_jsonl.display(),
+                                error
+                            );
                         }
                     }
                 }
@@ -1087,7 +1167,17 @@ pub fn resolve_persisted_outputs(content: &str) -> String {
                     }
                 })
                 .and_then(|path| {
-                    let canonical = std::fs::canonicalize(&path).ok()?;
+                    let canonical = match std::fs::canonicalize(&path) {
+                        Ok(canonical) => canonical,
+                        Err(error) => {
+                            log::warn!(
+                                "failed to canonicalize Claude full-output path '{}': {}",
+                                path,
+                                error
+                            );
+                            return None;
+                        }
+                    };
                     let home = dirs::home_dir()?;
                     let allowed = [home.join(".claude"), home.join(".cc-mirror")];
                     if !allowed.iter().any(|base| {
@@ -1097,7 +1187,17 @@ pub fn resolve_persisted_outputs(content: &str) -> String {
                     }) {
                         return None;
                     }
-                    std::fs::read_to_string(&canonical).ok()
+                    match std::fs::read_to_string(&canonical) {
+                        Ok(content) => Some(content),
+                        Err(error) => {
+                            log::warn!(
+                                "failed to read Claude full-output file '{}': {}",
+                                canonical.display(),
+                                error
+                            );
+                            None
+                        }
+                    }
                 });
 
             match file_content {

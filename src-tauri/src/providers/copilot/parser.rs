@@ -92,8 +92,28 @@ fn is_image_filename(name: &str) -> bool {
 }
 
 pub fn parse_session_file(path: &PathBuf) -> Option<ParsedSession> {
-    let file = File::open(path).ok()?;
-    let metadata = fs::metadata(path).ok()?;
+    let file = match File::open(path) {
+        Ok(file) => file,
+        Err(error) => {
+            log::warn!(
+                "failed to open Copilot session '{}': {}",
+                path.display(),
+                error
+            );
+            return None;
+        }
+    };
+    let metadata = match fs::metadata(path) {
+        Ok(metadata) => metadata,
+        Err(error) => {
+            log::warn!(
+                "failed to read Copilot session metadata '{}': {}",
+                path.display(),
+                error
+            );
+            return None;
+        }
+    };
     let file_size = metadata.len();
 
     let reader = BufReader::new(file);
@@ -111,7 +131,14 @@ pub fn parse_session_file(path: &PathBuf) -> Option<ParsedSession> {
     for line in reader.lines() {
         let line = match line {
             Ok(l) => l,
-            Err(_) => continue,
+            Err(error) => {
+                log::warn!(
+                    "failed to read Copilot session line from '{}': {}",
+                    path.display(),
+                    error
+                );
+                continue;
+            }
         };
         if line.trim().is_empty() {
             continue;
