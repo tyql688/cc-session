@@ -121,6 +121,11 @@ export function TreeNodeComponent(props: {
     node: TreeNode,
     parentProjectLabel: string,
   ) => void;
+  onSessionDblClick?: (
+    e: MouseEvent,
+    node: TreeNode,
+    parentProjectLabel: string,
+  ) => void;
 }) {
   const { t } = useI18n();
   const hasChildren = () => props.node.children.length > 0;
@@ -160,6 +165,13 @@ export function TreeNodeComponent(props: {
     }
   };
 
+  const handleDblClick = (e: MouseEvent) => {
+    if (isSession() && props.onSessionDblClick) {
+      e.preventDefault();
+      props.onSessionDblClick(e, props.node, props.parentProjectLabel ?? "");
+    }
+  };
+
   const handleContextMenu = (e: MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
@@ -195,6 +207,7 @@ export function TreeNodeComponent(props: {
         class={`tree-node tree-node-${props.node.node_type}${isSession() && props.activeSessionId === props.node.id ? " active" : ""}${nodeSelected() ? " selected" : ""}`}
         style={{ "padding-left": `${props.depth * 16 + 8}px` }}
         onClick={handleClick}
+        onDblClick={handleDblClick}
         onContextMenu={handleContextMenu}
         data-session-id={isSession() ? props.node.id : undefined}
       >
@@ -285,6 +298,7 @@ export function TreeNodeComponent(props: {
               onSessionContextMenu={props.onSessionContextMenu}
               onNodeContextMenu={props.onNodeContextMenu}
               onSessionClick={props.onSessionClick}
+              onSessionDblClick={props.onSessionDblClick}
             />
           )}
         </For>
@@ -303,6 +317,7 @@ export function TreeNodeComponent(props: {
               onSessionContextMenu={props.onSessionContextMenu}
               onNodeContextMenu={props.onNodeContextMenu}
               onSessionClick={props.onSessionClick}
+              onSessionDblClick={props.onSessionDblClick}
             />
           )}
         </For>

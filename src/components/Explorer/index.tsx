@@ -65,6 +65,7 @@ export function Explorer(props: {
   tree: TreeNode[];
   activeSessionId: string | null;
   onOpenSession: (s: SessionRef) => void;
+  onPreviewSession: (s: SessionRef) => void;
   onDeleteSession?: (id: string) => void;
   onExportSession?: (id: string) => void;
   onRefreshTree?: () => void;
@@ -199,6 +200,14 @@ export function Explorer(props: {
       return;
     }
     clearSelection();
+    props.onPreviewSession(buildSessionRef(node, parentProjectLabel));
+  }
+
+  function handleSessionDblClick(
+    _e: MouseEvent,
+    node: TreeNode,
+    parentProjectLabel: string,
+  ) {
     props.onOpenSession(buildSessionRef(node, parentProjectLabel));
   }
 
@@ -446,6 +455,7 @@ export function Explorer(props: {
               onSessionContextMenu={handleSessionContextMenu}
               onNodeContextMenu={handleNodeContextMenu}
               onSessionClick={handleSessionClick}
+              onSessionDblClick={handleSessionDblClick}
             />
           )}
         </For>

@@ -23,19 +23,25 @@
   height: 36px;
   background: var(--bg-sidebar);
   border-bottom: 0.5px solid var(--border);
+  flex-shrink: 0;
+  padding: 0;
+  position: relative;
+}
+
+.tab-bar-scroll {
+  display: flex;
+  align-items: flex-end;
+  flex: 1;
+  min-width: 0;
+  height: 100%;
   overflow-x: auto;
   overflow-y: hidden;
-  flex-shrink: 0;
   padding: 0 8px;
+  scrollbar-width: none;
 }
 
-.tab-bar::-webkit-scrollbar {
-  height: 2px;
-}
-
-.tab-bar::-webkit-scrollbar-thumb {
-  background: var(--scrollbar-thumb);
-  border-radius: 1px;
+.tab-bar-scroll::-webkit-scrollbar {
+  display: none;
 }
 
 .tab {
@@ -123,6 +129,87 @@
 .tab.active .tab-close,
 .tab .tab-close.visible {
   opacity: 1;
+}
+
+/* Preview tab — italic title */
+.tab.preview .tab-title {
+  font-style: italic;
+}
+
+/* Tab overflow chevron */
+.tab-overflow-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 36px;
+  border: none;
+  background: var(--bg-sidebar);
+  color: var(--text-secondary);
+  cursor: pointer;
+  font-size: 16px;
+  flex-shrink: 0;
+  border-bottom: 0.5px solid var(--border);
+  border-left: 0.5px solid var(--border);
+}
+
+.tab-overflow-btn:hover {
+  color: var(--text-primary);
+  background: var(--bg-tab-hover);
+}
+
+/* Tab overflow dropdown */
+.tab-overflow-menu {
+  position: absolute;
+  top: 36px;
+  right: 0;
+  z-index: 100;
+  min-width: 200px;
+  max-width: 320px;
+  max-height: 400px;
+  overflow-y: auto;
+  background: var(--context-menu-bg);
+  border: 0.5px solid var(--border);
+  border-radius: 6px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  padding: 4px;
+}
+
+.tab-overflow-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  padding: 6px 10px;
+  border: none;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 12px;
+  cursor: pointer;
+  border-radius: 4px;
+  text-align: left;
+}
+
+.tab-overflow-item:hover {
+  background: var(--bg-tab-hover);
+  color: var(--text-primary);
+}
+
+.tab-overflow-item.active {
+  color: var(--text-primary);
+  font-weight: 500;
+}
+
+.tab-overflow-item.preview .tab-overflow-title {
+  font-style: italic;
+}
+
+.tab-overflow-title {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 /* Explorer Tree */

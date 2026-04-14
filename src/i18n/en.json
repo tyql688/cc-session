@@ -179,7 +179,11 @@
     "rename": "Rename",
     "openInFinder": "Open in Finder",
     "copyPath": "Copy Path",
-    "openToSide": "Open to the Side"
+    "openToSide": "Open to the Side",
+    "keepOpen": "Keep Open"
+  },
+  "tabs": {
+    "showOpenTabs": "Show Open Tabs"
   },
   "settings": {
     "title": "Settings",

@@ -25,6 +25,7 @@ export function EditorArea(props: {
   groupId: string;
   tabs: SessionRef[];
   activeTabId: string | null;
+  previewTabId: string | null;
   isFocused: boolean;
   flexBasis: number;
   onFocus: () => void;
@@ -34,6 +35,7 @@ export function EditorArea(props: {
   onCloseOtherTabs: (keepId: string) => void;
   onCloseTabsToRight: (fromId: string) => void;
   onSplitToRight: (sessionId: string) => void;
+  onPinTab: (sessionId: string) => void;
   onRefreshTree: () => void;
   tree: TreeNode[];
   onOpenSession: (session: SessionRef) => void;
@@ -182,12 +184,14 @@ export function EditorArea(props: {
           groupId={props.groupId}
           tabs={props.tabs}
           activeTabId={props.activeTabId}
+          previewTabId={props.previewTabId}
           onTabSelect={props.onTabSelect}
           onTabClose={props.onTabClose}
           onCloseAllTabs={props.onCloseAllTabs}
           onCloseOtherTabs={props.onCloseOtherTabs}
           onCloseTabsToRight={props.onCloseTabsToRight}
           onSplitToRight={props.onSplitToRight}
+          onPinTab={props.onPinTab}
         />
         <div class="editor-content">
           <Index each={props.tabs}>

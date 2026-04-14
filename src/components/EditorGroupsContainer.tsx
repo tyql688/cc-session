@@ -17,6 +17,7 @@ export function EditorGroupsContainer(props: {
   onCloseOtherTabs: (keepId: string) => void;
   onCloseTabsToRight: (fromId: string) => void;
   onSplitToRight: (sessionId: string) => void;
+  onPinTab: (sessionId: string) => void;
   onRefreshTree: () => void;
   tree: TreeNode[];
   onOpenSession: (session: SessionRef) => void;
@@ -102,6 +103,7 @@ export function EditorGroupsContainer(props: {
               groupId={group().id}
               tabs={group().tabs}
               activeTabId={group().activeTabId}
+              previewTabId={group().previewTabId}
               isFocused={group().id === activeGroupId()}
               flexBasis={group().flexBasis}
               onFocus={() => focusGroup(group().id)}
@@ -111,6 +113,7 @@ export function EditorGroupsContainer(props: {
               onCloseOtherTabs={props.onCloseOtherTabs}
               onCloseTabsToRight={props.onCloseTabsToRight}
               onSplitToRight={props.onSplitToRight}
+              onPinTab={props.onPinTab}
               onRefreshTree={props.onRefreshTree}
               tree={props.tree}
               onOpenSession={props.onOpenSession}

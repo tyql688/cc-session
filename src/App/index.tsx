@@ -38,6 +38,8 @@ import {
   groups,
   activeGroup,
   openSession,
+  openPreview,
+  pinTab,
   closeTab,
   closeAllTabs,
   closeOtherTabs,
@@ -156,7 +158,7 @@ export default function App() {
           const children = await getChildSessions(parentId);
           const match = children.find(
             (c) =>
-              (agentId && c.id === agentId) ||
+              (agentId && (c.id === agentId || c.id === `agent-${agentId}`)) ||
               (nickname && c.title === nickname) ||
               (description &&
                 (c.title === description || c.title.startsWith(description))),
@@ -375,6 +377,7 @@ export default function App() {
               isLoading={isLoading()}
               activeSessionId={activeGroup()?.activeTabId ?? null}
               onOpenSession={openSession}
+              onPreviewSession={openPreview}
               onRefreshTree={sync.refreshTree}
               onCollapse={() => setSidebarCollapsed(true)}
               onDeleteSession={async (id: string) => {
@@ -420,6 +423,7 @@ export default function App() {
               onCloseOtherTabs={closeOtherTabs}
               onCloseTabsToRight={closeTabsToRight}
               onSplitToRight={splitToRight}
+              onPinTab={pinTab}
               onRefreshTree={sync.refreshTree}
               tree={filteredTree()}
               onOpenSession={openSession}
