@@ -7,6 +7,23 @@ versioned with [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.3.11] - 2026-04-14
+
+### Added
+
+- VSCode-style horizontal split view with drag & drop tabs, resizable split handles, and "Open to the Side" support
+- Keyboard shortcuts for split view: split right, focus between groups
+- Keyboard shortcuts overlay now shows split view bindings
+
+### Fixed
+
+- Provider chip counts now reflect the filtered date range instead of total session counts (65c7fca)
+- OpenCode usage stats missing due to token usage not being extracted during scan (82c0848)
+- Live watch no longer dies when session titles update mid-watch (4064b21)
+- Split view resize accuracy: correct flex basis redistribution on group removal (aad4ff2)
+- Tab pane height collapse when using display:contents (5919cb7)
+- Text selection highlight no longer appears on draggable tabs (f290635)
+
 ## [0.3.10] - 2026-04-13
 
 ### Added
