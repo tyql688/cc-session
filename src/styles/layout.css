@@ -227,7 +227,7 @@ body {
 
 /* Editor Area */
 .editor-area {
-  flex: 1;
+  flex: 0 0 auto; /* width controlled by inline flex-basis from editorGroups store */
   min-width: 0; /* allow shrinking below content size */
   display: flex;
   flex-direction: column;
@@ -237,8 +237,11 @@ body {
 
 .editor-content {
   flex: 1;
-  overflow: auto;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
   padding: 0;
+  min-height: 0;
 }
 
 /* Editor Empty State */
@@ -1259,4 +1262,57 @@ body {
   font-size: 11px;
   color: var(--text-secondary);
   border: 0.5px solid var(--border);
+}
+
+/* Split Handle */
+.split-handle {
+  width: 4px;
+  cursor: col-resize;
+  background: transparent;
+  flex-shrink: 0;
+  position: relative;
+  z-index: 5;
+  transition: background 0.15s;
+}
+
+.split-handle:hover,
+.split-handle.active {
+  background: var(--accent);
+  opacity: 0.5;
+}
+
+/* Editor Groups Container */
+.editor-groups-container {
+  display: flex;
+  flex-direction: row;
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  position: relative;
+}
+
+/* Drop zone for creating new group on right edge */
+.editor-groups-drop-right {
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 40px;
+  height: 100%;
+  z-index: 10;
+  pointer-events: none;
+}
+
+.editor-groups-drop-right.active {
+  pointer-events: auto;
+  background: rgba(var(--accent-rgb, 0, 122, 255), 0.12);
+  border-left: 2px solid var(--accent);
+}
+
+/* Focus indicator on active group tab bar */
+.editor-area.focused .tab-bar {
+  border-bottom: 1.5px solid var(--accent);
+}
+
+.editor-area:not(.focused) {
+  opacity: 0.85;
 }

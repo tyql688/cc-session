@@ -9,6 +9,8 @@ export interface KeyboardDeps {
   setActiveView: (view: string) => void;
   closeTab: (id: string) => void;
   closeAllTabs: () => void;
+  splitToRight: (sessionId: string) => void;
+  focusAdjacentGroup: (direction: "left" | "right") => void;
   startRebuildIndex: () => void;
   syncFromDisk: (opts?: {
     showSpinner?: boolean;
@@ -120,6 +122,28 @@ export function createKeyboardHandler(
     if (mod && e.key === ",") {
       e.preventDefault();
       deps.setActiveView("settings");
+      return;
+    }
+
+    // Cmd+\ : Split editor — move active tab to right group
+    if (mod && e.key === "\\") {
+      e.preventDefault();
+      const id = deps.activeTabId();
+      if (id) deps.splitToRight(id);
+      return;
+    }
+
+    // Cmd+Option+→ : Focus right group
+    if (mod && e.altKey && e.key === "ArrowRight") {
+      e.preventDefault();
+      deps.focusAdjacentGroup("right");
+      return;
+    }
+
+    // Cmd+Option+← : Focus left group
+    if (mod && e.altKey && e.key === "ArrowLeft") {
+      e.preventDefault();
+      deps.focusAdjacentGroup("left");
       return;
     }
 

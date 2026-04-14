@@ -237,6 +237,13 @@ export function SessionView(props: {
   const [starred, setStarred] = createSignal(false);
   const [watching, setWatching] = createSignal(false);
 
+  // Stable memos so the live-watch effect only re-runs when these values
+  // actually change, not on every reloadSession() → setMeta() cycle.
+  const watchProvider = createMemo(() => meta().provider);
+  const watchSourcePath = createMemo(
+    () => meta().source_path || props.session.source_path,
+  );
+
   // Live watch: re-fetch session when file changes
   let unwatchFn: UnlistenFn | undefined;
   let watchDebounce: ReturnType<typeof setTimeout> | undefined;
@@ -265,9 +272,8 @@ export function SessionView(props: {
       () =>
         [
           watching(),
-          meta().provider,
-          meta().source_path,
-          props.session.source_path,
+          watchProvider(),
+          watchSourcePath(),
           getProviderWatchVersion(),
         ] as const,
       async ([isWatching]) => {
@@ -281,9 +287,8 @@ export function SessionView(props: {
         if (isWatching) {
           void loadProviderWatchSnapshots();
 
-          const activeSourcePath =
-            meta().source_path || props.session.source_path;
-          const watchConfig = getProviderWatchConfig(meta().provider);
+          const activeSourcePath = watchSourcePath();
+          const watchConfig = getProviderWatchConfig(watchProvider());
 
           if (watchConfig.strategy === "poll") {
             pollTimer = setInterval(reloadSession, watchConfig.debounceMs);
