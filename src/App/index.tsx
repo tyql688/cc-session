@@ -44,6 +44,7 @@ import {
   splitToRight,
   setActiveTabInGroup,
   focusGroup,
+  focusAdjacentGroup,
   syncAllTabTitles,
 } from "../stores/editorGroups";
 import type { TreeNode, Provider, MaintenanceEvent } from "../lib/types";
@@ -120,6 +121,8 @@ export default function App() {
     setActiveView,
     closeTab,
     closeAllTabs,
+    splitToRight,
+    focusAdjacentGroup,
     startRebuildIndex: () => {
       void startRebuildIndex();
     },
