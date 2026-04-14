@@ -43,7 +43,7 @@ describe("compareUsageValues", () => {
 });
 
 describe("filterScannedProviderSnapshots", () => {
-  it("keeps only providers that have indexed sessions", () => {
+  it("keeps installed providers and providers with indexed sessions", () => {
     expect(
       filterScannedProviderSnapshots([
         {
@@ -66,8 +66,18 @@ describe("filterScannedProviderSnapshots", () => {
           exists: true,
           session_count: 0,
         },
+        {
+          key: "opencode",
+          label: "OpenCode",
+          color: "var(--opencode)",
+          sort_order: 2,
+          watch_strategy: "poll",
+          path: "/opencode",
+          exists: false,
+          session_count: 0,
+        },
       ]).map((snapshot) => snapshot.key),
-    ).toEqual(["claude"]);
+    ).toEqual(["claude", "codex"]);
   });
 });
 

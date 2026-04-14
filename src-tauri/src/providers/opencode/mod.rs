@@ -133,6 +133,9 @@ impl SessionProvider for OpenCodeProvider {
     }
 
     fn scan_all(&self) -> Result<Vec<ParsedSession>, ProviderError> {
+        if !self.db_path.exists() {
+            return Ok(Vec::new());
+        }
         let conn = self.open_db()?;
 
         // Batch: message counts per session (avoids N+1)

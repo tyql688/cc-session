@@ -55,7 +55,9 @@ export function makeEmptyUsageStats(): UsageStats {
 export function filterScannedProviderSnapshots(
   snapshots: ProviderSnapshot[],
 ): ProviderSnapshot[] {
-  return snapshots.filter((snapshot) => snapshot.session_count > 0);
+  return snapshots.filter(
+    (snapshot) => snapshot.exists || snapshot.session_count > 0,
+  );
 }
 
 export function compareUsageValues(
