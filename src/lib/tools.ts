@@ -359,6 +359,42 @@ function patchFiles(structured: Record<string, unknown>): string[] {
   return [...files];
 }
 
+function nestedStatusText(value: unknown): string {
+  const record = nestedRecord(value);
+  if (!record) return "";
+  for (const key of [
+    "completed",
+    "failed",
+    "running",
+    "pending",
+    "interrupted",
+  ]) {
+    const text = firstString(record, [key]);
+    if (text) return text;
+  }
+  return "";
+}
+
+function mcpResultSummary(structured: Record<string, unknown>): string {
+  const result = nestedRecord(structured.result);
+  if (!result) return "";
+
+  const err = result.Err;
+  if (typeof err === "string" && err.length > 0) return err;
+
+  const ok = nestedRecord(result.Ok);
+  const content = ok?.content;
+  if (!Array.isArray(content)) return "";
+
+  const parts: string[] = [];
+  for (const item of content) {
+    const record = nestedRecord(item);
+    const text = firstString(record ?? {}, ["text"]);
+    if (text) parts.push(text);
+  }
+  return parts.join("\n");
+}
+
 export function formatToolResultMetadata(
   metadata?: ToolMetadata,
 ): ToolDetail | null {
@@ -497,8 +533,46 @@ export function formatToolResultMetadata(
         ]);
         if (role) lines.push({ label: "role", value: role });
 
+        const model = firstString(structured, ["model"]);
+        if (model) lines.push({ label: "model", value: model });
+
+        const reasoning = firstString(structured, ["reasoning_effort"]);
+        if (reasoning) lines.push({ label: "reasoning", value: reasoning });
+
+        const senderThread = firstString(structured, ["sender_thread_id"]);
+        if (senderThread) lines.push({ label: "sender", value: senderThread });
+
+        const newThread = firstString(structured, ["new_thread_id"]);
+        if (newThread) lines.push({ label: "newThread", value: newThread });
+
+        const receiverThread = firstString(structured, ["receiver_thread_id"]);
+        if (receiverThread)
+          lines.push({ label: "receiver", value: receiverThread });
+
         if (structured.timed_out === true) {
           lines.push({ label: "timedOut", value: "true" });
+        }
+
+        const statusSummary =
+          nestedStatusText(structured.status) ||
+          nestedStatusText(structured.previous_status);
+        if (statusSummary) {
+          lines.push({ label: "statusText", value: statusSummary });
+        }
+
+        const agentStatuses = Array.isArray(structured.agent_statuses)
+          ? structured.agent_statuses.length
+          : undefined;
+        if (agentStatuses && agentStatuses > 0) {
+          lines.push({ label: "agentStatuses", value: String(agentStatuses) });
+        } else {
+          const statuses = nestedRecord(structured.statuses);
+          if (statuses) {
+            lines.push({
+              label: "agentStatuses",
+              value: String(Object.keys(statuses).length),
+            });
+          }
         }
       }
       break;
@@ -535,6 +609,30 @@ export function formatToolResultMetadata(
           { label: "server", value: metadata.mcp.server },
           { label: "tool", value: metadata.mcp.tool },
         );
+        if (typeof structured.success === "boolean") {
+          lines.push({
+            label: "success",
+            value: structured.success ? "true" : "false",
+          });
+        }
+        const duration = maybeNumber(
+          structured.durationSeconds ?? structured.duration_seconds,
+        );
+        if (duration) {
+          lines.push({ label: "duration", value: `${duration}s` });
+        }
+        const invocation = nestedRecord(structured.invocation);
+        const argumentsValue = invocation?.arguments;
+        if (argumentsValue !== undefined) {
+          lines.push({
+            label: "args",
+            value: valueToDisplayString(argumentsValue),
+          });
+        }
+        const resultText = mcpResultSummary(structured);
+        if (resultText) {
+          lines.push({ label: "result", value: resultText });
+        }
       }
   }
 
