@@ -71,14 +71,14 @@ Your personal knowledge base for AI coding sessions — unified access, searchab
 - Reference: Paseo's Daemon + WebSocket architecture
 - 桌面端启动本地 server，手机浏览器同局域网访问，支持浏览/搜索/收藏
 
-### Preview / Commit Mode — 预览 / 确认打开
+### Preview / Commit Mode — 预览 / 确认打开 `✅ done`
 - Single-click session → preview (lightweight load, italic tab, replaced on next click)
 - Double-click session → open (full load, pinned tab)
 - Browse many sessions quickly without tab accumulation
 - Reference: VS Code preview editor behavior
 - 单击预览（轻量加载，斜体 tab，再点别的就替换），双击正式打开（固定 tab）
 
-### Split View — 分屏查看
+### Split View — 分屏查看 `✅ done`
 - Drag tab to the right to split editor area side-by-side
 - View two sessions simultaneously (e.g., compare approaches)
 - Also enables: session on left + related context on right
@@ -123,7 +123,7 @@ Your personal knowledge base for AI coding sessions — unified access, searchab
 - Impact: ~50% reduction in redundant reindexing
 - 当前每次文件写入立即触发 reindex，应合并为 500ms 窗口批量处理
 
-### Incremental Sync with mtime — 基于 mtime 的增量同步
+### Incremental Sync with mtime — 基于 mtime 的增量同步 `⚫ low priority`
 - Current: `reindex_filtered()` does full `scan_all()` every time (`indexer.rs:67-102`)
 - Fix: track `last_indexed_mtime` per source file, skip unchanged files
 - Impact: ~80% faster cold-check reindex
@@ -195,7 +195,7 @@ Your personal knowledge base for AI coding sessions — unified access, searchab
 - Show per-item success/failure counts (e.g., "Trashed 8/10, 2 failed")
 - 显示逐项成功/失败计数
 
-### Tab Overflow Handling — Tab 溢出处理
+### Tab Overflow Handling — Tab 溢出处理 `✅ done`
 - Reference: VSCode tab bar (scroll + overflow menu)
 - VSCode 风格 tab 滚动 + 溢出菜单
 
