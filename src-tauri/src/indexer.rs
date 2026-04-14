@@ -97,14 +97,25 @@ impl Indexer {
             }
 
             let mut seen_hashes: HashSet<String> = HashSet::new();
+            let mut stats_batch: Vec<(String, Vec<TokenStatRow>)> = Vec::new();
             for parsed in parents.iter().chain(children.iter()) {
                 let stat_rows = compute_token_stats_dedup(
                     parsed,
                     pricing_catalog.as_ref(),
                     Some(&mut seen_hashes),
                 );
-                if let Err(e) = self.db.replace_token_stats(&parsed.meta.id, &stat_rows) {
-                    log::warn!("failed to write token stats for {}: {e}", parsed.meta.id);
+                stats_batch.push((parsed.meta.id.clone(), stat_rows));
+            }
+            {
+                let batch_refs: Vec<(&str, &[TokenStatRow])> = stats_batch
+                    .iter()
+                    .map(|(id, rows)| (id.as_str(), rows.as_slice()))
+                    .collect();
+                if let Err(e) = self.db.replace_token_stats_batch(&batch_refs) {
+                    log::warn!(
+                        "failed to write token stats batch for {}: {e}",
+                        provider_kind.key()
+                    );
                 }
             }
 

@@ -204,18 +204,24 @@ impl SessionProvider for OpenCodeProvider {
         }
 
         // Batch: aggregate token usage per session for indexer stats
-        let mut usage_map: std::collections::HashMap<
-            String,
-            Vec<(Option<String>, crate::models::TokenUsage)>,
-        > = std::collections::HashMap::new();
+        struct UsageEntry {
+            model: Option<String>,
+            usage: crate::models::TokenUsage,
+            usage_hash: Option<String>,
+            timestamp: Option<String>,
+        }
+        let mut usage_map: std::collections::HashMap<String, Vec<UsageEntry>> =
+            std::collections::HashMap::new();
         {
             let mut stmt = conn.prepare(
                 "SELECT session_id,
+                        id,
                         json_extract(data, '$.modelID'),
                         json_extract(data, '$.tokens.input'),
                         json_extract(data, '$.tokens.output'),
                         json_extract(data, '$.tokens.cache.read'),
-                        json_extract(data, '$.tokens.cache.write')
+                        json_extract(data, '$.tokens.cache.write'),
+                        time_created
                  FROM message
                  WHERE json_extract(data, '$.role') = 'assistant'
                    AND json_extract(data, '$.tokens') IS NOT NULL",
@@ -223,22 +229,30 @@ impl SessionProvider for OpenCodeProvider {
             let rows = stmt.query_map([], |row| {
                 Ok((
                     row.get::<_, String>(0)?,
-                    row.get::<_, Option<String>>(1)?,
-                    row.get::<_, Option<i64>>(2)?,
+                    row.get::<_, String>(1)?,
+                    row.get::<_, Option<String>>(2)?,
                     row.get::<_, Option<i64>>(3)?,
                     row.get::<_, Option<i64>>(4)?,
                     row.get::<_, Option<i64>>(5)?,
+                    row.get::<_, Option<i64>>(6)?,
+                    row.get::<_, Option<i64>>(7)?,
                 ))
             })?;
             for r in rows.flatten() {
-                let (sid, model, input, output, cache_read, cache_write) = r;
+                let (sid, msg_id, model, input, output, cache_read, cache_write, time_created) = r;
                 let usage = crate::models::TokenUsage {
                     input_tokens: input.unwrap_or(0) as u32,
                     output_tokens: output.unwrap_or(0) as u32,
                     cache_read_input_tokens: cache_read.unwrap_or(0) as u32,
                     cache_creation_input_tokens: cache_write.unwrap_or(0) as u32,
                 };
-                usage_map.entry(sid).or_default().push((model, usage));
+                let timestamp = time_created.and_then(ms_to_rfc3339);
+                usage_map.entry(sid).or_default().push(UsageEntry {
+                    model,
+                    usage,
+                    usage_hash: Some(msg_id),
+                    timestamp,
+                });
             }
         }
 
@@ -371,15 +385,15 @@ impl SessionProvider for OpenCodeProvider {
                         },
                         messages: usage_entries
                             .into_iter()
-                            .map(|(model, usage)| Message {
+                            .map(|entry| Message {
                                 role: MessageRole::Assistant,
                                 content: String::new(),
-                                timestamp: ms_to_rfc3339(time_updated),
+                                timestamp: entry.timestamp.or_else(|| ms_to_rfc3339(time_updated)),
                                 tool_name: None,
                                 tool_input: None,
-                                token_usage: Some(usage),
-                                model,
-                                usage_hash: None,
+                                token_usage: Some(entry.usage),
+                                model: entry.model,
+                                usage_hash: entry.usage_hash,
                                 tool_metadata: None,
                             })
                             .collect(),
@@ -640,7 +654,11 @@ impl SessionProvider for OpenCodeProvider {
                                 None
                             },
                             model: msg_model.clone(),
-                            usage_hash: None,
+                            usage_hash: if tool_messages.is_empty() {
+                                Some(msg_id.clone())
+                            } else {
+                                None
+                            },
                             tool_metadata: None,
                         });
                     }
@@ -653,6 +671,7 @@ impl SessionProvider for OpenCodeProvider {
                             // otherwise it was already attached to the text message above
                             if i == last_idx && text_parts.is_empty() {
                                 tool_msg.token_usage = token_usage.clone();
+                                tool_msg.usage_hash = Some(msg_id.clone());
                             }
                             messages.push(tool_msg);
                         }
@@ -673,7 +692,7 @@ impl SessionProvider for OpenCodeProvider {
                             tool_input: None,
                             token_usage,
                             model: msg_model,
-                            usage_hash: None,
+                            usage_hash: Some(msg_id.clone()),
                             tool_metadata: None,
                         });
                     }

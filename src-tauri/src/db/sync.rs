@@ -217,6 +217,44 @@ impl Database {
         }
         Ok(())
     }
+
+    /// Replace token stats for multiple sessions atomically within a single
+    /// transaction.  The frontend reads via a separate connection, so without
+    /// a transaction the reader can observe a partially-updated state (e.g.
+    /// after a DELETE but before the matching INSERTs), causing usage numbers
+    /// to "jump" on every poll cycle.
+    pub fn replace_token_stats_batch(
+        &self,
+        batch: &[(&str, &[TokenStatRow])],
+    ) -> Result<(), rusqlite::Error> {
+        self.with_transaction(|conn| {
+            let mut insert = conn.prepare_cached(
+                "INSERT INTO session_token_stats
+                    (session_id, date, model, turn_count, input_tokens, output_tokens, cache_read_tokens, cache_write_tokens, cost_usd)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
+            )?;
+            for &(session_id, stats) in batch {
+                conn.execute(
+                    "DELETE FROM session_token_stats WHERE session_id = ?1",
+                    params![session_id],
+                )?;
+                for row in stats {
+                    insert.execute(params![
+                        session_id,
+                        row.date,
+                        row.model,
+                        row.turn_count as i64,
+                        row.input_tokens as i64,
+                        row.output_tokens as i64,
+                        row.cache_read_tokens as i64,
+                        row.cache_write_tokens as i64,
+                        row.cost_usd,
+                    ])?;
+                }
+            }
+            Ok(())
+        })
+    }
 }
 
 fn upsert_session_on(

@@ -848,6 +848,8 @@ export function UsagePanel() {
                                   >
                                     {(provider) => {
                                       const val = providers.get(provider) ?? 0;
+                                      const color = () =>
+                                        providerInfo(provider).color;
                                       return (
                                         <Show when={val > 0}>
                                           <span
@@ -861,8 +863,7 @@ export function UsagePanel() {
                                                 4,
                                                 (val / max) * 100,
                                               )}%`,
-                                              background:
-                                                providerInfo(provider).color,
+                                              background: color(),
                                             }}
                                           />
                                         </Show>

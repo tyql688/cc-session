@@ -207,6 +207,24 @@ fn strip_trailing_version_segment(model: &str) -> Option<String> {
     None
 }
 
+/// Known model variant suffixes, stripped only as a last resort when no
+/// other match succeeds (e.g. "gpt-5.4-fast" → "gpt-5.4").
+const VARIANT_SUFFIXES: &[&str] = &[
+    "-fast", "-mini", "-turbo", "-pro", "-lite", "-plus", "-preview", "-latest",
+];
+
+fn strip_variant_suffix(model: &str) -> Option<String> {
+    let lower = model.to_lowercase();
+    for suffix in VARIANT_SUFFIXES {
+        if let Some(prefix) = lower.strip_suffix(suffix) {
+            if !prefix.is_empty() {
+                return Some(prefix.to_string());
+            }
+        }
+    }
+    None
+}
+
 fn model_match_variants(model: &str) -> Vec<String> {
     let normalized = normalize_model_key(model);
     let mut variants = vec![normalized.clone()];
@@ -290,25 +308,44 @@ fn lookup_model_pricing(catalog: &PricingCatalog, model: &str) -> Option<ModelPr
         }
     }
 
-    catalog.iter().find_map(|(name, remote)| {
+    // HashMap iteration order is non-deterministic (random seed per instance).
+    // When the catalog is re-parsed on each poll, a different entry may win.
+    // Pick the shortest matching key (prefers short alias "gpt-5.4" over
+    // "azure/gpt-5.4") to make the result stable across re-parses.
+    let mut best: Option<(&str, &RemoteModelPricing)> = None;
+    for (name, remote) in catalog.iter() {
         if matches_model_name(name, &normalized)
             || matches_model_name(provider_model_suffix(name), &normalized)
         {
-            model_pricing_from_remote(remote)
-        } else {
-            None
+            let dominated = best.is_some_and(|(prev, _)| name.len() < prev.len());
+            if best.is_none() || dominated {
+                best = Some((name, remote));
+            }
         }
-    })
+    }
+    best.and_then(|(_, remote)| model_pricing_from_remote(remote))
 }
 
 pub fn lookup_pricing(catalog: Option<&PricingCatalog>, model: &str) -> Option<ModelPricing> {
-    if let Some(catalog) = catalog {
-        for candidate in model_match_variants(model) {
+    let catalog = catalog?;
+
+    // 1. Try exact / version-stripped variants first.
+    for candidate in model_match_variants(model) {
+        if let Some(pricing) = lookup_model_pricing(catalog, &candidate) {
+            return Some(pricing);
+        }
+    }
+
+    // 2. Last resort: strip known variant suffixes (-fast, -mini, …) and retry.
+    let normalized = normalize_model_key(model);
+    if let Some(base) = strip_variant_suffix(&normalized) {
+        for candidate in model_match_variants(&base) {
             if let Some(pricing) = lookup_model_pricing(catalog, &candidate) {
                 return Some(pricing);
             }
         }
     }
+
     None
 }
 
@@ -384,6 +421,18 @@ mod tests {
         assert_close(pricing.output, 15.0e-6);
         assert_close(pricing.cache_read, 0.25e-6);
         assert_eq!(pricing.threshold_tokens, None);
+    }
+
+    #[test]
+    fn lookup_pricing_strips_variant_suffix() {
+        let catalog = parse_catalog(
+            r#"{"gpt-5.4":{"input_cost_per_token":2.5e-6,"output_cost_per_token":15e-6}}"#,
+        )
+        .expect("catalog");
+        // "gpt-5.4-fast" should strip "-fast" and match "gpt-5.4"
+        let pricing = super::lookup_pricing(Some(&catalog), "gpt-5.4-fast").expect("pricing");
+        assert_close(pricing.input, 2.5e-6);
+        assert_close(pricing.output, 15.0e-6);
     }
 
     #[test]

@@ -51,14 +51,22 @@ impl<'a> SourceSyncService<'a> {
             .and_then(|json| pricing::parse_catalog(&json));
 
         let mut seen_hashes = HashSet::new();
+        let mut stats_batch: Vec<(String, Vec<crate::db::sync::TokenStatRow>)> = Vec::new();
         for parsed in &sessions {
             let stat_rows = compute_token_stats_with_catalog_dedup(
                 parsed,
                 pricing_catalog.as_ref(),
                 &mut seen_hashes,
             );
-            if let Err(e) = self.db.replace_token_stats(&parsed.meta.id, &stat_rows) {
-                log::warn!("failed to write token stats for {}: {e}", parsed.meta.id);
+            stats_batch.push((parsed.meta.id.clone(), stat_rows));
+        }
+        {
+            let batch_refs: Vec<(&str, &[crate::db::sync::TokenStatRow])> = stats_batch
+                .iter()
+                .map(|(id, rows)| (id.as_str(), rows.as_slice()))
+                .collect();
+            if let Err(e) = self.db.replace_token_stats_batch(&batch_refs) {
+                log::warn!("failed to write token stats batch for source {source_path}: {e}");
             }
         }
 
