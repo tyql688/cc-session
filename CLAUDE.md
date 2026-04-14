@@ -26,9 +26,87 @@ src-tauri/src/
   exporter/                # json.rs, markdown.rs, html.rs, templates.rs
   db/                      # mod.rs, queries.rs, sync.rs, row_mapper.rs
   indexer.rs  watcher.rs  models.rs  provider.rs  provider_utils.rs  trash_state.rs
-src/stores/               # settings, search, selection, providerSnapshots, updater, favorites
+src/stores/               # editorGroups, settings, search, selection, providerSnapshots, updater, favorites, toast, theme
 src/lib/                  # tauri.ts, provider-watch.ts, formatters, tree-builders, icons, image-cache.ts
+src/styles/               # variables.css (theme tokens), layout.css, components.css, messages.css, usage.css
 ```
+
+## Editor UI Architecture
+
+```
+App
+├── ActivityBar                        # Left icon bar (explorer, favorites, usage, trash, etc.)
+├── [Left panel — conditional on activeView()]
+│   ├── Explorer                       # Session tree with single-click=preview, double-click=pin
+│   ├── FavoritesView / TrashView / BlockedView / UsagePanel / SettingsPanel
+├── SearchPanel                        # In titlebar-right, not in left panel
+├── EditorGroupsContainer             # Manages split view layout (max 4 groups)
+│   ├── SplitHandle                    # Draggable resize between groups
+│   └── EditorArea (per group)
+│       ├── TabBar                     # Tabs with preview italic, overflow chevron dropdown
+│       └── SessionView (per tab)      # Full session viewer (messages, toolbar, search)
+└── StatusBar                          # Index count, today's cost, provider info
+```
+
+### Editor Groups Store (`src/stores/editorGroups.ts`)
+
+Central store for tabs, split view, and preview mode. All state is immutable (spread updates).
+
+```typescript
+interface EditorGroup {
+  id: string;
+  tabs: SessionRef[];          // open sessions in this group
+  activeTabId: string | null;  // currently visible tab
+  previewTabId: string | null; // at most one preview (unpinned) tab
+  flexBasis: number;           // width percentage for split view
+}
+```
+
+Key functions:
+- `openSession(session)` — pin-open a tab (or focus if already open, auto-pins preview)
+- `openPreview(session)` — open as preview tab (italic, replaces previous preview in group)
+- `pinTab(sessionId)` — promote preview to permanent
+- `splitToRight(sessionId)` — move tab to right group (creates new group if needed)
+- `moveTabToGroup(sessionId, targetGroupId, insertIndex?)` — drag-drop between groups
+- `createGroupFromDrop(sessionId)` — drop zone creates new rightmost group
+
+### Preview Mode (VSCode-style)
+
+- **Explorer single click** → `openPreview()` — italic tab, replaced by next preview
+- **Explorer double click** → `openSession()` — permanent pinned tab
+- **Double-click on preview tab** → `pinTab()` — pins it
+- **Search/Favorites/Subagent open** → `openSession()` — always pinned
+- Each group has at most one `previewTabId`; replacement removes old preview tab from array
+- SessionView is wrapped in `<Show when={session().id} keyed>` to force remount on preview replacement (prevents stale local state: filters, search, watch, favorite)
+
+### Tab Overflow
+
+- Hidden-scrollbar scroll container with mouse wheel horizontal scroll
+- `ResizeObserver` + `props.tabs` array reference change triggers overflow detection
+- `»` chevron button with dropdown listing all tabs (active indicator, italic for preview)
+
+## Event System
+
+Custom DOM events for cross-component communication:
+
+| Event | Dispatcher | Handler | Purpose |
+|-------|-----------|---------|---------|
+| `open-subagent` | ToolMessage "↗ Open" button | App.handleOpenSubagent | Navigate to child session by agentId/nickname/description |
+| `usage-data-changed` | SessionView (on favorite/export) | App (refreshes usage panel) | Sync usage stats |
+
+Tauri backend events:
+
+| Event | Payload | Purpose |
+|-------|---------|---------|
+| `sessions-changed` | `string[]` (changed paths) | Trigger debounced reindex from file watcher |
+| `maintenance-status` | `MaintenanceEvent` | Show indexing/cleanup progress |
+
+### Subagent Open Matching
+
+`handleOpenSubagent` matches child sessions by priority:
+1. `agentId` — exact match OR `agent-${agentId}` prefix (Claude files are `agent-{id}.jsonl`)
+2. `nickname` — Codex agent nickname from tool output
+3. `description` — full description from tool_input JSON (NOT truncated summary)
 
 ## Provider Architecture
 
@@ -58,13 +136,16 @@ Resume: Claude `--resume`, Codex `resume`, Gemini `--resume`, Kimi `--session`, 
 
 ## Key Patterns
 
-- **Message**: `{ role, content, timestamp, tool_name, tool_input, token_usage }` — universal
+- **Message**: `{ role, content, timestamp, tool_name, tool_input, token_usage }` — universal across providers
 - **Thinking**: `MessageRole::System` with `[thinking]\n` prefix
-- **Images**: `[Image: source: ...]` in content; persistent cache at `app_data_dir/images/{sha256}.ext` with fallback in `read_image_base64`
-- **Tool merge**: `call_id` maps pair tool calls with results
+- **Images**: `[Image: source: ...]` in content; persistent cache at `app_data_dir/images/{sha256}.ext`; `read_image_base64` reads from cache when original is deleted
+- **Tool merge**: `call_id` pairs tool calls with results into single tool message
+- **Tool metadata**: Rust `build_tool_metadata` + `enrich_tool_metadata` attaches summary, structured result, status, and result_kind to each tool call
 - **Subagents**: `parent_id` links children; "Open" button for providers with separate files (Claude, Codex, Kimi, Cursor, CC-Mirror)
-- **Provider snapshots**: backend derives provider label/color/order/watch strategy/path info; frontend consumes snapshot data
+- **Provider snapshots**: backend derives provider label/color/order/watch strategy/path info; frontend consumes via `providerSnapshots` store
 - **Trash**: `TrashMeta.parent_id` cascades restore/delete; `is_session_dir()` prevents shared dir deletion
+- **Immutable state**: All Solid.js store updates use spread (`{ ...prev, field: newValue }`). Never mutate in place.
+- **Solid.js reactivity**: Use `Index` (not `For`) for tab panes to preserve component instances across reorders. Use `<Show when={id} keyed>` when component must remount on identity change.
 
 ## Pitfalls
 
@@ -76,6 +157,8 @@ Resume: Claude `--resume`, Codex `resume`, Gemini `--resume`, Kimi `--session`, 
 - **CC-Mirror**: Multi-variant under `~/.cc-mirror/`, sanitized variant names.
 - **Qwen**: `sanitizeCwd()` path (hyphens, not SHA256). `thought: true` boolean + `text` field. Subagents embedded in parent (no separate files). Skip `ui_telemetry`/`slash_command`/`at_command`/`chat_compression`.
 - **Copilot**: Session ID from directory name (UUID). `reasoningText` for thinking. `toolRequests[]` in `assistant.message` + `tool.execution_start/complete` for tool calls. Subagents embedded via `task` tool (no separate files). Skip `hook.*`/`session.info`/`system.notification`/`session.mode_changed`.
+- **compact_string**: Rust `compact_string(s, limit)` truncates with `…` suffix. Do NOT use truncated summaries for matching/comparison — always extract full values from source JSON.
+- **Session ID vs agentId**: Claude subagent files are `agent-{id}.jsonl`, so session ID = `agent-{id}` but tool result `agentId` = `{id}` (no prefix). Always match both forms.
 
 ## Conventions
 
@@ -84,3 +167,12 @@ Resume: Claude `--resume`, Codex `resume`, Gemini `--resume`, Kimi `--session`, 
 - Commits: conventional commits (`feat:`, `fix:`, `refactor:`)
 - i18n: all user-facing strings via `t()`
 - Colors: Claude `#d97757`, Codex `#10b981`, Gemini `#f59e0b`, Cursor `#3b82f6`, OpenCode `#06b6d4`, Kimi `#1783ff`, CC-Mirror `#f472b6`, Qwen `#6c3cf5`, Copilot `#171717`
+
+## Error Handling: No Silent Fallbacks
+
+All code (Rust and TypeScript) must fail explicitly — never silently swallow errors or fall back to defaults that hide problems.
+
+- **Rust**: Propagate errors with `?` and context (`anyhow`/`fmt::Error`). Use `log::warn!`/`log::error!` when skipping a record, never silently return `None` or empty. `unwrap()` only in tests.
+- **TypeScript**: Catch errors at boundaries (Tauri command calls, event handlers), surface via toast or `console.error`. Never use empty `catch {}` blocks — at minimum log the error. No `?? fallbackValue` that masks broken data.
+- **Parsers**: When a JSONL line or JSON field is malformed, log a warning with file path and line context, then skip — do not silently produce partial/empty results.
+- **UI**: When a backend call fails, show a toast or error state. Never render stale/empty data as if everything succeeded.
