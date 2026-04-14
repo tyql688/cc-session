@@ -1,4 +1,4 @@
-import { For, Show, createSignal } from "solid-js";
+import { Index, Show, createSignal } from "solid-js";
 import type { SessionRef, TreeNode } from "../lib/types";
 import {
   groups,
@@ -86,23 +86,23 @@ export function EditorGroupsContainer(props: {
       onDrop={handleDrop}
       onDragLeave={handleDragLeave}
     >
-      <For each={groups()}>
+      <Index each={groups()}>
         {(group, idx) => (
           <>
-            <Show when={idx() > 0}>
+            <Show when={idx > 0}>
               <SplitHandle
-                onResize={(dx) => handleResize(idx() - 1, dx)}
+                onResize={(dx) => handleResize(idx - 1, dx)}
                 onDoubleClick={equalizeWidths}
               />
             </Show>
             <EditorArea
-              groupId={group.id}
-              tabs={group.tabs}
-              activeTabId={group.activeTabId}
-              isFocused={group.id === activeGroupId()}
-              flexBasis={group.flexBasis}
-              onFocus={() => focusGroup(group.id)}
-              onTabSelect={(tabId) => props.onTabSelect(group.id, tabId)}
+              groupId={group().id}
+              tabs={group().tabs}
+              activeTabId={group().activeTabId}
+              isFocused={group().id === activeGroupId()}
+              flexBasis={group().flexBasis}
+              onFocus={() => focusGroup(group().id)}
+              onTabSelect={(tabId) => props.onTabSelect(group().id, tabId)}
               onTabClose={props.onTabClose}
               onCloseAllTabs={props.onCloseAllTabs}
               onCloseOtherTabs={props.onCloseOtherTabs}
@@ -114,7 +114,7 @@ export function EditorGroupsContainer(props: {
             />
           </>
         )}
-      </For>
+      </Index>
       <div class={`editor-groups-drop-right${dropActive() ? " active" : ""}`} />
     </div>
   );
