@@ -10,7 +10,7 @@ import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { ActivityBar } from "../components/ActivityBar";
 import { Explorer } from "../components/Explorer";
-import { EditorArea } from "../components/EditorArea";
+import { EditorGroupsContainer } from "../components/EditorGroupsContainer";
 import { StatusBar } from "../components/StatusBar";
 import { SearchPanel } from "../components/SearchPanel";
 import { SettingsPanel } from "../components/SettingsPanel";
@@ -34,12 +34,19 @@ import { disabledProviders } from "../stores/settings";
 import { loadProviderSnapshots } from "../stores/providerSnapshots";
 import { toast, toastError, toastInfo } from "../stores/toast";
 import { checkForUpdate } from "../stores/updater";
-import type {
-  TreeNode,
-  SessionRef,
-  Provider,
-  MaintenanceEvent,
-} from "../lib/types";
+import {
+  activeGroup,
+  openSession,
+  closeTab,
+  closeAllTabs,
+  closeOtherTabs,
+  closeTabsToRight,
+  splitToRight,
+  setActiveTabInGroup,
+  focusGroup,
+  syncAllTabTitles,
+} from "../stores/editorGroups";
+import type { TreeNode, Provider, MaintenanceEvent } from "../lib/types";
 import { useI18n } from "../i18n";
 import { createKeyboardHandler } from "./KeyboardShortcuts";
 import { createSyncManager } from "./SyncManager";
@@ -50,8 +57,6 @@ export default function App() {
   const [tree, setTree] = createSignal<TreeNode[]>([]);
   const [sessionCount, setSessionCount] = createSignal(0);
   const [activeView, setActiveView] = createSignal("explorer");
-  const [openTabs, setOpenTabs] = createSignal<SessionRef[]>([]);
-  const [activeTabId, setActiveTabId] = createSignal<string | null>(null);
   const [isLoading, setIsLoading] = createSignal(true);
   const [showKeyboardOverlay, setShowKeyboardOverlay] = createSignal(false);
   const [sidebarCollapsed, setSidebarCollapsed] = createSignal(false);
@@ -88,78 +93,29 @@ export default function App() {
   let unlistenMaintenance: UnlistenFn | undefined;
   let debounceTimer: ReturnType<typeof setTimeout> | undefined;
 
-  function syncTabsWithTree(treeData: TreeNode[]) {
-    const titleMap = new Map<string, string>();
-    function walk(node: TreeNode) {
-      if (node.node_type === "session") {
-        titleMap.set(node.id, node.label);
-      }
-      for (const child of node.children) walk(child);
-    }
-    for (const n of treeData) walk(n);
-
-    setOpenTabs((prev) =>
-      prev.map((tab) => {
-        const newTitle = titleMap.get(tab.id);
-        if (newTitle && newTitle !== tab.title) {
-          return { ...tab, title: newTitle };
-        }
-        return tab;
-      }),
-    );
-  }
-
   const sync = createSyncManager({
     setTree,
     setSessionCount,
     setIsLoading,
-    syncTabsWithTree,
+    syncTabsWithTree: (treeData: TreeNode[]) => {
+      const titleMap = new Map<string, string>();
+      function walk(node: TreeNode) {
+        if (node.node_type === "session") titleMap.set(node.id, node.label);
+        for (const child of node.children) walk(child);
+      }
+      for (const n of treeData) walk(n);
+      syncAllTabTitles(titleMap);
+    },
   });
 
-  function openSession(session: SessionRef) {
-    const tabs = openTabs();
-    if (!tabs.find((t) => t.id === session.id)) {
-      setOpenTabs([...tabs, session]);
-    }
-    setActiveTabId(session.id);
-  }
-
-  function closeTab(sessionId: string) {
-    const tabs = openTabs().filter((t) => t.id !== sessionId);
-    setOpenTabs(tabs);
-    if (activeTabId() === sessionId) {
-      setActiveTabId(tabs.length > 0 ? tabs[tabs.length - 1].id : null);
-    }
-  }
-
-  function closeAllTabs() {
-    setOpenTabs([]);
-    setActiveTabId(null);
-  }
-
-  function closeOtherTabs(keepId: string) {
-    const kept = openTabs().filter((t) => t.id === keepId);
-    setOpenTabs(kept);
-    setActiveTabId(keepId);
-  }
-
-  function closeTabsToRight(fromId: string) {
-    const tabs = openTabs();
-    const idx = tabs.findIndex((t) => t.id === fromId);
-    if (idx === -1) return;
-    const kept = tabs.slice(0, idx + 1);
-    setOpenTabs(kept);
-    const currentActive = activeTabId();
-    if (currentActive && !kept.find((t) => t.id === currentActive)) {
-      setActiveTabId(fromId);
-    }
-  }
-
   const handleGlobalKeyDown = createKeyboardHandler({
-    activeTabId,
-    openTabs,
+    activeTabId: () => activeGroup()?.activeTabId ?? null,
+    openTabs: () => activeGroup()?.tabs ?? [],
     showKeyboardOverlay,
-    setActiveTabId,
+    setActiveTabId: (id: string | null) => {
+      const g = activeGroup();
+      if (g && id) setActiveTabInGroup(g.id, id);
+    },
     setShowKeyboardOverlay,
     setActiveView,
     closeTab,
@@ -186,10 +142,10 @@ export default function App() {
     // Listen for subagent open requests from ToolMessage
     const handleOpenSubagent = async (e: Event) => {
       const { description, nickname, agentId } = (e as CustomEvent).detail;
-      const activeTab = openTabs().find((t) => t.id === activeTabId());
-      if (!activeTab) return;
+      const ag = activeGroup();
+      if (!ag?.activeTabId) return;
       try {
-        const children = await getChildSessions(activeTab.id);
+        const children = await getChildSessions(ag.activeTabId);
         const match = children.find(
           (c) =>
             (agentId && c.id === agentId) ||
@@ -407,7 +363,7 @@ export default function App() {
             <Explorer
               tree={filteredTree()}
               isLoading={isLoading()}
-              activeSessionId={activeTabId()}
+              activeSessionId={activeGroup()?.activeTabId ?? null}
               onOpenSession={openSession}
               onRefreshTree={sync.refreshTree}
               onCollapse={() => setSidebarCollapsed(true)}
@@ -444,14 +400,16 @@ export default function App() {
             <UsagePanel />
           </div>
           <Show when={showExplorer()}>
-            <EditorArea
-              tabs={openTabs()}
-              activeTabId={activeTabId()}
-              onTabSelect={setActiveTabId}
+            <EditorGroupsContainer
+              onTabSelect={(groupId, tabId) => {
+                focusGroup(groupId);
+                setActiveTabInGroup(groupId, tabId);
+              }}
               onTabClose={closeTab}
               onCloseAllTabs={closeAllTabs}
               onCloseOtherTabs={closeOtherTabs}
               onCloseTabsToRight={closeTabsToRight}
+              onSplitToRight={splitToRight}
               onRefreshTree={sync.refreshTree}
               tree={filteredTree()}
               onOpenSession={openSession}
