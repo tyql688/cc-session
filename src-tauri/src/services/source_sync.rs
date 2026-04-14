@@ -43,12 +43,20 @@ impl<'a> SourceSyncService<'a> {
             .sync_source_snapshot(&provider, source_path, &sessions)
             .map_err(|e| format!("failed to sync source snapshot: {e}"))?;
 
-        let pricing_catalog = self
-            .db
-            .get_meta(PRICING_CATALOG_JSON_KEY)
-            .ok()
-            .flatten()
-            .and_then(|json| pricing::parse_catalog(&json));
+        let pricing_catalog = match self.db.get_meta(PRICING_CATALOG_JSON_KEY) {
+            Ok(Some(json)) => match pricing::parse_catalog(&json) {
+                Ok(catalog) => Some(catalog),
+                Err(error) => {
+                    log::warn!("failed to parse cached pricing catalog for source sync: {error}");
+                    None
+                }
+            },
+            Ok(None) => None,
+            Err(error) => {
+                log::warn!("failed to read cached pricing catalog for source sync: {error}");
+                None
+            }
+        };
 
         let mut seen_hashes = HashSet::new();
         let mut stats_batch: Vec<(String, Vec<crate::db::sync::TokenStatRow>)> = Vec::new();

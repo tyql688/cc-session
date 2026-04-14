@@ -154,8 +154,8 @@ export function createSyncManager(callbacks: SyncCallbacks) {
     try {
       await refreshTree();
       cacheHit = true;
-    } catch {
-      // No cached index yet — will be populated by reindex below
+    } catch (error) {
+      console.warn("Cold start tree refresh failed before reindex:", error);
     }
     // Only dismiss spinner early on cache hit; keep it up on cache miss
     if (cacheHit) callbacks.setIsLoading(false);

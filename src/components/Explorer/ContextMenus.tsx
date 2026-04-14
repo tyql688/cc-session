@@ -1,6 +1,7 @@
 import type { MenuItemDef } from "../ContextMenu";
 import type { TreeNode } from "../../lib/types";
 import { openInFolder } from "../../lib/tauri";
+import { errorMessage } from "../../lib/errors";
 import { toast, toastError } from "../../stores/toast";
 import { selectionCount } from "../../stores/selection";
 import { bumpFavoriteVersion } from "../../stores/favorites";
@@ -45,8 +46,12 @@ export function buildSessionMenuItems(ctx: SessionMenuContext): MenuItemDef[] {
       ? [
           {
             label: t("contextMenu.openInFinder"),
-            onClick: () => {
-              openInFolder(sessionProjectPath).catch(() => {});
+            onClick: async () => {
+              try {
+                await openInFolder(sessionProjectPath);
+              } catch (error) {
+                toastError(errorMessage(error));
+              }
             },
           },
           {
@@ -162,8 +167,12 @@ export function buildNodeMenuItems(ctx: NodeMenuContext): MenuItemDef[] {
       ? [
           {
             label: t("contextMenu.openInFinder"),
-            onClick: () => {
-              openInFolder(projectPath).catch(() => {});
+            onClick: async () => {
+              try {
+                await openInFolder(projectPath);
+              } catch (error) {
+                toastError(errorMessage(error));
+              }
             },
           },
           {

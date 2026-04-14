@@ -16,12 +16,20 @@ use super::CursorProvider;
 /// Ensures JSON parsing and role/content extraction are identical.
 pub(crate) fn for_each_transcript_entry(
     content: &str,
+    source_label: &str,
     mut handler: impl FnMut(&str, Option<&Value>),
 ) {
     for line in content.lines() {
         let entry: Value = match serde_json::from_str(line) {
             Ok(v) => v,
-            Err(_) => continue,
+            Err(error) => {
+                log::warn!(
+                    "skipping malformed Cursor transcript JSONL in '{}': {}",
+                    source_label,
+                    error
+                );
+                continue;
+            }
         };
         let role = entry.get("role").and_then(|r| r.as_str()).unwrap_or("");
         let msg_content = entry.get("message").and_then(|m| m.get("content"));
@@ -29,10 +37,10 @@ pub(crate) fn for_each_transcript_entry(
     }
 }
 
-pub(crate) fn parse_transcript_messages(content: &str) -> Vec<Message> {
+pub(crate) fn parse_transcript_messages(content: &str, source_label: &str) -> Vec<Message> {
     let mut messages = Vec::new();
 
-    for_each_transcript_entry(content, |role, msg_content| match role {
+    for_each_transcript_entry(content, source_label, |role, msg_content| match role {
         "user" => {
             let text = extract_text_from_content(msg_content);
             let clean = extract_user_text(&text);
@@ -140,7 +148,7 @@ pub(crate) fn parse_transcript_messages(content: &str) -> Vec<Message> {
 
 fn extract_project_path_from_transcript(content: &str) -> String {
     let mut project_path = String::new();
-    for_each_transcript_entry(content, |role, msg_content| {
+    for_each_transcript_entry(content, "<cursor transcript>", |role, msg_content| {
         if role != "user" || !project_path.is_empty() {
             return;
         }
@@ -162,8 +170,18 @@ impl CursorProvider {
     /// Subagent transcript: `.../agent-transcripts/<parentId>/subagents/<subagentId>.jsonl`
     ///   → parent_id = Some(parentId), is_sidechain = true
     pub fn parse_transcript_jsonl(&self, path: &Path) -> Option<ParsedSession> {
-        let content = std::fs::read_to_string(path).ok()?;
-        let messages = parse_transcript_messages(&content);
+        let content = match std::fs::read_to_string(path) {
+            Ok(content) => content,
+            Err(error) => {
+                log::warn!(
+                    "failed to read Cursor transcript '{}': {}",
+                    path.display(),
+                    error
+                );
+                return None;
+            }
+        };
+        let messages = parse_transcript_messages(&content, &path.display().to_string());
         if messages.is_empty() {
             return None;
         }
@@ -231,27 +249,61 @@ impl CursorProvider {
             (session_title(first_user_message.as_deref()), 0)
         };
 
-        let file_size = std::fs::metadata(path).map(|m| m.len()).unwrap_or(0);
+        let metadata = match std::fs::metadata(path) {
+            Ok(metadata) => metadata,
+            Err(error) => {
+                log::warn!(
+                    "failed to read Cursor transcript metadata '{}': {}",
+                    path.display(),
+                    error
+                );
+                return None;
+            }
+        };
+        let file_size = metadata.len();
 
-        let created_at = std::fs::metadata(path)
-            .ok()
-            .and_then(|m| m.created().ok())
-            .map(|t| {
-                t.duration_since(std::time::UNIX_EPOCH)
-                    .unwrap_or_default()
-                    .as_secs() as i64
-            })
-            .unwrap_or(0)
-            + task_index; // tiebreaker: preserve parent Task order
-        let updated_at = std::fs::metadata(path)
-            .ok()
-            .and_then(|m| m.modified().ok())
-            .map(|t| {
-                t.duration_since(std::time::UNIX_EPOCH)
-                    .unwrap_or_default()
-                    .as_secs() as i64
-            })
-            .unwrap_or(created_at);
+        let created_at = match metadata.created() {
+            Ok(time) => match time.duration_since(std::time::UNIX_EPOCH) {
+                Ok(duration) => duration.as_secs() as i64 + task_index,
+                Err(error) => {
+                    log::warn!(
+                        "failed to convert Cursor transcript created time '{}' to unix timestamp: {}",
+                        path.display(),
+                        error
+                    );
+                    return None;
+                }
+            },
+            Err(error) => {
+                log::warn!(
+                    "failed to read Cursor transcript created time '{}': {}",
+                    path.display(),
+                    error
+                );
+                return None;
+            }
+        };
+        let updated_at = match metadata.modified() {
+            Ok(time) => match time.duration_since(std::time::UNIX_EPOCH) {
+                Ok(duration) => duration.as_secs() as i64,
+                Err(error) => {
+                    log::warn!(
+                        "failed to convert Cursor transcript modified time '{}' to unix timestamp: {}",
+                        path.display(),
+                        error
+                    );
+                    return None;
+                }
+            },
+            Err(error) => {
+                log::warn!(
+                    "failed to read Cursor transcript modified time '{}': {}",
+                    path.display(),
+                    error
+                );
+                return None;
+            }
+        };
 
         Some(ParsedSession {
             meta: SessionMeta {
@@ -289,14 +341,31 @@ impl CursorProvider {
         let parent_id = parent_dir.file_name()?.to_string_lossy();
         let parent_jsonl = parent_dir.join(format!("{parent_id}.jsonl"));
 
-        let content = std::fs::read_to_string(&parent_jsonl).ok()?;
+        let content = match std::fs::read_to_string(&parent_jsonl) {
+            Ok(content) => content,
+            Err(error) => {
+                log::warn!(
+                    "failed to read Cursor parent transcript '{}': {}",
+                    parent_jsonl.display(),
+                    error
+                );
+                return None;
+            }
+        };
 
         // Collect all Task/Subagent tool_uses with their prompts and descriptions
         let mut candidates: Vec<(String, String)> = Vec::new();
         for line in content.lines() {
             let entry: Value = match serde_json::from_str(line) {
                 Ok(v) => v,
-                Err(_) => continue,
+                Err(error) => {
+                    log::warn!(
+                        "skipping malformed Cursor parent transcript JSONL in '{}': {}",
+                        parent_jsonl.display(),
+                        error
+                    );
+                    continue;
+                }
             };
             if entry.get("role").and_then(|r| r.as_str()) != Some("assistant") {
                 continue;

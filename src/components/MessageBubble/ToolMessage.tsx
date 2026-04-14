@@ -116,7 +116,8 @@ export function ToolMessage(props: { message: Message; provider?: string }) {
     try {
       const obj = JSON.parse(props.message.content);
       return obj.nickname as string | undefined;
-    } catch {
+    } catch (error) {
+      console.warn("Failed to parse agent tool output JSON:", error);
       return undefined;
     }
   });
@@ -126,7 +127,8 @@ export function ToolMessage(props: { message: Message; provider?: string }) {
     try {
       const obj = JSON.parse(props.message.tool_input!);
       return (obj.description ?? obj.prompt) as string | undefined;
-    } catch {
+    } catch (error) {
+      console.warn("Failed to parse agent tool input JSON:", error);
       return undefined;
     }
   });

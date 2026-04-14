@@ -159,7 +159,8 @@ export function toolSummary(message: Message): string {
         return first ? String(first).slice(0, 80) : "";
       }
     }
-  } catch {
+  } catch (error) {
+    console.warn(`Failed to summarize tool input for ${name}:`, error);
     if (name === "Agent") {
       const m = inputJson.match(/"description"\s*:\s*"([^"]+)"/);
       if (m) return m[1];
@@ -267,7 +268,8 @@ export function formatToolInput(message: Message): ToolDetail | null {
             .slice(0, 8),
         };
     }
-  } catch {
+  } catch (error) {
+    console.warn(`Failed to format tool input for ${name}:`, error);
     if (
       (name === "Apply_patch" || name === "Edit") &&
       inputJson.includes("*** Begin Patch")

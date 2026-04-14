@@ -157,8 +157,8 @@ export function TabBar(props: {
             if (data.sessionId && data.sourceGroupId !== props.groupId) {
               moveTabToGroup(data.sessionId, props.groupId);
             }
-          } catch {
-            /* ignore */
+          } catch (error) {
+            console.warn("Failed to parse dragged tab payload:", error);
           }
         }}
       >

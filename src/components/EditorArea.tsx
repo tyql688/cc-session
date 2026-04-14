@@ -2,6 +2,7 @@ import {
   Show,
   For,
   Index,
+  createMemo,
   createSignal,
   createResource,
   createEffect,
@@ -15,6 +16,7 @@ import { listRecentSessions, getChildSessions } from "../lib/tauri";
 import { useI18n } from "../i18n/index";
 import { isPathBlocked } from "../stores/settings";
 import { groups } from "../stores/editorGroups";
+import { errorMessage } from "../lib/errors";
 import { formatTimestamp } from "../lib/formatters";
 import { TabBar } from "./TabBar";
 import { SessionView } from "./SessionView";
@@ -43,14 +45,14 @@ export function EditorArea(props: {
   const { t, locale } = useI18n();
   // Refresh trigger: bumped on mount and whenever sessions change
   const [recentVersion, setRecentVersion] = createSignal(0);
-  const [recentSessions] = createResource(recentVersion, () =>
-    listRecentSessions(100)
-      .catch(() => [])
-      .then((list) =>
-        list
-          .filter((s) => !isPathBlocked(s.project_path) && !s.is_sidechain)
-          .slice(0, 10),
-      ),
+  const [recentSessions] = createResource(recentVersion, async () => {
+    const list = await listRecentSessions(100);
+    return list
+      .filter((s) => !isPathBlocked(s.project_path) && !s.is_sidechain)
+      .slice(0, 10);
+  });
+  const recentSessionsError = createMemo(() =>
+    recentSessions.error ? errorMessage(recentSessions.error) : null,
   );
   // Child counts per session for badge display
   const [childCounts, setChildCounts] = createSignal<Record<string, number>>(
@@ -67,8 +69,11 @@ export function EditorArea(props: {
             try {
               const children = await getChildSessions(s.id);
               if (children.length > 0) counts[s.id] = children.length;
-            } catch {
-              /* ignore */
+            } catch (error) {
+              console.error(
+                `Failed to load child sessions for recent session ${s.id}:`,
+                error,
+              );
             }
           }),
         );
@@ -165,7 +170,16 @@ export function EditorArea(props: {
                   </For>
                 </div>
               </Show>
-              <Show when={!recentSessions() || recentSessions()!.length === 0}>
+              <Show when={recentSessionsError()}>
+                <p class="editor-empty-text">{recentSessionsError()}</p>
+              </Show>
+              <Show
+                when={
+                  !recentSessions.loading &&
+                  !recentSessionsError() &&
+                  (!recentSessions() || recentSessions()!.length === 0)
+                }
+              >
                 <p class="editor-empty-text">{t("editor.emptyHint")}</p>
               </Show>
               <div class="editor-empty-shortcuts">

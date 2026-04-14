@@ -230,7 +230,11 @@ export function Explorer(props: {
     if (!resumeCommandCache.has(node.id)) {
       try {
         resumeCommand = await getResumeCommand(node.id);
-      } catch {
+      } catch (error) {
+        console.error(
+          `Failed to load resume command for session ${node.id}:`,
+          error,
+        );
         resumeCommand = null;
       }
       resumeCommandCache.set(node.id, resumeCommand);

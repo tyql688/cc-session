@@ -182,7 +182,17 @@ fn audit_trash_consistency(db: &db::Database) {
 
     for entry in &entries {
         // Auto-fix: session in both trash_meta AND DB → complete interrupted trash
-        if db.get_session(&entry.id).ok().flatten().is_some() {
+        let session_exists_in_db = match db.get_session(&entry.id) {
+            Ok(session) => session.is_some(),
+            Err(e) => {
+                log::warn!(
+                    "trash audit: failed to query session {} in DB: {e}",
+                    entry.id
+                );
+                false
+            }
+        };
+        if session_exists_in_db {
             log::warn!(
                 "trash audit: session {} found in both trash and DB — completing interrupted trash",
                 entry.id

@@ -84,8 +84,28 @@ fn codex_tool_result_value(raw_output: &str, output: &str) -> Option<Value> {
 
 impl CodexProvider {
     pub fn parse_session_file(&self, path: &PathBuf) -> Option<ParsedSession> {
-        let file = File::open(path).ok()?;
-        let metadata = fs::metadata(path).ok()?;
+        let file = match File::open(path) {
+            Ok(file) => file,
+            Err(error) => {
+                log::warn!(
+                    "failed to open Codex session '{}': {}",
+                    path.display(),
+                    error
+                );
+                return None;
+            }
+        };
+        let metadata = match fs::metadata(path) {
+            Ok(metadata) => metadata,
+            Err(error) => {
+                log::warn!(
+                    "failed to read Codex session metadata '{}': {}",
+                    path.display(),
+                    error
+                );
+                return None;
+            }
+        };
         let file_size = metadata.len();
 
         let reader = BufReader::new(file);
@@ -116,7 +136,14 @@ impl CodexProvider {
         for line in reader.lines() {
             let line = match line {
                 Ok(l) => l,
-                Err(_) => continue,
+                Err(error) => {
+                    log::warn!(
+                        "failed to read Codex session line from '{}': {}",
+                        path.display(),
+                        error
+                    );
+                    continue;
+                }
             };
             if line.trim().is_empty() {
                 continue;
@@ -124,7 +151,14 @@ impl CodexProvider {
 
             let entry: CodexLine = match serde_json::from_str(&line) {
                 Ok(e) => e,
-                Err(_) => continue,
+                Err(error) => {
+                    log::warn!(
+                        "skipping malformed Codex JSONL in '{}': {}",
+                        path.display(),
+                        error
+                    );
+                    continue;
+                }
             };
 
             if let Some(ref ts) = entry.timestamp {
@@ -293,7 +327,17 @@ impl CodexProvider {
                                 "exec_command" | "shell_command" => {
                                     // Remap {"cmd": "..."} to {"command": "..."}; keep already-normalized command args.
                                     arguments_str.and_then(|s| {
-                                        let v: Value = serde_json::from_str(s).ok()?;
+                                        let v: Value = match serde_json::from_str(s) {
+                                            Ok(value) => value,
+                                            Err(error) => {
+                                                log::warn!(
+                                                    "failed to parse Codex tool arguments in '{}': {}",
+                                                    path.display(),
+                                                    error
+                                                );
+                                                return None;
+                                            }
+                                        };
                                         let cmd = v
                                             .get("cmd")
                                             .or_else(|| v.get("command"))
@@ -303,13 +347,22 @@ impl CodexProvider {
                                 }
                                 "view_image" => {
                                     // Emit as image message instead of tool
-                                    if let Some(path) = arguments_str
-                                        .and_then(|s| serde_json::from_str::<Value>(s).ok())
-                                        .and_then(|v| {
-                                            v.get("path")
+                                    if let Some(path) = arguments_str.and_then(|s| {
+                                        match serde_json::from_str::<Value>(s) {
+                                            Ok(value) => value
+                                                .get("path")
                                                 .and_then(|p| p.as_str())
-                                                .map(|s| s.to_string())
-                                        })
+                                                .map(|s| s.to_string()),
+                                            Err(error) => {
+                                                log::warn!(
+                                                    "failed to parse Codex view_image arguments in '{}': {}",
+                                                    path.display(),
+                                                    error
+                                                );
+                                                None
+                                            }
+                                        }
+                                    })
                                     {
                                         messages.push(Message {
                                             role: MessageRole::Assistant,
@@ -718,7 +771,14 @@ impl CodexProvider {
 pub fn extract_usage_events_from_file(path: &PathBuf) -> Vec<CodexUsageEvent> {
     let file = match File::open(path) {
         Ok(file) => file,
-        Err(_) => return Vec::new(),
+        Err(error) => {
+            log::warn!(
+                "failed to open Codex session for usage extraction '{}': {}",
+                path.display(),
+                error
+            );
+            return Vec::new();
+        }
     };
     let reader = BufReader::new(file);
 
@@ -729,12 +789,27 @@ pub fn extract_usage_events_from_file(path: &PathBuf) -> Vec<CodexUsageEvent> {
     for line in reader.lines() {
         let line = match line {
             Ok(line) if !line.trim().is_empty() => line,
-            _ => continue,
+            Ok(_) => continue,
+            Err(error) => {
+                log::warn!(
+                    "failed to read Codex usage line from '{}': {}",
+                    path.display(),
+                    error
+                );
+                continue;
+            }
         };
 
         let entry: CodexLine = match serde_json::from_str(&line) {
             Ok(entry) => entry,
-            Err(_) => continue,
+            Err(error) => {
+                log::warn!(
+                    "skipping malformed Codex usage JSONL in '{}': {}",
+                    path.display(),
+                    error
+                );
+                continue;
+            }
         };
 
         let Some(payload) = entry.payload.as_ref() else {

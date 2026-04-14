@@ -12,19 +12,11 @@ export function IndexSettings(props: { onIndexChanged: () => void }) {
   const [showClearIndexConfirm, setShowClearIndexConfirm] = createSignal(false);
 
   const [indexStats, { refetch: refetchStats }] = createResource<IndexStats>(
-    async () => {
-      try {
-        return await getIndexStats();
-      } catch {
-        return {
-          session_count: 0,
-          db_size_bytes: 0,
-          last_index_time: "",
-          usage_last_refreshed_at: "",
-        };
-      }
-    },
+    () => getIndexStats(),
   );
+
+  const indexStatsError = () =>
+    indexStats.error ? errorMessage(indexStats.error) : null;
 
   async function handleRebuildIndex() {
     try {
@@ -42,15 +34,21 @@ export function IndexSettings(props: { onIndexChanged: () => void }) {
     <div class="settings-section">
       <div class="settings-section-title">{t("settings.index")}</div>
 
+      {indexStatsError() && (
+        <div class="session-error">{indexStatsError()}</div>
+      )}
+
       <div class="settings-row">
         <div class="settings-label">{t("settings.totalSessions")}</div>
-        <span class="settings-stat">{indexStats()?.session_count ?? 0}</span>
+        <span class="settings-stat">
+          {indexStats() ? indexStats()!.session_count.toLocaleString() : "—"}
+        </span>
       </div>
 
       <div class="settings-row">
         <div class="settings-label">{t("settings.dbSize")}</div>
         <span class="settings-stat">
-          {formatFileSize(indexStats()?.db_size_bytes ?? 0)}
+          {indexStats() ? formatFileSize(indexStats()!.db_size_bytes) : "—"}
         </span>
       </div>
 

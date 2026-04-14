@@ -3,7 +3,11 @@ import { invoke } from "@tauri-apps/api/core";
 import { useI18n } from "../../i18n/index";
 import { shortenHomePath } from "../../lib/formatters";
 import type { ProviderSnapshot } from "../../lib/types";
-import { disabledProviders, toggleProvider } from "../../stores/settings";
+import {
+  disabledProviders,
+  disabledProvidersError,
+  toggleProvider,
+} from "../../stores/settings";
 import { toastError } from "../../stores/toast";
 
 export function DataSourceSettings(props: {
@@ -14,6 +18,9 @@ export function DataSourceSettings(props: {
   return (
     <div class="settings-section">
       <div class="settings-section-title">{t("settings.dataSources")}</div>
+      <Show when={disabledProvidersError()}>
+        <div class="session-error">{disabledProvidersError()}</div>
+      </Show>
       <For each={props.providerSnapshots()}>
         {(info) => (
           <div class="settings-row">

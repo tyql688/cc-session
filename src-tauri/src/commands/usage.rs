@@ -137,33 +137,37 @@ fn build_usage_stats(
 
     // Previous period for trend comparison.
     // Only computed when a concrete range is given and enough historical data exists.
-    let prev_period = range_days.and_then(|days| {
+    let prev_period = if let Some(days) = range_days {
         if days == 0 {
-            return None;
-        }
-        let today = chrono::Local::now().date_naive();
-        let cur_start = today - chrono::Duration::days(i64::from(days.saturating_sub(1)));
-        let prev_start = cur_start - chrono::Duration::days(i64::from(days));
-        let prev_start_str = prev_start.format("%Y-%m-%d").to_string();
-        let prev_end_str = cur_start.format("%Y-%m-%d").to_string();
+            None
+        } else {
+            let today = chrono::Local::now().date_naive();
+            let cur_start = today - chrono::Duration::days(i64::from(days.saturating_sub(1)));
+            let prev_start = cur_start - chrono::Duration::days(i64::from(days));
+            let prev_start_str = prev_start.format("%Y-%m-%d").to_string();
+            let prev_end_str = cur_start.format("%Y-%m-%d").to_string();
 
-        let (sessions, turns, inp, out, cr, cw, cost) = state
-            .db
-            .usage_totals_range(providers, &prev_start_str, &prev_end_str)
-            .ok()?;
+            let (sessions, turns, inp, out, cr, cw, cost) = state
+                .db
+                .usage_totals_range(providers, &prev_start_str, &prev_end_str)
+                .map_err(|e| format!("failed to query previous-period usage totals: {e}"))?;
 
-        // Only return if prev period has data
-        let total_tokens = inp + out + cr + cw;
-        if sessions == 0 && turns == 0 {
-            return None;
+            // Only return if prev period has data
+            let total_tokens = inp + out + cr + cw;
+            if sessions == 0 && turns == 0 {
+                None
+            } else {
+                Some(PrevPeriodTotals {
+                    total_sessions: sessions,
+                    total_turns: turns,
+                    total_tokens,
+                    total_cost: cost,
+                })
+            }
         }
-        Some(PrevPeriodTotals {
-            total_sessions: sessions,
-            total_turns: turns,
-            total_tokens,
-            total_cost: cost,
-        })
-    });
+    } else {
+        None
+    };
 
     let provider_session_counts = state
         .db

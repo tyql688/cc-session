@@ -48,12 +48,20 @@ impl Indexer {
     ) -> Result<usize, String> {
         let start = Instant::now();
         let mut total = 0usize;
-        let pricing_catalog = self
-            .db
-            .get_meta(PRICING_CATALOG_JSON_KEY)
-            .ok()
-            .flatten()
-            .and_then(|json| pricing::parse_catalog(&json));
+        let pricing_catalog = match self.db.get_meta(PRICING_CATALOG_JSON_KEY) {
+            Ok(Some(json)) => match pricing::parse_catalog(&json) {
+                Ok(catalog) => Some(catalog),
+                Err(error) => {
+                    log::warn!("failed to parse cached pricing catalog: {error}");
+                    None
+                }
+            },
+            Ok(None) => None,
+            Err(error) => {
+                log::warn!("failed to read cached pricing catalog: {error}");
+                None
+            }
+        };
 
         let now_millis = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
@@ -342,21 +350,8 @@ fn compute_token_stats_dedup(
         return compute_codex_token_stats(parsed, pricing_catalog);
     }
 
-    let fallback_date = chrono::DateTime::from_timestamp(parsed.meta.created_at, 0)
-        .map(|dt| {
-            dt.with_timezone(&chrono::Local)
-                .format("%Y-%m-%d")
-                .to_string()
-        })
-        .unwrap_or_else(|| "1970-01-01".to_string());
-    let fallback_model = parsed.meta.model.as_deref().unwrap_or("").to_string();
-    let mut last_seen_model = fallback_model.clone();
-
     let mut stats_map: HashMap<(String, String), TokenStatRow> = HashMap::with_capacity(32);
     for msg in &parsed.messages {
-        if let Some(model) = msg.model.as_deref().filter(|model| !model.is_empty()) {
-            last_seen_model = model.to_string();
-        }
         if let Some(usage) = &msg.token_usage {
             // Dedup: skip if this usage entry was already counted (cross-file)
             if let Some(ref mut seen) = seen_hashes {
@@ -367,17 +362,29 @@ fn compute_token_stats_dedup(
                 }
             }
 
-            let date = msg
-                .timestamp
-                .as_deref()
-                .and_then(timestamp_to_local_date)
-                .unwrap_or_else(|| fallback_date.clone());
-            let model = msg
-                .model
-                .as_deref()
-                .filter(|model| !model.is_empty())
-                .unwrap_or(&last_seen_model)
-                .to_string();
+            let Some(timestamp) = msg.timestamp.as_deref() else {
+                log::warn!(
+                    "skipping token usage without message timestamp in session {}",
+                    parsed.meta.id
+                );
+                continue;
+            };
+            let Some(date) = timestamp_to_local_date(timestamp) else {
+                log::warn!(
+                    "skipping token usage with invalid timestamp '{}' in session {}",
+                    timestamp,
+                    parsed.meta.id
+                );
+                continue;
+            };
+            let Some(model) = msg.model.as_deref().filter(|model| !model.is_empty()) else {
+                log::warn!(
+                    "skipping token usage without message model in session {}",
+                    parsed.meta.id
+                );
+                continue;
+            };
+            let model = model.to_string();
             let entry = stats_map
                 .entry((date.clone(), model.clone()))
                 .or_insert_with(|| TokenStatRow {
@@ -501,7 +508,7 @@ mod tests {
     }
 
     #[test]
-    fn compute_token_stats_falls_back_to_session_model() {
+    fn compute_token_stats_skips_usage_without_message_model() {
         let parsed = make_session(
             Some("claude-opus-4-6"),
             vec![Message {
@@ -518,12 +525,11 @@ mod tests {
         );
 
         let rows = compute_token_stats(&parsed);
-        assert_eq!(rows.len(), 1);
-        assert_eq!(rows[0].model, "claude-opus-4-6");
+        assert!(rows.is_empty());
     }
 
     #[test]
-    fn compute_token_stats_falls_back_to_created_at_date() {
+    fn compute_token_stats_skips_usage_without_message_timestamp() {
         let parsed = make_session(
             Some("gpt-5.4"),
             vec![Message {
@@ -540,17 +546,11 @@ mod tests {
         );
 
         let rows = compute_token_stats(&parsed);
-        assert_eq!(rows.len(), 1);
-        let expected_date = chrono::DateTime::from_timestamp(parsed.meta.created_at, 0)
-            .expect("valid timestamp")
-            .with_timezone(&chrono::Local)
-            .format("%Y-%m-%d")
-            .to_string();
-        assert_eq!(rows[0].date, expected_date);
+        assert!(rows.is_empty());
     }
 
     #[test]
-    fn compute_token_stats_uses_latest_seen_model_for_tool_usage() {
+    fn compute_token_stats_skips_tool_usage_without_explicit_message_model() {
         let parsed = make_session(
             Some("claude-haiku-4-5-20251001"),
             vec![
@@ -580,8 +580,7 @@ mod tests {
         );
 
         let rows = compute_token_stats(&parsed);
-        assert_eq!(rows.len(), 1);
-        assert_eq!(rows[0].model, "claude-opus-4-6");
+        assert!(rows.is_empty());
     }
 
     #[test]

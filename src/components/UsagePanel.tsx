@@ -25,6 +25,7 @@ import {
 } from "../stores/providerSnapshots";
 import { ConfirmDialog } from "./ConfirmDialog";
 import { toast, toastError, toastInfo } from "../stores/toast";
+import { errorMessage } from "../lib/errors";
 import { formatLocalDateTime, shortenHomePath } from "../lib/formatters";
 import {
   buildDailyChartData,
@@ -148,28 +149,11 @@ export function UsagePanel() {
   const [sessionCount, { refetch: refetchSessionCount }] = createResource(() =>
     getSessionCount(),
   );
-  const [indexStats, { refetch: refetchIndexStats }] = createResource(
-    async () => {
-      try {
-        return await getIndexStats();
-      } catch {
-        return {
-          session_count: 0,
-          db_size_bytes: 0,
-          last_index_time: "",
-          usage_last_refreshed_at: "",
-        };
-      }
-    },
+  const [indexStats, { refetch: refetchIndexStats }] = createResource(() =>
+    getIndexStats(),
   );
   const [pricingStatus, { refetch: refetchPricingStatus }] =
-    createResource<PricingCatalogStatus>(async () => {
-      try {
-        return await getPricingCatalogStatus();
-      } catch {
-        return { updated_at: null, model_count: 0 };
-      }
-    });
+    createResource<PricingCatalogStatus>(() => getPricingCatalogStatus());
 
   let unlistenMaintenance: UnlistenFn | undefined;
   const handleUsageDataChanged = () => {
@@ -396,6 +380,7 @@ export function UsagePanel() {
   };
 
   const formattedPricingUpdatedAt = createMemo(() => {
+    if (pricingStatus.error) return t("error.message");
     const updatedAt = pricingStatus()?.updated_at;
     return updatedAt
       ? formatLocalDateTime(updatedAt)
@@ -403,8 +388,23 @@ export function UsagePanel() {
   });
 
   const formattedUsageUpdatedAt = createMemo(() => {
+    if (indexStats.error) return t("error.message");
     const updatedAt = indexStats()?.usage_last_refreshed_at;
     return updatedAt ? formatLocalDateTime(updatedAt) : t("usage.notRefreshed");
+  });
+
+  const pricingStatusError = createMemo(() =>
+    pricingStatus.error ? errorMessage(pricingStatus.error) : null,
+  );
+
+  const indexStatsError = createMemo(() =>
+    indexStats.error ? errorMessage(indexStats.error) : null,
+  );
+
+  const pricingModelCountLabel = createMemo(() => {
+    if (pricingStatus.error) return t("error.message");
+    if (pricingStatus.loading && !pricingStatus()) return t("common.loading");
+    return String(pricingStatus()?.model_count ?? 0);
   });
 
   const maintenanceStatusText = createMemo(() => {
@@ -596,19 +596,25 @@ export function UsagePanel() {
         </div>
 
         <div class="usage-toolbar-meta">
-          <span class="usage-meta-pill">
+          <span
+            class="usage-meta-pill"
+            title={pricingStatusError() ?? undefined}
+          >
             {t("usage.pricingUpdatedShort").replace(
               "{count}",
-              String(pricingStatus()?.model_count ?? 0),
+              pricingModelCountLabel(),
             )}
           </span>
-          <span class="usage-meta-pill">
+          <span
+            class="usage-meta-pill"
+            title={pricingStatusError() ?? undefined}
+          >
             {t("usage.pricingUpdatedAtShort").replace(
               "{updatedAt}",
               formattedPricingUpdatedAt(),
             )}
           </span>
-          <span class="usage-meta-pill">
+          <span class="usage-meta-pill" title={indexStatsError() ?? undefined}>
             {t("usage.usageUpdatedShort").replace(
               "{updatedAt}",
               formattedUsageUpdatedAt(),

@@ -40,13 +40,12 @@ pub fn normalize_model_key(model: &str) -> String {
 }
 
 /// Parse a cached PricingCatalog (our flattened format, stored in SQLite).
-pub fn parse_catalog(json: &str) -> Option<PricingCatalog> {
-    let raw: HashMap<String, RemoteModelPricing> = serde_json::from_str(json).ok()?;
-    Some(
-        raw.into_iter()
-            .map(|(name, pricing)| (normalize_model_key(&name), pricing))
-            .collect(),
-    )
+pub fn parse_catalog(json: &str) -> Result<PricingCatalog, serde_json::Error> {
+    let raw: HashMap<String, RemoteModelPricing> = serde_json::from_str(json)?;
+    Ok(raw
+        .into_iter()
+        .map(|(name, pricing)| (normalize_model_key(&name), pricing))
+        .collect())
 }
 
 // ── models.dev parsing ──────────────────────────────────────────────
@@ -108,8 +107,8 @@ const PREFERRED_ALIAS_PROVIDERS: &[&str] = &[
 /// `provider_id/model_id`. For preferred providers a short-name alias
 /// (just `model_id`) is also inserted so that e.g. `claude-opus-4-6`
 /// resolves directly without a prefix.
-pub fn parse_models_dev(json: &str) -> Option<PricingCatalog> {
-    let providers: HashMap<String, ModelsDevProvider> = serde_json::from_str(json).ok()?;
+pub fn parse_models_dev(json: &str) -> Result<PricingCatalog, serde_json::Error> {
+    let providers: HashMap<String, ModelsDevProvider> = serde_json::from_str(json)?;
     let mut catalog = PricingCatalog::new();
 
     // Process preferred providers first so their short aliases win.
@@ -168,17 +167,17 @@ pub fn parse_models_dev(json: &str) -> Option<PricingCatalog> {
         }
     }
 
-    Some(catalog)
+    Ok(catalog)
 }
 
-pub fn count_models_dev_models(json: &str) -> Option<u64> {
-    let providers: HashMap<String, ModelsDevProvider> = serde_json::from_str(json).ok()?;
+pub fn count_models_dev_models(json: &str) -> Result<u64, serde_json::Error> {
+    let providers: HashMap<String, ModelsDevProvider> = serde_json::from_str(json)?;
     let count = providers
         .values()
         .filter_map(|provider| provider.models.as_ref())
         .map(|models| models.len() as u64)
         .sum();
-    Some(count)
+    Ok(count)
 }
 
 fn push_unique(targets: &mut Vec<String>, candidate: String) {
@@ -524,7 +523,7 @@ mod tests {
             }
         }"#;
 
-        assert_eq!(count_models_dev_models(json), Some(3));
+        assert_eq!(count_models_dev_models(json).expect("count"), 3);
         assert!(parse_models_dev(json).expect("catalog").len() > 3);
     }
 

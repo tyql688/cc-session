@@ -74,8 +74,8 @@ export function EditorGroupsContainer(props: {
       if (data.sessionId) {
         createGroupFromDrop(data.sessionId);
       }
-    } catch {
-      /* ignore invalid drag data */
+    } catch (error) {
+      console.warn("Failed to parse split-drop payload:", error);
     }
   }
 

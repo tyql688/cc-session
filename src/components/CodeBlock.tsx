@@ -1,5 +1,6 @@
 import { createSignal, createEffect, onCleanup } from "solid-js";
 import { useI18n } from "../i18n/index";
+import { toastError } from "../stores/toast";
 import hljs from "highlight.js/lib/core";
 
 // Register languages on demand
@@ -94,7 +95,8 @@ export function CodeBlock(props: { code: string; language?: string }) {
       try {
         const result = hljs.highlightAuto(props.code);
         codeRef.innerHTML = result.value;
-      } catch {
+      } catch (error) {
+        console.warn(`Failed to auto-highlight code block (${lang}):`, error);
         codeRef.textContent = props.code;
       }
     }
@@ -106,8 +108,9 @@ export function CodeBlock(props: { code: string; language?: string }) {
       setCopied(true);
       clearTimeout(copyTimer);
       copyTimer = setTimeout(() => setCopied(false), 1500);
-    } catch {
-      // clipboard unavailable
+    } catch (error) {
+      console.error("Failed to copy code block:", error);
+      toastError(t("toast.copyFailed"));
     }
   }
 
