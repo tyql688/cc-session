@@ -7,6 +7,12 @@ versioned with [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.3.14] - 2026-04-14
+
+### Fixed
+
+- Pricing lookup now uses deterministic exact-match instead of non-deterministic HashMap iteration, fixing incorrect cost for variant models like gpt-5.4-fast (bd43ef2)
+
 ## [0.3.13] - 2026-04-14
 
 ### Fixed
