@@ -172,6 +172,7 @@ Resume: Claude `--resume`, Codex `resume`, Gemini `--resume`, Kimi `--session`, 
 
 All code (Rust and TypeScript) must fail explicitly — never silently swallow errors or fall back to defaults that hide problems.
 
+- **No plausible-but-wrong values**: Never substitute a "close enough" value when the correct one is unavailable. A wrong result that looks right is worse than no result. Concrete anti-patterns: using a parent/session-level value where a per-record value is needed (e.g. session timestamp instead of message timestamp); writing `None`/placeholder where a real value should be computed (e.g. `usage_hash: None`); non-deterministic iteration as a lookup fallback (e.g. `HashMap::iter().find_map()`); default values that mask missing data (`?? 0`, `unwrap_or_default()`). If the correct value cannot be obtained, log a warning and skip — do not fabricate a substitute.
 - **Rust**: Propagate errors with `?` and context (`anyhow`/`fmt::Error`). Use `log::warn!`/`log::error!` when skipping a record, never silently return `None` or empty. `unwrap()` only in tests.
 - **TypeScript**: Catch errors at boundaries (Tauri command calls, event handlers), surface via toast or `console.error`. Never use empty `catch {}` blocks — at minimum log the error. No `?? fallbackValue` that masks broken data.
 - **Parsers**: When a JSONL line or JSON field is malformed, log a warning with file path and line context, then skip — do not silently produce partial/empty results.
