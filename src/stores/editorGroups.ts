@@ -228,11 +228,11 @@ function splitToRight(sessionId: string) {
       flexBasis: halfBasis,
     }));
     const newGroup = makeGroup([session], halfBasis);
-    setGroups((prev) => {
-      const result = [...prev];
-      result.splice(sourceIdx + 1, 0, newGroup);
-      return result;
-    });
+    setGroups((prev) => [
+      ...prev.slice(0, sourceIdx + 1),
+      newGroup,
+      ...prev.slice(sourceIdx + 1),
+    ]);
     setActiveGroupId(newGroup.id);
   } else {
     // at max groups, move to rightmost
@@ -267,8 +267,12 @@ function moveTabToGroup(
     if (insertIndex === undefined) return;
     const tab = sourceGroup.tabs.find((t) => t.id === sessionId)!;
     const without = sourceGroup.tabs.filter((t) => t.id !== sessionId);
-    without.splice(insertIndex, 0, tab);
-    updateGroup(sourceGroup.id, (g) => ({ ...g, tabs: without }));
+    const reordered = [
+      ...without.slice(0, insertIndex),
+      tab,
+      ...without.slice(insertIndex),
+    ];
+    updateGroup(sourceGroup.id, (g) => ({ ...g, tabs: reordered }));
     return;
   }
   const session = sourceGroup.tabs.find((t) => t.id === sessionId)!;
@@ -289,12 +293,14 @@ function moveTabToGroup(
   }));
   // add to target (drag = pin, so don't set previewTabId)
   updateGroup(targetGroupId, (g) => {
-    const tabs = [...g.tabs];
-    if (insertIndex !== undefined) {
-      tabs.splice(insertIndex, 0, session);
-    } else {
-      tabs.push(session);
-    }
+    const tabs =
+      insertIndex !== undefined
+        ? [
+            ...g.tabs.slice(0, insertIndex),
+            session,
+            ...g.tabs.slice(insertIndex),
+          ]
+        : [...g.tabs, session];
     return { ...g, tabs, activeTabId: session.id };
   });
   setActiveGroupId(targetGroupId);
