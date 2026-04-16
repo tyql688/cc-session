@@ -43,6 +43,7 @@ import {
 import { processMessages } from "./hooks";
 import { SessionToolbar } from "./SessionToolbar";
 import { SessionSearch } from "./SessionSearch";
+import { TimelineMinimap } from "./TimelineMinimap";
 
 export function SessionView(props: {
   session: SessionRef;
@@ -536,46 +537,54 @@ export function SessionView(props: {
       </Show>
 
       <Show when={!loading() && !error()}>
-        <div
-          class="session-messages"
-          ref={messagesRef}
-          onScroll={handleMessagesScroll}
-        >
-          <For each={visibleEntries()}>
-            {(entry) => {
-              if (entry.type === "time-sep") {
+        <div class="session-messages-container">
+          <div
+            class="session-messages"
+            ref={messagesRef}
+            onScroll={handleMessagesScroll}
+          >
+            <For each={visibleEntries()}>
+              {(entry) => {
+                if (entry.type === "time-sep") {
+                  return (
+                    <div class="session-entry" data-entry-key={entry.key}>
+                      <div class="msg-time-separator">{entry.time}</div>
+                    </div>
+                  );
+                }
+                if (entry.type === "merged-tools") {
+                  return (
+                    <div class="session-entry" data-entry-key={entry.key}>
+                      <MergedToolRow
+                        tools={entry.tools}
+                        messages={entry.messages}
+                        provider={meta().provider}
+                        highlightTerm={sessionSearch()}
+                      />
+                    </div>
+                  );
+                }
                 return (
                   <div class="session-entry" data-entry-key={entry.key}>
-                    <div class="msg-time-separator">{entry.time}</div>
-                  </div>
-                );
-              }
-              if (entry.type === "merged-tools") {
-                return (
-                  <div class="session-entry" data-entry-key={entry.key}>
-                    <MergedToolRow
-                      tools={entry.tools}
-                      messages={entry.messages}
+                    <MessageBubble
+                      message={entry.msg}
                       provider={meta().provider}
                       highlightTerm={sessionSearch()}
                     />
                   </div>
                 );
-              }
-              return (
-                <div class="session-entry" data-entry-key={entry.key}>
-                  <MessageBubble
-                    message={entry.msg}
-                    provider={meta().provider}
-                    highlightTerm={sessionSearch()}
-                  />
-                </div>
-              );
-            }}
-          </For>
-          <Show when={messages().length === 0}>
-            <div class="session-empty-messages">{t("session.noMessages")}</div>
-          </Show>
+              }}
+            </For>
+            <Show when={messages().length === 0}>
+              <div class="session-empty-messages">
+                {t("session.noMessages")}
+              </div>
+            </Show>
+          </div>
+          <TimelineMinimap
+            entries={filteredEntries()}
+            messagesRef={messagesRef}
+          />
         </div>
       </Show>
 
