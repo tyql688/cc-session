@@ -151,23 +151,37 @@ impl Database {
     }
 
     pub fn db_size_bytes(&self) -> u64 {
-        // Use (page_count - freelist_count) * page_size for actual data usage.
-        // File size includes free pages that can't be reclaimed while app is running.
-        if let Ok(conn) = self.lock_read() {
-            let used: u64 = conn
-                .query_row(
+        // Prefer (page_count - freelist_count) * page_size for actual data usage;
+        // file size on disk includes free pages that can't be reclaimed while the
+        // app is running. Falls back to file metadata if the pragma query fails.
+        match self.lock_read() {
+            Ok(conn) => {
+                match conn.query_row(
                     "SELECT (page_count - freelist_count) * page_size FROM pragma_page_count, pragma_freelist_count, pragma_page_size",
                     [],
-                    |row| row.get(0),
-                )
-                .unwrap_or(0);
-            if used > 0 {
-                return used;
+                    |row| row.get::<_, u64>(0),
+                ) {
+                    Ok(used) if used > 0 => return used,
+                    Ok(_) => {}
+                    Err(error) => {
+                        log::warn!("db_size_bytes pragma query failed: {error}");
+                    }
+                }
+            }
+            Err(error) => {
+                log::warn!("db_size_bytes lock_read failed: {error}");
             }
         }
-        std::fs::metadata(&self.db_path)
-            .map(|m| m.len())
-            .unwrap_or(0)
+        match std::fs::metadata(&self.db_path) {
+            Ok(metadata) => metadata.len(),
+            Err(error) => {
+                log::warn!(
+                    "db_size_bytes fallback metadata failed for '{}': {error}",
+                    self.db_path.display()
+                );
+                0
+            }
+        }
     }
 
     pub fn provider_session_counts(&self) -> Result<HashMap<String, u64>, rusqlite::Error> {

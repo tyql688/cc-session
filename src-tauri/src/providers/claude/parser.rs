@@ -298,7 +298,7 @@ pub fn parse_session_file(path: &PathBuf) -> Option<ParsedSession> {
     // Subagents inherit project_path from parent session's cwd (first entry in parent JSONL).
     // Their own cwd may differ (e.g. subagent ran in src-tauri/ subfolder).
     // We derive the parent's project path from the file system path instead.
-    let project_path = if parent_id.is_some() {
+    let project_path = if let Some(parent_id) = parent_id.as_ref() {
         // Path: .../{project_dir}/{parent_id}/subagents/agent-xxx.jsonl
         // Parent JSONL: .../{project_dir}/{parent_id}.jsonl
         // We need the project_dir's cwd, which we can't get here.
@@ -310,8 +310,7 @@ pub fn parse_session_file(path: &PathBuf) -> Option<ParsedSession> {
             .and_then(|project_dir| {
                 // Read parent session to find first line with cwd
                 // (first line may be file-history-snapshot without cwd)
-                let parent_jsonl =
-                    project_dir.join(format!("{}.jsonl", parent_id.as_ref().unwrap()));
+                let parent_jsonl = project_dir.join(format!("{parent_id}.jsonl"));
                 let file = match std::fs::File::open(&parent_jsonl) {
                     Ok(file) => file,
                     Err(error) => {
