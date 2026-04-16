@@ -21,6 +21,15 @@ import type {
  * actions (rename, export, delete, resume…) where the caller needs
  * to know the call failed.
  *
+ * The argument is an already-started `Promise<T>` (eager evaluation);
+ * if the underlying call can throw **synchronously** before returning
+ * the promise, wrap it in a thunk yourself:
+ *   invokeWithToast(Promise.resolve().then(() => invoke(...)), "...")
+ *
+ * Rethrows the original error verbatim (preserves `instanceof` and
+ * stack); the `context` prefix is embedded only in the log + toast,
+ * not in the thrown error's message.
+ *
  * @example
  *   await invokeWithToast(renameSession(id, title), "rename session");
  */
@@ -44,6 +53,9 @@ export async function invokeWithToast<T>(
  * diagnosability but do not toast (to avoid noise when the backend
  * hiccups), and the fallback value is returned so callers can render
  * a safe default instead of propagating undefined.
+ *
+ * Like `invokeWithToast`, the argument is evaluated eagerly — wrap
+ * in a thunk if the call can throw synchronously.
  *
  * @example
  *   const cost = await invokeWithFallback(getTodayCost(), undefined, "refresh today cost");

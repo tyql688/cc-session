@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const invoke = vi.fn();
 const toastError = vi.fn();
@@ -110,6 +110,10 @@ describe("invokeWithToast", () => {
     errSpy = vi.spyOn(console, "error").mockImplementation(() => {});
   });
 
+  afterEach(() => {
+    errSpy.mockRestore();
+  });
+
   it("returns the resolved value on success and does not toast", async () => {
     const { invokeWithToast } = await import("./tauri");
 
@@ -148,6 +152,10 @@ describe("invokeWithFallback", () => {
   beforeEach(() => {
     toastError.mockReset();
     errSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+  });
+
+  afterEach(() => {
+    errSpy.mockRestore();
   });
 
   it("returns the resolved value on success", async () => {
