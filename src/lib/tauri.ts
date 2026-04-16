@@ -1,4 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
+import { errorMessage } from "./errors";
+import { toastError } from "../stores/toast";
 import type {
   BatchResult,
   SessionDetail,
@@ -12,6 +14,52 @@ import type {
   SessionMeta,
   UsageStats,
 } from "./types";
+
+/**
+ * Wrap a Tauri invocation so failures surface to the user as a toast
+ * (plus `console.error`) and then rethrow. Use for user-triggered
+ * actions (rename, export, delete, resume…) where the caller needs
+ * to know the call failed.
+ *
+ * @example
+ *   await invokeWithToast(renameSession(id, title), "rename session");
+ */
+export async function invokeWithToast<T>(
+  promise: Promise<T>,
+  context: string,
+): Promise<T> {
+  try {
+    return await promise;
+  } catch (err) {
+    const message = `${context}: ${errorMessage(err)}`;
+    console.error(message);
+    toastError(message);
+    throw err;
+  }
+}
+
+/**
+ * Wrap a Tauri invocation used for background / status refreshes.
+ * Failures are logged via `console.error` with `context` for
+ * diagnosability but do not toast (to avoid noise when the backend
+ * hiccups), and the fallback value is returned so callers can render
+ * a safe default instead of propagating undefined.
+ *
+ * @example
+ *   const cost = await invokeWithFallback(getTodayCost(), undefined, "refresh today cost");
+ */
+export async function invokeWithFallback<T, D = T>(
+  promise: Promise<T>,
+  fallback: D,
+  context: string,
+): Promise<T | D> {
+  try {
+    return await promise;
+  } catch (err) {
+    console.error(`${context}: ${errorMessage(err)}`);
+    return fallback;
+  }
+}
 
 export async function reindex(): Promise<number> {
   return invoke<number>("reindex");

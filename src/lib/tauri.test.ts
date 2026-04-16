@@ -1,15 +1,21 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const invoke = vi.fn();
+const toastError = vi.fn();
 
 vi.mock("@tauri-apps/api/core", () => ({
   invoke,
+}));
+
+vi.mock("../stores/toast", () => ({
+  toastError,
 }));
 
 describe("tauri api wrappers", () => {
   beforeEach(() => {
     invoke.mockReset();
     invoke.mockResolvedValue(undefined);
+    toastError.mockReset();
   });
 
   it("getSessionDetail sends only sessionId", async () => {
@@ -93,5 +99,93 @@ describe("tauri api wrappers", () => {
       format: "markdown",
       outputPath: "/tmp/export.zip",
     });
+  });
+});
+
+describe("invokeWithToast", () => {
+  let errSpy: ReturnType<typeof vi.spyOn>;
+
+  beforeEach(() => {
+    toastError.mockReset();
+    errSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+  });
+
+  it("returns the resolved value on success and does not toast", async () => {
+    const { invokeWithToast } = await import("./tauri");
+
+    const result = await invokeWithToast(Promise.resolve(42), "compute answer");
+
+    expect(result).toBe(42);
+    expect(toastError).not.toHaveBeenCalled();
+  });
+
+  it("toasts with context + error message and rethrows on failure", async () => {
+    const { invokeWithToast } = await import("./tauri");
+    const err = new Error("boom");
+
+    await expect(
+      invokeWithToast(Promise.reject(err), "compute answer"),
+    ).rejects.toBe(err);
+
+    expect(toastError).toHaveBeenCalledWith("compute answer: boom");
+    expect(errSpy).toHaveBeenCalledWith("compute answer: boom");
+  });
+
+  it("handles non-Error throwables by stringifying them", async () => {
+    const { invokeWithToast } = await import("./tauri");
+
+    await expect(
+      invokeWithToast(Promise.reject("plain string"), "ctx"),
+    ).rejects.toBe("plain string");
+
+    expect(toastError).toHaveBeenCalledWith("ctx: plain string");
+  });
+});
+
+describe("invokeWithFallback", () => {
+  let errSpy: ReturnType<typeof vi.spyOn>;
+
+  beforeEach(() => {
+    toastError.mockReset();
+    errSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+  });
+
+  it("returns the resolved value on success", async () => {
+    const { invokeWithFallback } = await import("./tauri");
+
+    const result = await invokeWithFallback(
+      Promise.resolve(42),
+      0,
+      "refresh stats",
+    );
+
+    expect(result).toBe(42);
+    expect(errSpy).not.toHaveBeenCalled();
+  });
+
+  it("returns the fallback and logs (but does NOT toast) on failure", async () => {
+    const { invokeWithFallback } = await import("./tauri");
+
+    const result = await invokeWithFallback(
+      Promise.reject(new Error("network down")),
+      99,
+      "refresh stats",
+    );
+
+    expect(result).toBe(99);
+    expect(errSpy).toHaveBeenCalledWith("refresh stats: network down");
+    expect(toastError).not.toHaveBeenCalled();
+  });
+
+  it("accepts a widened fallback type (T | undefined)", async () => {
+    const { invokeWithFallback } = await import("./tauri");
+
+    const result = await invokeWithFallback<number, undefined>(
+      Promise.reject(new Error("x")),
+      undefined,
+      "ctx",
+    );
+
+    expect(result).toBeUndefined();
   });
 });
