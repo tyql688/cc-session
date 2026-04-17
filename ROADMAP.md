@@ -170,10 +170,11 @@ Your personal knowledge base for AI coding sessions — unified access, searchab
 
 ## Code Quality / 代码质量
 
-### UsagePanel Component Split — UsagePanel 组件拆分
-- Current: 1323-line god component with charts + tables + sorting + maintenance
-- Fix: split into `<UsageChart>`, `<ProjectCostTable>`, `<SessionCostTable>`, `<MaintenancePanel>`
-- 1323 行巨型组件，应拆分为独立子组件
+### UsagePanel Component Split — UsagePanel 组件拆分 `✅ done`
+- Moved `src/components/UsagePanel.tsx` (1337 lines) → `src/components/UsagePanel/` directory with 8 focused children: `Toolbar` (185), `Chart` (174), `SessionTable` (123), `ProjectTable` (117), `ModelTable` (91), `SummaryCards` (83), `TopModels` (64), plus pure `formatters.ts` (75) covered by 20 unit tests
+- Orchestrator `index.tsx` now at 595 lines — still under the 800-line cap; remaining bulk is signals/resources/memos/handlers that intentionally live in the single component rather than in a store
+- All child props are `Accessor<T>` functions, preserving Solid reactivity across the component boundary
+- 1337 行拆成 orchestrator + 7 子组件 + 纯 formatters（含 20 个单测），编排层 595 行，子组件各 ≤185 行
 
 ### Parser Error Surfacing — 解析错误用户可见 `🔧 partial`
 - Current: malformed JSONL silently skipped with `log::warn` (`claude/parser.rs:112-118`)
@@ -242,10 +243,10 @@ Your personal knowledge base for AI coding sessions — unified access, searchab
 ### Large File Splits — 大文件拆分 `🔧 partial`
 - Rust: `providers/codex/parser.rs` 1652, `providers/claude/parser.rs` 1385, `providers/kimi/parser.rs` 944, `provider.rs` 907, `db/queries.rs` 848 — outstanding
 - TS: ~~`MarkdownRenderer.tsx` 833~~ split into `markdown/{types,parser,katex,utils,renderers}` (renderers.tsx 552, all others <200); thin 47-line entry re-exports the prior public API
-- TS: `UsagePanel.tsx` 1337 still tracked under Code Quality — outstanding
+- TS: ~~`UsagePanel.tsx` 1337~~ split into `UsagePanel/{index,Toolbar,Chart,SummaryCards,TopModels,ModelTable,ProjectTable,SessionTable,formatters}` — orchestrator 595, all children ≤185
 - All files must stay under the 800-line limit set in CLAUDE.md
 - Fix: most of the Rust parsers collapse naturally once Provider Parser Abstraction lands
-- MarkdownRenderer 已拆；Rust parsers 待 Provider 抽象后自然瘦身；UsagePanel 单独跟踪
+- MarkdownRenderer 和 UsagePanel 已拆；Rust parsers 待 Provider 抽象后自然瘦身
 
 ### SessionView Effect Decoupling — SessionView Effect 解耦 `🟡 medium`
 - `SessionView/index.tsx:151-397` has 6+ chained `createEffect` (favoriteVersion ↔ isFavorite ↔ setStarred ↔ bumpFavoriteVersion)
