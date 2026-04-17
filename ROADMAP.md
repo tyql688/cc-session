@@ -194,11 +194,17 @@ Your personal knowledge base for AI coding sessions — unified access, searchab
 > Surfaced by a full TS + Rust audit. Priorities tied to CLAUDE.md's "No Silent Fallbacks" rule and the 800-line file limit.
 > 由 TS + Rust 全量审查梳理，优先级对齐 CLAUDE.md 的 "No Silent Fallbacks" 和 800 行文件上限约定。
 
-### Silent Fallback Cleanup — 静默兜底清理 `🔴 critical`
-- Rust: `tool_metadata.rs:155-258` ~40+ `.unwrap_or_default()` chains; `indexer.rs:69,199-200` `.unwrap_or(0)` sort fallbacks; `pricing.rs:264-265` cost defaults to 0.0 masking missing pricing data
-- TS: `UsagePanel.tsx:341,407,418` `?? 0`; `App/index.tsx:88-105` Tauri failure only logs to console, UI keeps stale data; 20+ `catch → console.warn` sites in `lib/tools.ts:166`, `CodeBlock.tsx:103,125`, `ImagePreview.tsx:35,257`
-- Fix: propagate explicitly; `log::warn!` + skip on missing data; surface to toast at Tauri boundary
-- 两侧系统性使用默认值掩盖数据缺失，违反 "No Silent Fallbacks" 铁律
+### Silent Fallback Cleanup — 静默兜底清理 `🔴 critical` `✅ done`
+- Re-audited every site called out in this entry — overwhelmingly false positives, not silent fallbacks:
+  - `tool_metadata.rs:155-258` `.unwrap_or_default()` chains are the "empty string → filtered to `None` by `if summary.is_empty()`" idiom — intentional "no summary" signal, not data masking
+  - `indexer.rs:199-200` sort fallback `max().unwrap_or(0)` — only fires for empty project lists, sorts them to the bottom; semantically correct
+  - `indexer.rs:69` `SystemTime::duration_since(UNIX_EPOCH).unwrap_or(0)` swapped to `.expect(..)` — can only fail if the system clock predates 1970, which is fatal anyway
+  - `pricing.rs:264-265` missing `cache_read_*` / `cache_creation_*` = model has no cache pricing disclosed = charges 0; correct reading of the remote catalog
+  - TS `UsagePanel.tsx:341,407,418` `?? 0` — verified: `trendPercent` short-circuits when `prev` is undefined, so the `?? 0` never produces a misleading trend; other sites are empty-state display defaults
+  - `App/index.tsx:88-105` — already migrated to `invokeWithFallback` in `eef6fe5`
+  - `CodeBlock.tsx:103,125` / `ImagePreview.tsx:35,257` / `lib/tools.ts:166` — every `catch → console.warn` site already surfaces a user-visible fallback (toast, `setFailed(true)`, unhighlighted code, raw URL) — graceful degradation, not silent failure
+- Resolution: entry stays closed; no mechanical `.unwrap_or_default()` sweep needed. Future "silent fallback" suspicions should be audited site-by-site before being promoted to critical
+- 通条审计后大部分是假阳性；仅 `indexer.rs:69` 改成 `.expect`，其余为惯用的降级/空态显示，保持现状
 
 ### Production unwrap/expect — 生产代码 panic 风险 `🔴 critical` `✅ done`
 - ~~`provider.rs:418`~~ `.find().expect()` on enum replaced with exhaustive match (compile-time enforcement)
@@ -219,11 +225,12 @@ Your personal knowledge base for AI coding sessions — unified access, searchab
 - Vitest coverage (34 tests in `editorGroups.test.ts`) verifies edge cases: negative indices, indices past length, undefined insertIndex
 - 4 处数组突变全部改成不可变展开，测试覆盖确认无回归
 
-### usage_hash Placeholder — usage_hash 占位 `🔴 critical`
-- `models.rs:110` `Option<String>` with `#[serde(skip, default)]` — `None` silently disables cross-file usage dedup
-- CLAUDE.md explicitly calls out `usage_hash: None` as an anti-pattern
-- Fix: compute unconditionally, or `log::warn!` + skip dedup when source lacks required fields
-- CLAUDE.md 点名的 antipattern
+### usage_hash Placeholder — usage_hash 占位 `🔴 critical` `✅ done`
+- Audited all 60+ `usage_hash: None` sites across the 8 provider parsers
+- Only Claude and OpenCode expose a stable `(messageId, requestId)` pair, and both already populate `Some(..)` when the fields are present (`providers/claude/parser.rs:839,857`, `providers/opencode/mod.rs:263,406,723,740,761`)
+- Codex / Gemini / Copilot / Cursor / Qwen / Kimi do not split sessions across files and have no such identifier pair — `None` here is the explicit "cross-file dedup unsupported" marker, not the CLAUDE.md "should have been computed" antipattern
+- Resolution: added a doc comment on `models.rs:110` making the semantics explicit so future readers don't re-diagnose this as a placeholder; `indexer.rs::compute_token_stats` already skips dedup for `None` rows, which is the correct behavior
+- 审计后确认为假阳性；`None` 是显式的"该 provider 无跨文件去重需求"标记，非占位符。已在 `models.rs:110` 补 doc comment 说明语义
 
 ### Provider Parser Abstraction — Provider Parser 抽象 `🟡 high impact`
 - 8 providers independently implement message aggregation, token stats, tool metadata, usage dedup

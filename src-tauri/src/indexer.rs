@@ -66,7 +66,7 @@ impl Indexer {
         let now_millis = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .map(|d| d.as_millis() as i64)
-            .unwrap_or(0);
+            .expect("system clock is before the UNIX epoch");
 
         let excluded = crate::trash_state::shared_deleted_ids();
 

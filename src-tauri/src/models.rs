@@ -106,6 +106,13 @@ pub struct Message {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub model: Option<String>,
     /// `messageId:requestId` hash for cross-file usage deduplication.
+    ///
+    /// `None` means the source provider does not expose a stable `(messageId, requestId)`
+    /// pair — this is the norm for Codex / Gemini / Copilot / Cursor / Qwen / Kimi, where
+    /// sessions are not split across files and usage rows cannot collide. Only Claude and
+    /// OpenCode populate `Some(..)`. `None` here is *not* the CLAUDE.md "placeholder when a
+    /// real value should be computed" antipattern — it is an explicit "unsupported" marker
+    /// and `indexer.rs::compute_token_stats` simply skips dedup for those rows.
     #[serde(skip, default)]
     pub usage_hash: Option<String>,
 }
