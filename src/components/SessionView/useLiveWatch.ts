@@ -20,11 +20,17 @@ export interface UseLiveWatchOptions {
  * either polls (for DB-backed providers like OpenCode) or subscribes to the
  * `sessions-changed` FS event. All timers and unlisten fns are owned here so
  * the parent component doesn't juggle them inline.
+ *
+ * Each effect iteration captures its own `cancelled` flag: if a newer
+ * iteration (or `onCleanup`) fires while `await listen(..)` is still in
+ * flight, the awaited `unlisten` is invoked immediately on resolution so the
+ * stale subscription doesn't outlive the iteration that spawned it.
  */
 export function useLiveWatch(opts: UseLiveWatchOptions): void {
   let unwatchFn: UnlistenFn | undefined;
   let pollTimer: ReturnType<typeof setInterval> | undefined;
   let watchDebounce: ReturnType<typeof setTimeout> | undefined;
+  let currentIteration: { cancelled: boolean } | undefined;
 
   createEffect(
     on(
@@ -36,13 +42,22 @@ export function useLiveWatch(opts: UseLiveWatchOptions): void {
           getProviderWatchVersion(),
         ] as const,
       async ([isWatching]) => {
+        // Cancel the previous iteration's in-flight listen() if any, then
+        // clean up whatever it already installed.
+        if (currentIteration) currentIteration.cancelled = true;
         clearTimeout(watchDebounce);
         clearInterval(pollTimer);
         pollTimer = undefined;
         unwatchFn?.();
         unwatchFn = undefined;
 
-        if (!isWatching) return;
+        if (!isWatching) {
+          currentIteration = undefined;
+          return;
+        }
+
+        const iteration = { cancelled: false };
+        currentIteration = iteration;
 
         void loadProviderWatchSnapshots();
 
@@ -57,7 +72,7 @@ export function useLiveWatch(opts: UseLiveWatchOptions): void {
           return;
         }
 
-        unwatchFn = await listen<string[]>("sessions-changed", (event) => {
+        const unlisten = await listen<string[]>("sessions-changed", (event) => {
           const changedPaths = event.payload ?? [];
           if (!activeSourcePath) return;
 
@@ -78,11 +93,21 @@ export function useLiveWatch(opts: UseLiveWatchOptions): void {
             watchConfig.debounceMs,
           );
         });
+
+        if (iteration.cancelled) {
+          // A newer iteration (or onCleanup) ran while listen() was in
+          // flight; drop the now-stale subscription immediately rather than
+          // letting it leak until the next flip.
+          unlisten();
+          return;
+        }
+        unwatchFn = unlisten;
       },
     ),
   );
 
   onCleanup(() => {
+    if (currentIteration) currentIteration.cancelled = true;
     clearTimeout(watchDebounce);
     clearInterval(pollTimer);
     pollTimer = undefined;

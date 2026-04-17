@@ -226,20 +226,18 @@ Your personal knowledge base for AI coding sessions — unified access, searchab
 - Resolution: added a doc comment on `models.rs:110` making the semantics explicit so future readers don't re-diagnose this as a placeholder; `indexer.rs::compute_token_stats` already skips dedup for `None` rows, which is the correct behavior
 - 审计后确认为假阳性；`None` 是显式的"该 provider 无跨文件去重需求"标记，非占位符。已在 `models.rs:110` 补 doc comment 说明语义
 
-### Provider Parser Abstraction — Provider Parser 抽象 `🟡 high impact`
-- 8 providers independently implement message aggregation, token stats, tool metadata, usage dedup
-- ~5000+ lines of parallel code across codex/claude/kimi/cursor/qwen/copilot/gemini/cc_mirror parsers
-- Adding a 9th provider means re-copying the whole pipeline
-- Fix: extract a `ProviderParser` trait + shared helpers, start with tool metadata (most duplicated)
-- 杠杆最大的一笔重构，8 个 provider 的 parser 平行演进，约 5000+ 行重复
+### Provider Parser Abstraction — Provider Parser 抽象 `⚫ won't do`
+- Dismissed after consideration: the 8 provider parsers look superficially similar but each has materially different event models (Claude JSONL line events, Codex nested JSON envelopes, Gemini chat.json arrays, OpenCode SQLite rows, Kimi SubagentEvent streams, Copilot toolRequest/tool.execution split, Cursor transcript + store.db marker, Qwen `thought: true` booleans). A shared trait would either leak into each impl as `match provider` branches or force every provider to translate into a common event model — either way the total line count wouldn't drop meaningfully and per-provider quirk fixes would get harder to localize.
+- Line-count pressure on individual parsers is addressed directly instead: Large File Splits tracks per-file thresholds with the 800-line cap as the bar.
+- 经评估不做：8 个 parser 形似但事件模型实质不同（Claude 行级、Codex 嵌套 JSON、Gemini 数组、OpenCode SQLite、Kimi 子代理事件流、Copilot 拆分请求/执行、Cursor 双路径、Qwen thought 布尔），抽共享 trait 要么在每个 impl 里 match provider，要么强迫所有 provider 翻译进统一事件模型，总行数不会显著下降，反而会让 per-provider 改动变难。大文件问题交给 Large File Splits 按每文件处理。
 
 ### Large File Splits — 大文件拆分 `🔧 partial`
 - Rust: `providers/codex/parser.rs` 1652, `providers/claude/parser.rs` 1385, `providers/kimi/parser.rs` 944, `provider.rs` 907, `db/queries.rs` 848 — outstanding
 - TS: ~~`MarkdownRenderer.tsx` 833~~ split into `markdown/{types,parser,katex,utils,renderers}` (renderers.tsx 552, all others <200); thin 47-line entry re-exports the prior public API
 - TS: ~~`UsagePanel.tsx` 1337~~ split into `UsagePanel/{index,Toolbar,Chart,SummaryCards,TopModels,ModelTable,ProjectTable,SessionTable,formatters}` — orchestrator 595, all children ≤185
 - All files must stay under the 800-line limit set in CLAUDE.md
-- Fix: most of the Rust parsers collapse naturally once Provider Parser Abstraction lands
-- MarkdownRenderer 和 UsagePanel 已拆；Rust parsers 待 Provider 抽象后自然瘦身
+- Fix: tackle Rust parsers individually (event-model-specific helpers, extract tool-metadata mapping, split out submodules) — Provider Parser Abstraction was considered and dismissed, so there is no shared-trait shortcut to lean on
+- MarkdownRenderer 和 UsagePanel 已拆；Rust parsers 需按文件单独瘦身，不走统一 trait 抽象
 
 ### SessionView Effect Decoupling — SessionView Effect 解耦 `🟡 medium` `✅ done`
 - Extracted `useLiveWatch` (91), `useFavoriteSync` (56), `useAutoLoad` (32) alongside existing `hooks.ts` in `src/components/SessionView/`
