@@ -317,6 +317,7 @@ impl CodexProvider {
         // Subagent JSONL: [sub_meta, parent_meta, ...parent_context..., spawn_marker, sub_turn]
         // The marker "You are the newly spawned agent" signals end of parent context.
         let mut skipping_fork_context = false;
+        let mut parse_warning_count: u32 = 0;
 
         for line in reader.lines() {
             let line = match line {
@@ -342,6 +343,7 @@ impl CodexProvider {
                         path.display(),
                         error
                     );
+                    parse_warning_count = parse_warning_count.saturating_add(1);
                     continue;
                 }
             };
@@ -1213,7 +1215,7 @@ impl CodexProvider {
             meta,
             messages,
             content_text,
-            parse_warning_count: 0,
+            parse_warning_count,
         })
     }
 }
@@ -1495,6 +1497,36 @@ mod tests {
         assert_eq!(events[0].input_tokens, 400);
         assert_eq!(events[0].cache_read_input_tokens, 600);
         assert_eq!(events[0].output_tokens, 50);
+    }
+
+    #[test]
+    fn parse_session_file_counts_malformed_lines_without_aborting() {
+        let dir = TempDir::new().unwrap();
+        let file = dir.path().join("codex.jsonl");
+        fs::write(
+            &file,
+            concat!(
+                "{\"timestamp\":\"2026-04-10T10:00:00Z\",\"type\":\"event_msg\",\"payload\":{\"type\":\"user_message\",\"message\":\"first\"}}\n",
+                "{ this is not valid json\n",
+                "{\"timestamp\":\"2026-04-10T10:00:02Z\",\"type\":\"event_msg\",\"payload\":{\"type\":\"user_message\",\"message\":\"second\"}}\n"
+            ),
+        )
+        .unwrap();
+
+        let provider = CodexProvider {
+            home_dir: PathBuf::from("/tmp"),
+        };
+        let parsed = provider.parse_session_file(&file).expect("parsed session");
+        assert_eq!(
+            parsed.parse_warning_count, 1,
+            "the single malformed line must be counted"
+        );
+        // The two well-formed user events should still produce messages.
+        assert!(
+            parsed.messages.len() >= 2,
+            "well-formed lines must still produce messages; got {}",
+            parsed.messages.len()
+        );
     }
 
     #[test]

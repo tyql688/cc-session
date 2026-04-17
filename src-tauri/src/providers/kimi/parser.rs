@@ -174,6 +174,7 @@ impl KimiProvider {
         let mut content_parts: Vec<String> = Vec::new();
         // Map call_id -> message index for merging ToolResult into ToolCall
         let mut call_id_map: HashMap<String, usize> = HashMap::new();
+        let mut parse_warning_count: u32 = 0;
 
         for line in reader.lines() {
             let line = match line {
@@ -199,6 +200,7 @@ impl KimiProvider {
                         path.display(),
                         error
                     );
+                    parse_warning_count = parse_warning_count.saturating_add(1);
                     continue;
                 }
             };
@@ -526,7 +528,7 @@ impl KimiProvider {
             meta,
             messages,
             content_text,
-            parse_warning_count: 0,
+            parse_warning_count,
         })
     }
 

@@ -9,7 +9,7 @@ mod tools;
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 
-use crate::models::{Message, Provider, SessionMeta};
+use crate::models::{Provider, SessionMeta};
 use crate::provider::{
     ChildPlan, DeletionPlan, FileAction, LoadedSession, ParsedSession, ProviderError,
     SessionProvider,
@@ -155,13 +155,15 @@ impl CursorProvider {
 
     /// Load messages from a transcript JSONL file.
     /// Format: `{role, message: {content: [{type: "text"/"tool_use", ...}]}}`.
-    fn load_transcript_messages(&self, source_path: &str) -> Result<Vec<Message>, ProviderError> {
+    fn load_transcript_messages(&self, source_path: &str) -> Result<LoadedSession, ProviderError> {
         let content = std::fs::read_to_string(source_path)
             .map_err(|e| ProviderError::Parse(format!("failed to read transcript: {e}")))?;
-        Ok(crate::providers::cursor::parser::parse_transcript_messages(
-            &content,
-            source_path,
-        ))
+        let (messages, parse_warning_count) =
+            crate::providers::cursor::parser::parse_transcript_messages(&content, source_path);
+        Ok(LoadedSession {
+            messages,
+            parse_warning_count,
+        })
     }
 
     fn extract_workspace_path_from_store_db(&self, store_db_path: &Path) -> Option<String> {
@@ -360,9 +362,7 @@ impl SessionProvider for CursorProvider {
         _session_id: &str,
         source_path: &str,
     ) -> Result<LoadedSession, ProviderError> {
-        Ok(LoadedSession::new(
-            self.load_transcript_messages(source_path)?,
-        ))
+        self.load_transcript_messages(source_path)
     }
 
     fn cleanup_on_permanent_delete(&self, session_id: &str) {

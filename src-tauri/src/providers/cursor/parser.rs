@@ -14,11 +14,16 @@ use super::CursorProvider;
 
 /// Shared JSONL entry parsing used by both scan and load paths.
 /// Ensures JSON parsing and role/content extraction are identical.
+///
+/// Returns the count of malformed lines that were logged and skipped; callers
+/// thread this into `ParsedSession.parse_warning_count` / `LoadedSession.parse_warning_count`
+/// so the UI can surface a `⚠ N` badge.
 pub(crate) fn for_each_transcript_entry(
     content: &str,
     source_label: &str,
     mut handler: impl FnMut(&str, Option<&Value>),
-) {
+) -> u32 {
+    let mut parse_warning_count: u32 = 0;
     for line in content.lines() {
         let entry: Value = match serde_json::from_str(line) {
             Ok(v) => v,
@@ -28,6 +33,7 @@ pub(crate) fn for_each_transcript_entry(
                     source_label,
                     error
                 );
+                parse_warning_count = parse_warning_count.saturating_add(1);
                 continue;
             }
         };
@@ -35,120 +41,124 @@ pub(crate) fn for_each_transcript_entry(
         let msg_content = entry.get("message").and_then(|m| m.get("content"));
         handler(role, msg_content);
     }
+    parse_warning_count
 }
 
-pub(crate) fn parse_transcript_messages(content: &str, source_label: &str) -> Vec<Message> {
+pub(crate) fn parse_transcript_messages(content: &str, source_label: &str) -> (Vec<Message>, u32) {
     let mut messages = Vec::new();
 
-    for_each_transcript_entry(content, source_label, |role, msg_content| match role {
-        "user" => {
-            let text = extract_text_from_content(msg_content);
-            let clean = extract_user_text(&text);
-            if !clean.is_empty() {
-                messages.push(Message {
-                    role: MessageRole::User,
-                    content: clean,
-                    timestamp: None,
-                    tool_name: None,
-                    tool_input: None,
-                    token_usage: None,
-                    model: None,
-                    usage_hash: None,
-                    tool_metadata: None,
-                });
-            }
-        }
-        "assistant" => {
-            let raw_text = extract_text_from_content(msg_content);
-            let text = strip_redacted(&raw_text);
-
-            if let Some(thinking) = extract_think_content(&text) {
-                messages.push(Message {
-                    role: MessageRole::System,
-                    content: format!("[thinking]\n{thinking}"),
-                    timestamp: None,
-                    tool_name: None,
-                    tool_input: None,
-                    token_usage: None,
-                    model: None,
-                    usage_hash: None,
-                    tool_metadata: None,
-                });
-            }
-
-            let after_think = strip_think_tags(&text);
-
-            if let Some(cursor_thinking) = extract_cursor_thinking(&after_think) {
-                messages.push(Message {
-                    role: MessageRole::System,
-                    content: format!("[thinking]\n{cursor_thinking}"),
-                    timestamp: None,
-                    tool_name: None,
-                    tool_input: None,
-                    token_usage: None,
-                    model: None,
-                    usage_hash: None,
-                    tool_metadata: None,
-                });
-            }
-
-            let visible = strip_cursor_thinking(&after_think);
-            if !visible.is_empty() {
-                messages.push(Message {
-                    role: MessageRole::Assistant,
-                    content: visible,
-                    timestamp: None,
-                    tool_name: None,
-                    tool_input: None,
-                    token_usage: None,
-                    model: None,
-                    usage_hash: None,
-                    tool_metadata: None,
-                });
-            }
-
-            let parts = parse_content_array(msg_content);
-            for part in &parts {
-                if part.get("type").and_then(|t| t.as_str()) != Some("tool_use") {
-                    continue;
+    let parse_warning_count =
+        for_each_transcript_entry(content, source_label, |role, msg_content| match role {
+            "user" => {
+                let text = extract_text_from_content(msg_content);
+                let clean = extract_user_text(&text);
+                if !clean.is_empty() {
+                    messages.push(Message {
+                        role: MessageRole::User,
+                        content: clean,
+                        timestamp: None,
+                        tool_name: None,
+                        tool_input: None,
+                        token_usage: None,
+                        model: None,
+                        usage_hash: None,
+                        tool_metadata: None,
+                    });
                 }
-                let raw_name = part.get("name").and_then(|n| n.as_str()).unwrap_or("tool");
-                let args = part.get("input");
-                let metadata = build_tool_metadata(ToolCallFacts {
-                    provider: Provider::Cursor,
-                    raw_name,
-                    input: args,
-                    call_id: part
-                        .get("id")
-                        .or_else(|| part.get("tool_use_id"))
-                        .and_then(|v| v.as_str()),
-                    assistant_id: None,
-                });
-                let display_name = metadata.canonical_name.clone();
-                let tool_input = args.and_then(|a| remap_tool_args(&display_name, a));
-
-                messages.push(Message {
-                    role: MessageRole::Tool,
-                    content: String::new(),
-                    timestamp: None,
-                    tool_name: Some(display_name),
-                    tool_input,
-                    token_usage: None,
-                    model: None,
-                    usage_hash: None,
-                    tool_metadata: Some(metadata),
-                });
             }
-        }
-        _ => {}
-    });
+            "assistant" => {
+                let raw_text = extract_text_from_content(msg_content);
+                let text = strip_redacted(&raw_text);
 
-    messages
+                if let Some(thinking) = extract_think_content(&text) {
+                    messages.push(Message {
+                        role: MessageRole::System,
+                        content: format!("[thinking]\n{thinking}"),
+                        timestamp: None,
+                        tool_name: None,
+                        tool_input: None,
+                        token_usage: None,
+                        model: None,
+                        usage_hash: None,
+                        tool_metadata: None,
+                    });
+                }
+
+                let after_think = strip_think_tags(&text);
+
+                if let Some(cursor_thinking) = extract_cursor_thinking(&after_think) {
+                    messages.push(Message {
+                        role: MessageRole::System,
+                        content: format!("[thinking]\n{cursor_thinking}"),
+                        timestamp: None,
+                        tool_name: None,
+                        tool_input: None,
+                        token_usage: None,
+                        model: None,
+                        usage_hash: None,
+                        tool_metadata: None,
+                    });
+                }
+
+                let visible = strip_cursor_thinking(&after_think);
+                if !visible.is_empty() {
+                    messages.push(Message {
+                        role: MessageRole::Assistant,
+                        content: visible,
+                        timestamp: None,
+                        tool_name: None,
+                        tool_input: None,
+                        token_usage: None,
+                        model: None,
+                        usage_hash: None,
+                        tool_metadata: None,
+                    });
+                }
+
+                let parts = parse_content_array(msg_content);
+                for part in &parts {
+                    if part.get("type").and_then(|t| t.as_str()) != Some("tool_use") {
+                        continue;
+                    }
+                    let raw_name = part.get("name").and_then(|n| n.as_str()).unwrap_or("tool");
+                    let args = part.get("input");
+                    let metadata = build_tool_metadata(ToolCallFacts {
+                        provider: Provider::Cursor,
+                        raw_name,
+                        input: args,
+                        call_id: part
+                            .get("id")
+                            .or_else(|| part.get("tool_use_id"))
+                            .and_then(|v| v.as_str()),
+                        assistant_id: None,
+                    });
+                    let display_name = metadata.canonical_name.clone();
+                    let tool_input = args.and_then(|a| remap_tool_args(&display_name, a));
+
+                    messages.push(Message {
+                        role: MessageRole::Tool,
+                        content: String::new(),
+                        timestamp: None,
+                        tool_name: Some(display_name),
+                        tool_input,
+                        token_usage: None,
+                        model: None,
+                        usage_hash: None,
+                        tool_metadata: Some(metadata),
+                    });
+                }
+            }
+            _ => {}
+        });
+
+    (messages, parse_warning_count)
 }
 
 fn extract_project_path_from_transcript(content: &str) -> String {
     let mut project_path = String::new();
-    for_each_transcript_entry(content, "<cursor transcript>", |role, msg_content| {
+    // Discard the parse-warning count here — this helper only extracts the
+    // project path and the count is owned by the primary parse call.
+    let _ = for_each_transcript_entry(content, "<cursor transcript>", |role, msg_content| {
         if role != "user" || !project_path.is_empty() {
             return;
         }
@@ -181,7 +191,8 @@ impl CursorProvider {
                 return None;
             }
         };
-        let messages = parse_transcript_messages(&content, &path.display().to_string());
+        let (messages, parse_warning_count) =
+            parse_transcript_messages(&content, &path.display().to_string());
         if messages.is_empty() {
             return None;
         }
@@ -326,7 +337,7 @@ impl CursorProvider {
             },
             messages: Vec::new(),
             content_text: truncate_to_bytes(&content_parts.join("\n"), FTS_CONTENT_LIMIT),
-            parse_warning_count: 0,
+            parse_warning_count,
         })
     }
 

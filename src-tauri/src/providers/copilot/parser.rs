@@ -127,6 +127,7 @@ pub fn parse_session_file(path: &PathBuf) -> Option<ParsedSession> {
     let mut git_branch: Option<String> = None;
     // Map toolCallId → index in messages vec for merging tool results
     let mut call_id_map: HashMap<String, usize> = HashMap::new();
+    let mut parse_warning_count: u32 = 0;
 
     for line in reader.lines() {
         let line = match line {
@@ -148,6 +149,7 @@ pub fn parse_session_file(path: &PathBuf) -> Option<ParsedSession> {
             Ok(e) => e,
             Err(e) => {
                 log::warn!("skipping malformed JSONL in '{}': {}", path.display(), e);
+                parse_warning_count = parse_warning_count.saturating_add(1);
                 continue;
             }
         };
@@ -501,6 +503,6 @@ pub fn parse_session_file(path: &PathBuf) -> Option<ParsedSession> {
         },
         messages,
         content_text,
-        parse_warning_count: 0,
+        parse_warning_count,
     })
 }
