@@ -7,6 +7,18 @@ versioned with [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.3.17] - 2026-04-17
+
+### Fixed
+
+- Close race condition in live session watcher on rapid tab switches (a2dcb64)
+- Surface backend command failures via toast instead of silent errors (c6871d2)
+- Improve parser error messages with file path and line context (3928674)
+
+### Changed
+
+- Improve stability by removing panic sites and silent fallbacks in Rust backend (e43f6c2, a427860)
+
 ## [0.3.16] - 2026-04-16
 
 ### Added
