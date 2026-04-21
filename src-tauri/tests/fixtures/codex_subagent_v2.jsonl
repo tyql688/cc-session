@@ -1,0 +1,11 @@
+{"timestamp":"2026-04-21T03:21:21.714Z","type":"session_meta","payload":{"id":"codex-sub-v2-001","forked_from_id":"codex-parent-v2-001","timestamp":"2026-04-21T03:21:21.714Z","cwd":"/home/user/demo","originator":"codex-tui","cli_version":"0.122.0","source":{"subagent":{"thread_spawn":{"parent_thread_id":"codex-parent-v2-001","depth":1,"agent_path":null,"agent_nickname":"Hume","agent_role":null}}},"agent_nickname":"Hume","model_provider":"openai"}}
+{"timestamp":"2026-04-21T03:21:21.715Z","type":"session_meta","payload":{"id":"codex-parent-v2-001","timestamp":"2026-04-21T02:37:09.779Z","cwd":"/home/user/demo","originator":"codex-tui","cli_version":"0.122.0","source":"cli","model_provider":"openai"}}
+{"timestamp":"2026-04-21T03:21:21.716Z","type":"event_msg","payload":{"type":"task_started","turn_id":"parent-turn-001","started_at":1776739093,"model_context_window":950000,"collaboration_mode_kind":"default"}}
+{"timestamp":"2026-04-21T03:21:21.717Z","type":"response_item","payload":{"type":"message","role":"user","content":[{"type":"input_text","text":"Parent's original user request (should be filtered out of subagent view)."}]}}
+{"timestamp":"2026-04-21T03:21:21.718Z","type":"response_item","payload":{"type":"message","role":"assistant","content":[{"type":"text","text":"Parent's assistant reply (should be filtered out of subagent view)."}]}}
+{"timestamp":"2026-04-21T03:21:21.719Z","type":"event_msg","payload":{"type":"task_complete","turn_id":"parent-turn-001"}}
+{"timestamp":"2026-04-21T03:21:21.755Z","type":"event_msg","payload":{"type":"task_started","turn_id":"sub-turn-001","started_at":1776741681,"model_context_window":950000,"collaboration_mode_kind":"default"}}
+{"timestamp":"2026-04-21T03:21:21.756Z","type":"turn_context","payload":{"turn_id":"sub-turn-001","cwd":"/home/user/demo","model":"gpt-5.4-mini"}}
+{"timestamp":"2026-04-21T03:21:21.757Z","type":"response_item","payload":{"type":"message","role":"user","content":[{"type":"input_text","text":"Investigate module A and return a summary."}]}}
+{"timestamp":"2026-04-21T03:21:30.000Z","type":"response_item","payload":{"type":"message","role":"assistant","content":[{"type":"text","text":"Module A handles authentication via OAuth."}]}}
+{"timestamp":"2026-04-21T03:21:30.001Z","type":"event_msg","payload":{"type":"task_complete","turn_id":"sub-turn-001"}}

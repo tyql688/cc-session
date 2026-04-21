@@ -172,9 +172,31 @@ fn input_summary(canonical_name: &str, raw_name: &str, input: Option<&Value>) ->
             .or_else(|| string_field(input, &["dir_path", "path"]))
             .unwrap_or_default()
             .to_string(),
-        "Agent" => string_field(input, &["description", "prompt"])
-            .map(|s| compact_string(s, 80))
-            .unwrap_or_default(),
+        "Agent" => {
+            if raw_name == "wait_agent" {
+                input
+                    .get("targets")
+                    .and_then(|v| v.as_array())
+                    .map(|arr| match arr.len() {
+                        0 => String::new(),
+                        1 => arr[0]
+                            .as_str()
+                            .map(|s| compact_string(s, 40))
+                            .unwrap_or_default(),
+                        n => format!("{n} agents"),
+                    })
+                    .unwrap_or_default()
+            } else if matches!(raw_name, "send_input" | "close_agent" | "read_agent") {
+                string_field(input, &["target", "agent_id"])
+                    .map(|s| compact_string(s, 40))
+                    .unwrap_or_default()
+            } else {
+                // spawn_agent / Task / Subagent / agent / read_agent
+                string_field(input, &["description", "prompt", "message"])
+                    .map(|s| compact_string(s, 80))
+                    .unwrap_or_default()
+            }
+        }
         "SendMessage" | "FollowupTask" => {
             string_field(input, &["description", "prompt", "message"])
                 .map(|s| compact_string(s, 80))
@@ -514,6 +536,9 @@ fn normalize_structured_result(value: &mut Value) {
     };
 
     promote_string_alias(obj, "agent_id", "agentId");
+    // Codex v2 dropped `agent_id` from spawn_agent results (upstream #17005);
+    // fall back to the `new_thread_id` carried by `collab_agent_spawn_end`.
+    promote_string_alias(obj, "new_thread_id", "agentId");
     promote_string_alias(obj, "task_id", "taskId");
 
     if obj.contains_key("persistedOutputPath") {
@@ -667,6 +692,93 @@ mod tests {
                 .and_then(|value| value.as_str()),
             Some("/tmp/tool-output.txt")
         );
+    }
+
+    #[test]
+    fn promotes_new_thread_id_to_agent_id_alias() {
+        let mut metadata = build_tool_metadata(ToolCallFacts {
+            provider: Provider::Codex,
+            raw_name: "spawn_agent",
+            input: None,
+            call_id: Some("call_x"),
+            assistant_id: None,
+        });
+        enrich_tool_metadata(
+            &mut metadata,
+            ToolResultFacts {
+                raw_result: Some(&json!({
+                    "new_thread_id": "019dae0e-8a30-76f2-92cc-e81cfcf0d125",
+                    "new_agent_nickname": "Hume",
+                })),
+                is_error: Some(false),
+                status: Some("success"),
+                artifact_path: None,
+            },
+        );
+        assert_eq!(
+            metadata
+                .structured
+                .as_ref()
+                .and_then(|value| value.get("agentId"))
+                .and_then(|value| value.as_str()),
+            Some("019dae0e-8a30-76f2-92cc-e81cfcf0d125"),
+            "new_thread_id must populate agentId when agent_id is absent (codex >=0.123)"
+        );
+    }
+
+    #[test]
+    fn agent_input_summary_covers_codex_spawn_wait_send_close() {
+        fn summary(raw: &str, input: serde_json::Value) -> Option<String> {
+            let metadata = build_tool_metadata(ToolCallFacts {
+                provider: Provider::Codex,
+                raw_name: raw,
+                input: Some(&input),
+                call_id: None,
+                assistant_id: None,
+            });
+            metadata.summary
+        }
+
+        // spawn_agent: falls back to `message` when description/prompt absent
+        assert_eq!(
+            summary(
+                "spawn_agent",
+                json!({ "message": "你负责实现 1211 角色配置", "task_name": "worker" })
+            )
+            .as_deref(),
+            Some("你负责实现 1211 角色配置")
+        );
+        // wait_agent: 0 targets → no summary
+        assert_eq!(
+            summary("wait_agent", json!({ "targets": [], "timeout_ms": 10000 })),
+            None
+        );
+        // wait_agent: 1 target → compact target id
+        assert_eq!(
+            summary(
+                "wait_agent",
+                json!({ "targets": ["019dae0e-8a30-76f2-92cc-e81cfcf0d125"] })
+            )
+            .as_deref(),
+            Some("019dae0e-8a30-76f2-92cc-e81cfcf0d125")
+        );
+        // wait_agent: multiple targets → "N agents"
+        assert_eq!(
+            summary(
+                "wait_agent",
+                json!({ "targets": ["a", "b", "c"], "timeout_ms": 10000 })
+            )
+            .as_deref(),
+            Some("3 agents")
+        );
+        // send_input / close_agent / read_agent: target id
+        for raw in ["send_input", "close_agent", "read_agent"] {
+            assert_eq!(
+                summary(raw, json!({ "target": "019dae0e-8a30" })).as_deref(),
+                Some("019dae0e-8a30"),
+                "{raw} summary must come from input.target"
+            );
+        }
     }
 
     #[test]

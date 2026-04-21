@@ -110,29 +110,47 @@ export function ToolMessage(props: { message: Message; provider?: string }) {
   const resultHasDiff = () =>
     !!resultMetadata()?.diff || !!resultMetadata()?.patchDiff;
   const showInputDetail = () => !!formatted() && !resultHasDiff();
+  /** Parsed tool_input JSON, memoized so each Agent-related extractor reuses
+   *  the same JSON.parse call. Logs at most once per message on parse failure. */
+  const toolInputObj = createMemo<Record<string, unknown> | undefined>(() => {
+    if (!hasInput()) return undefined;
+    try {
+      const parsed = JSON.parse(props.message.tool_input!);
+      return typeof parsed === "object" && parsed !== null ? parsed : undefined;
+    } catch (error) {
+      console.warn("Failed to parse tool_input JSON:", error);
+      return undefined;
+    }
+  });
+  const toolOutputObj = createMemo<Record<string, unknown> | undefined>(() => {
+    if (!hasOutput()) return undefined;
+    try {
+      const parsed = JSON.parse(props.message.content);
+      return typeof parsed === "object" && parsed !== null ? parsed : undefined;
+    } catch {
+      return undefined;
+    }
+  });
   /** Extract nickname from Agent tool output (Codex: {"nickname":"Faraday"}) */
   const agentNickname = createMemo(() => {
-    if (name() !== "Agent" || !hasOutput()) return undefined;
-    try {
-      const obj = JSON.parse(props.message.content);
-      return obj.nickname as string | undefined;
-    } catch (error) {
-      console.warn("Failed to parse agent tool output JSON:", error);
-      return undefined;
-    }
+    if (name() !== "Agent") return undefined;
+    const obj = toolOutputObj();
+    return typeof obj?.nickname === "string" ? obj.nickname : undefined;
   });
-  /** Full description from Agent tool input (not truncated, for subagent matching) */
+  /** Full description from Agent tool input (not truncated, for subagent matching).
+   *  Codex spawn_agent carries the task text in `message`, not `description`/`prompt`. */
   const agentDescription = createMemo(() => {
-    if (name() !== "Agent" || !hasInput()) return undefined;
-    try {
-      const obj = JSON.parse(props.message.tool_input!);
-      return (obj.description ?? obj.prompt) as string | undefined;
-    } catch (error) {
-      console.warn("Failed to parse agent tool input JSON:", error);
-      return undefined;
-    }
+    if (name() !== "Agent") return undefined;
+    const obj = toolInputObj();
+    if (!obj) return undefined;
+    const candidate = obj.description ?? obj.prompt ?? obj.message;
+    return typeof candidate === "string" ? candidate : undefined;
   });
-  /** Extract agent_id from Agent tool output (Kimi: "agent_id: xxx\n...") */
+  /** Extract agent_id from Agent tool output/structured/input.
+   *  Priority:
+   *    1. Kimi output format: "agent_id: xxx"
+   *    2. Structured metadata agentId (set by successful spawn_agent)
+   *    3. Tool input target / agent_id (codex wait_agent / send_input / close_agent) */
   const agentId = createMemo(() => {
     if (name() !== "Agent") return undefined;
     if (hasOutput()) {
@@ -147,6 +165,19 @@ export function ToolMessage(props: { message: Message; provider?: string }) {
       "agentId" in structured
     ) {
       return String(structured.agentId);
+    }
+    const obj = toolInputObj();
+    if (obj) {
+      const single = obj.target ?? obj.agent_id ?? obj.agentId;
+      if (typeof single === "string") return single;
+      const targets = obj.targets;
+      if (
+        Array.isArray(targets) &&
+        targets.length === 1 &&
+        typeof targets[0] === "string"
+      ) {
+        return targets[0];
+      }
     }
     return undefined;
   });
@@ -188,7 +219,7 @@ export function ToolMessage(props: { message: Message; provider?: string }) {
         <Show
           when={
             name() === "Agent" &&
-            (summary() || agentNickname() || agentId()) &&
+            (agentNickname() || agentId()) &&
             SUBAGENT_FILE_PROVIDERS.has(props.provider ?? "")
           }
         >

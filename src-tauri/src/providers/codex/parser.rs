@@ -314,9 +314,16 @@ impl CodexProvider {
         let mut agent_nickname: Option<String> = None;
         let mut pending_user_message: Option<PendingCodexUserMessage> = None;
         // When parsing subagent files, skip the forked parent context.
-        // Subagent JSONL: [sub_meta, parent_meta, ...parent_context..., spawn_marker, sub_turn]
-        // The marker "You are the newly spawned agent" signals end of parent context.
+        // Subagent JSONL layout:
+        //   pre-0.120 (legacy):   [sub_meta, parent_meta, ...parent_context...,
+        //                          function_call_output("newly spawned agent"), sub_turn]
+        //   0.120+ (post-#16709): [sub_meta, parent_meta, ...sanitized_parent_history...,
+        //                          task_started(sub_turn), turn_context, sub_turn]
+        //     Upstream dropped the textual marker; the fork boundary is the first
+        //     `event_msg.task_started` whose `started_at` is >= the subagent's own
+        //     session_meta.timestamp.
         let mut skipping_fork_context = false;
+        let mut subagent_start_seconds: Option<i64> = None;
         let mut parse_warning_count: u32 = 0;
 
         for line in reader.lines() {
@@ -360,16 +367,29 @@ impl CodexProvider {
                 None => continue,
             };
 
-            // Skip forked parent context in subagent files.
-            // End marker: function_call_output containing "newly spawned agent".
+            // Skip forked parent context in subagent files. Clear the flag on
+            // the first subagent-owned `task_started` event (its `started_at`
+            // matches the subagent session's creation time). Fall back to the
+            // legacy `newly spawned agent` marker for pre-0.120 rollouts.
             if skipping_fork_context {
-                if entry.line_type == "response_item" {
-                    let item_type = payload.get("type").and_then(|v| v.as_str());
-                    if item_type == Some("function_call_output") {
-                        let output = payload.get("output").and_then(|v| v.as_str()).unwrap_or("");
-                        if output.contains("newly spawned agent") {
+                if entry.line_type == "event_msg"
+                    && payload.get("type").and_then(|v| v.as_str()) == Some("task_started")
+                {
+                    if let (Some(started_at), Some(sub_sec)) = (
+                        payload.get("started_at").and_then(|v| v.as_i64()),
+                        subagent_start_seconds,
+                    ) {
+                        if started_at >= sub_sec {
                             skipping_fork_context = false;
+                            continue;
                         }
+                    }
+                } else if entry.line_type == "response_item"
+                    && payload.get("type").and_then(|v| v.as_str()) == Some("function_call_output")
+                {
+                    let output = payload.get("output").and_then(|v| v.as_str()).unwrap_or("");
+                    if output.contains("newly spawned agent") {
+                        skipping_fork_context = false;
                     }
                 }
                 continue;
@@ -427,6 +447,15 @@ impl CodexProvider {
                             .get("agent_nickname")
                             .and_then(|v| v.as_str())
                             .map(|s| s.to_string());
+                        let sub_ts = parse_rfc3339_timestamp(
+                            payload
+                                .get("timestamp")
+                                .and_then(|v| v.as_str())
+                                .or(entry.timestamp.as_deref()),
+                        );
+                        if sub_ts > 0 {
+                            subagent_start_seconds = Some(sub_ts);
+                        }
                     }
                 }
                 "response_item" => {
@@ -1163,6 +1192,13 @@ impl CodexProvider {
             &mut content_parts,
             &mut first_user_message,
         );
+
+        if skipping_fork_context && is_sidechain {
+            log::warn!(
+                "Codex subagent '{}' fork-context boundary never resolved (missing task_started.started_at or subagent timestamp); yielded 0 messages",
+                path.display()
+            );
+        }
 
         if messages.is_empty() {
             return None;

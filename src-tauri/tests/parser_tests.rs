@@ -495,6 +495,45 @@ fn codex_subagent_detected() {
 }
 
 #[test]
+fn codex_subagent_v2_skips_sanitized_fork_context() {
+    // Codex 0.122+ rollouts: a second session_meta starts the sanitized forked
+    // parent history, and the legacy "newly spawned agent" marker was removed
+    // (upstream #16709). The parser must switch back on the first
+    // subagent-owned `task_started` whose `started_at` matches the subagent's
+    // session timestamp.
+    let provider = CodexProvider::new().expect("home dir must be available");
+    let path = fixtures_dir().join("codex_subagent_v2.jsonl");
+    let session = provider
+        .parse_session_file(&path)
+        .expect("codex subagent v2 fixture must parse");
+
+    assert!(session.meta.is_sidechain);
+    assert_eq!(
+        session.meta.parent_id.as_deref(),
+        Some("codex-parent-v2-001")
+    );
+    assert_eq!(session.meta.id, "codex-sub-v2-001");
+    assert_eq!(session.meta.title, "Hume");
+
+    let user_messages: Vec<&str> = session
+        .messages
+        .iter()
+        .filter(|m| m.role == MessageRole::User)
+        .map(|m| m.content.as_str())
+        .collect();
+    assert_eq!(
+        user_messages,
+        vec!["Investigate module A and return a summary."],
+        "parent's forked user message must be skipped; only subagent's own turn survives"
+    );
+    assert!(session
+        .messages
+        .iter()
+        .any(|m| m.role == MessageRole::Assistant
+            && m.content.contains("Module A handles authentication")));
+}
+
+#[test]
 fn codex_user_message_event_merges_placeholder_with_embedded_image_source() {
     let provider = CodexProvider::new().expect("home dir must be available");
     let path = fixtures_dir().join("codex_local_image_session.jsonl");
