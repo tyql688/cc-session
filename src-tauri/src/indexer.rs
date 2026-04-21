@@ -384,6 +384,11 @@ fn compute_token_stats_dedup(
                 );
                 continue;
             };
+            // Claude emits `<synthetic>` for internal placeholder entries.
+            // ccusage excludes them from aggregates; match that behaviour.
+            if model == "<synthetic>" {
+                continue;
+            }
             let model = model.to_string();
             let entry = stats_map
                 .entry((date.clone(), model.clone()))
@@ -636,5 +641,32 @@ mod tests {
 
         assert_eq!(first_rows.len(), 1);
         assert!(second_rows.is_empty());
+    }
+
+    #[test]
+    fn compute_token_stats_skips_synthetic_model() {
+        // Claude emits usage entries with model="<synthetic>" as internal
+        // placeholders. They should be excluded from usage aggregates to
+        // match ccusage's behavior.
+        let parsed = make_session(
+            Some("<synthetic>"),
+            vec![Message {
+                role: MessageRole::Assistant,
+                content: String::new(),
+                timestamp: Some("2026-04-09T12:00:00Z".into()),
+                tool_name: None,
+                tool_input: None,
+                token_usage: token_usage(500, 200),
+                model: Some("<synthetic>".into()),
+                usage_hash: Some("msg-x:req-x".into()),
+                tool_metadata: None,
+            }],
+        );
+
+        let rows = compute_token_stats(&parsed);
+        assert!(
+            rows.is_empty(),
+            "<synthetic> entries must not contribute to token stats"
+        );
     }
 }

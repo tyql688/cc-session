@@ -805,11 +805,11 @@ fn handle_assistant_message(entry: &Value, state: &mut ParseState, timestamp: Op
             state.messages.push(Message {
                 role: MessageRole::Assistant,
                 content: text,
-                timestamp,
+                timestamp: timestamp.clone(),
                 tool_name: None,
                 tool_input: None,
                 token_usage: None,
-                model: per_message_model,
+                model: per_message_model.clone(),
                 usage_hash: None,
                 tool_metadata: None,
             });
@@ -822,11 +822,11 @@ fn handle_assistant_message(entry: &Value, state: &mut ParseState, timestamp: Op
             state.messages.push(Message {
                 role: MessageRole::Assistant,
                 content: text,
-                timestamp,
+                timestamp: timestamp.clone(),
                 tool_name: None,
                 tool_input: None,
                 token_usage: None,
-                model: per_message_model,
+                model: per_message_model.clone(),
                 usage_hash: None,
                 tool_metadata: None,
             });
@@ -836,6 +836,12 @@ fn handle_assistant_message(entry: &Value, state: &mut ParseState, timestamp: Op
     // Attach token usage + dedup hash to the last assistant/tool message of this turn.
     // When the turn produced only thinking (System) or empty content, insert a
     // minimal placeholder so the usage is never silently dropped.
+    //
+    // Tool messages (and the empty placeholder below) carry model=None by
+    // design, so we always force the usage-bearing message's model and
+    // timestamp to the assistant entry's values. Without this, usage attached
+    // to a tool message is dropped later by `compute_token_stats_dedup`'s
+    // "missing model" filter.
     if let Some(usage) = turn_usage {
         let hash = unique_hash_from_entry(entry);
         if let Some(last_msg) = state.messages[turn_start..]
@@ -845,23 +851,21 @@ fn handle_assistant_message(entry: &Value, state: &mut ParseState, timestamp: Op
         {
             last_msg.token_usage = Some(usage);
             last_msg.usage_hash = hash;
+            if last_msg.model.as_deref().map(str::is_empty).unwrap_or(true) {
+                last_msg.model = per_message_model.clone();
+            }
+            if last_msg.timestamp.is_none() {
+                last_msg.timestamp = timestamp.clone();
+            }
         } else {
-            // timestamp/model may have been moved into earlier messages;
-            // retrieve from the last System message or fall back to None.
-            let fallback_ts = state.messages[turn_start..]
-                .last()
-                .and_then(|m| m.timestamp.clone());
-            let fallback_model = state.messages[turn_start..]
-                .last()
-                .and_then(|m| m.model.clone());
             state.messages.push(Message {
                 role: MessageRole::Assistant,
                 content: String::new(),
-                timestamp: fallback_ts,
+                timestamp: timestamp.clone(),
                 tool_name: None,
                 tool_input: None,
                 token_usage: Some(usage),
-                model: fallback_model,
+                model: per_message_model.clone(),
                 usage_hash: hash,
                 tool_metadata: None,
             });
@@ -1383,6 +1387,54 @@ mod tests {
         assert_eq!(metadata.status.as_deref(), Some("success"));
         assert_eq!(metadata.result_kind.as_deref(), None);
         assert_eq!(tool.content, "TaskCreate found");
+    }
+
+    #[test]
+    fn parse_session_file_keeps_model_and_timestamp_on_usage_attached_to_tool_message() {
+        // A tool_use-only assistant turn has its usage attached to the Tool
+        // message. Tool messages are emitted with model=None by design, so the
+        // parser must backfill the entry's model/timestamp on the usage-bearing
+        // message — otherwise `compute_token_stats_dedup` silently drops the
+        // usage via its "missing model" filter.
+        let dir = TempDir::new().unwrap();
+        let file = dir.path().join("session.jsonl");
+        let line = r#"{"type":"assistant","requestId":"req-1","uuid":"assistant-1","timestamp":"2026-04-21T10:00:00Z","message":{"id":"msg-1","model":"claude-opus-4-7","role":"assistant","usage":{"input_tokens":12,"output_tokens":34,"cache_creation_input_tokens":5,"cache_read_input_tokens":7},"content":[{"type":"tool_use","id":"toolu_1","name":"Read","input":{"file_path":"/tmp/x.txt"}}]}}"#;
+        fs::write(&file, format!("{line}\n")).unwrap();
+
+        let parsed = parse_session_file(&file).expect("parsed");
+        let usage_msg = parsed
+            .messages
+            .iter()
+            .find(|m| m.token_usage.is_some())
+            .expect("usage-bearing message");
+        assert_eq!(usage_msg.model.as_deref(), Some("claude-opus-4-7"));
+        assert_eq!(usage_msg.timestamp.as_deref(), Some("2026-04-21T10:00:00Z"));
+        assert_eq!(
+            usage_msg.usage_hash.as_deref(),
+            Some("msg-1:req-1"),
+            "usage_hash must be msg:req for cross-file dedup"
+        );
+    }
+
+    #[test]
+    fn parse_session_file_keeps_model_and_timestamp_on_thinking_only_turn() {
+        // A turn whose only content is `thinking` produces no Assistant/Tool
+        // message (thinking is emitted as System). The fallback placeholder
+        // for the usage must carry the entry's model/timestamp, not a guess
+        // read from adjacent messages.
+        let dir = TempDir::new().unwrap();
+        let file = dir.path().join("session.jsonl");
+        let line = r#"{"type":"assistant","requestId":"req-2","uuid":"assistant-2","timestamp":"2026-04-21T10:05:00Z","message":{"id":"msg-2","model":"claude-opus-4-7","role":"assistant","usage":{"input_tokens":3,"output_tokens":5,"cache_creation_input_tokens":0,"cache_read_input_tokens":0},"content":[{"type":"thinking","thinking":"reasoning only"}]}}"#;
+        fs::write(&file, format!("{line}\n")).unwrap();
+
+        let parsed = parse_session_file(&file).expect("parsed");
+        let usage_msg = parsed
+            .messages
+            .iter()
+            .find(|m| m.token_usage.is_some())
+            .expect("usage-bearing message");
+        assert_eq!(usage_msg.model.as_deref(), Some("claude-opus-4-7"));
+        assert_eq!(usage_msg.timestamp.as_deref(), Some("2026-04-21T10:05:00Z"));
     }
 
     #[test]
