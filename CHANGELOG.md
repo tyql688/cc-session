@@ -7,6 +7,12 @@ versioned with [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.3.18] - 2026-04-21
+
+### Fixed
+
+- Restore Codex subagent indexing and "Open" button for multi_agents_v2 sessions (a913247)
+
 ## [0.3.17] - 2026-04-17
 
 ### Fixed
