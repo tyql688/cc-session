@@ -3,7 +3,7 @@ name: Release
 on:
   push:
     tags:
-      - 'v*'
+      - "v*"
 
 permissions:
   contents: write
@@ -60,12 +60,102 @@ jobs:
         with:
           workspaces: src-tauri
 
+      - name: Import macOS signing certificate
+        if: runner.os == 'macOS'
+        shell: bash
+        env:
+          MACOS_SIGNING_CERTIFICATE: ${{ secrets.MACOS_SIGNING_CERTIFICATE }}
+          MACOS_SIGNING_CERTIFICATE_PASSWORD: ${{ secrets.MACOS_SIGNING_CERTIFICATE_PASSWORD }}
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_API_PRIVATE_KEY: ${{ secrets.APPLE_API_PRIVATE_KEY }}
+          APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
+        run: |
+          set -euo pipefail
+
+          CERT_BASE64="${MACOS_SIGNING_CERTIFICATE:-${APPLE_CERTIFICATE:-}}"
+          CERT_PASSWORD="${MACOS_SIGNING_CERTIFICATE_PASSWORD:-${APPLE_CERTIFICATE_PASSWORD:-}}"
+
+          if [ -z "$CERT_BASE64" ]; then
+            echo "No macOS signing certificate is configured; macOS app will be unsigned/ad-hoc."
+            exit 0
+          fi
+
+          if [ -z "$CERT_PASSWORD" ]; then
+            echo "A certificate password is required when a macOS signing certificate is configured." >&2
+            exit 1
+          fi
+
+          KEYCHAIN_PASSWORD="$(openssl rand -base64 32)"
+          KEYCHAIN_PATH="$RUNNER_TEMP/build.keychain-db"
+          CERTIFICATE_PATH="$RUNNER_TEMP/certificate.p12"
+
+          echo "$CERT_BASE64" | base64 --decode > "$CERTIFICATE_PATH"
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security list-keychains -d user -s "$KEYCHAIN_PATH"
+          security default-keychain -s "$KEYCHAIN_PATH"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
+          security import "$CERTIFICATE_PATH" -k "$KEYCHAIN_PATH" -P "$CERT_PASSWORD" -T /usr/bin/codesign
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+
+          CERT_PEM="$RUNNER_TEMP/signing-cert.pem"
+          if openssl pkcs12 -legacy -in "$CERTIFICATE_PATH" -nokeys -out "$CERT_PEM" -passin "pass:$CERT_PASSWORD" >/dev/null 2>&1 ||
+            openssl pkcs12 -in "$CERTIFICATE_PATH" -nokeys -out "$CERT_PEM" -passin "pass:$CERT_PASSWORD" >/dev/null 2>&1; then
+            security add-trusted-cert -r trustRoot -p codeSign -k "$KEYCHAIN_PATH" "$CERT_PEM" || true
+          fi
+
+          CERT_ID="$(security find-identity -v -p codesigning "$KEYCHAIN_PATH" | awk '/^[[:space:]]*[0-9]+\\)/ { print $2; exit }')"
+          if [ -z "$CERT_ID" ]; then
+            echo "No usable macOS code signing identity found in imported certificate." >&2
+            security find-identity -v -p codesigning "$KEYCHAIN_PATH" >&2
+            exit 1
+          fi
+
+          echo "APPLE_SIGNING_IDENTITY=$CERT_ID" >> "$GITHUB_ENV"
+          echo "MACOS_SIGNING_EXPECTED=true" >> "$GITHUB_ENV"
+
+          if [ -n "${APPLE_API_PRIVATE_KEY:-}" ] && [ -n "${APPLE_API_KEY:-}" ]; then
+            API_KEY_PATH="$RUNNER_TEMP/AuthKey_${APPLE_API_KEY}.p8"
+            printf '%s' "$APPLE_API_PRIVATE_KEY" > "$API_KEY_PATH"
+            echo "APPLE_API_KEY_PATH=$API_KEY_PATH" >> "$GITHUB_ENV"
+          fi
+
       - name: Build Tauri app
         shell: bash
         env:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
-        run: npx tauri build --target ${{ matrix.target }} --bundles ${{ matrix.bundles }}
+          # Without a stable macOS code signature, macOS identifies each release
+          # build by its binary hash, so privacy grants for protected folders do
+          # not survive app updates.
+          APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
+          APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+        run: |
+          set -euo pipefail
+
+          if [ "${RUNNER_OS:-}" = "macOS" ] && [ -n "${APPLE_SIGNING_IDENTITY:-}" ]; then
+            SIGN_CONFIG="$(printf '{"bundle":{"macOS":{"signingIdentity":"%s"}}}' "$APPLE_SIGNING_IDENTITY")"
+            npx tauri build --target ${{ matrix.target }} --bundles ${{ matrix.bundles }} --config "$SIGN_CONFIG"
+          else
+            npx tauri build --target ${{ matrix.target }} --bundles ${{ matrix.bundles }}
+          fi
+
+      - name: Verify macOS signature identity
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          set -euo pipefail
+          APP="src-tauri/target/${{ matrix.target }}/release/bundle/macos/CC Session.app"
+          [ -d "$APP" ] || APP="src-tauri/target/release/bundle/macos/CC Session.app"
+
+          REQUIREMENT="$(codesign -dr - "$APP" 2>&1)"
+          echo "$REQUIREMENT"
+
+          if [ "${MACOS_SIGNING_EXPECTED:-}" = "true" ] && echo "$REQUIREMENT" | grep -q "cdhash"; then
+            echo "macOS app was expected to use certificate signing, but it is still ad-hoc." >&2
+            exit 1
+          fi
 
       - name: Collect release assets
         shell: bash
