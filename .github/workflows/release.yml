@@ -104,7 +104,7 @@ jobs:
             sudo -n security add-trusted-cert -d -r trustRoot -p codeSign -k /Library/Keychains/System.keychain "$CERT_PEM"
           fi
 
-          CERT_ID="$(security find-identity -v -p codesigning "$KEYCHAIN_PATH" | awk '/^[[:space:]]*[0-9]+\\)/ { print $2; exit }')"
+          CERT_ID="$(security find-identity -v -p codesigning "$KEYCHAIN_PATH" | awk '/^[[:space:]]*[0-9]+\)/ { print $2; exit }')"
           if [ -z "$CERT_ID" ]; then
             echo "No usable macOS code signing identity found in imported certificate." >&2
             security find-identity -v -p codesigning "$KEYCHAIN_PATH" >&2
