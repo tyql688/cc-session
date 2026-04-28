@@ -1,5 +1,23 @@
-import { Index, Show, createSignal } from "solid-js";
+import {
+  Index,
+  Show,
+  createEffect,
+  createMemo,
+  createResource,
+  createSignal,
+  on,
+  onCleanup,
+  onMount,
+} from "solid-js";
+import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import type { SessionRef, TreeNode } from "../lib/types";
+import {
+  getChildSessionCounts,
+  invokeWithFallback,
+  listRecentSessions,
+} from "../lib/tauri";
+import { isPathBlocked } from "../stores/settings";
+import { errorMessage } from "../lib/errors";
 import {
   groups,
   activeGroupId,
@@ -23,6 +41,56 @@ export function EditorGroupsContainer(props: {
   onOpenSession: (session: SessionRef) => void;
 }) {
   const [dropActive, setDropActive] = createSignal(false);
+  const [recentVersion, setRecentVersion] = createSignal(0);
+  const [recentSessions] = createResource(recentVersion, async () => {
+    const list = await listRecentSessions(100);
+    return list
+      .filter((s) => !isPathBlocked(s.project_path) && !s.is_sidechain)
+      .slice(0, 10);
+  });
+  const recentSessionsError = createMemo(() =>
+    recentSessions.error ? errorMessage(recentSessions.error) : null,
+  );
+  const [childCounts, setChildCounts] = createSignal<Record<string, number>>(
+    {},
+  );
+
+  createEffect(
+    on(
+      () => recentSessions(),
+      async (sessions) => {
+        if (!sessions || sessions.length === 0) {
+          setChildCounts({});
+          return;
+        }
+        const counts = await invokeWithFallback(
+          getChildSessionCounts(sessions.map((session) => session.id)),
+          {},
+          "load child session counts",
+        );
+        setChildCounts(counts);
+      },
+      { defer: true },
+    ),
+  );
+
+  createEffect(
+    on(
+      () => props.tree,
+      () => setRecentVersion((version) => version + 1),
+      { defer: true },
+    ),
+  );
+
+  onMount(() => {
+    let unlisten: UnlistenFn | undefined;
+    listen<void>("sessions-changed", () =>
+      setRecentVersion((version) => version + 1),
+    ).then((fn) => {
+      unlisten = fn;
+    });
+    onCleanup(() => unlisten?.());
+  });
 
   function handleResize(leftIdx: number, deltaX: number) {
     const gs = groups();
@@ -115,8 +183,11 @@ export function EditorGroupsContainer(props: {
               onSplitToRight={props.onSplitToRight}
               onPinTab={props.onPinTab}
               onRefreshTree={props.onRefreshTree}
-              tree={props.tree}
               onOpenSession={props.onOpenSession}
+              recentSessions={recentSessions()}
+              recentSessionsLoading={recentSessions.loading}
+              recentSessionsError={recentSessionsError()}
+              childCounts={childCounts()}
             />
           </>
         )}

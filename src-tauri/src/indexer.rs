@@ -35,10 +35,12 @@ impl Indexer {
         self.reindex_filtered(None, true)
     }
 
-    pub fn reindex_providers(&self, filter: Option<&[Provider]>) -> Result<usize, String> {
-        // Background/polling reindex uses protective sync (aggressive=false)
-        // to avoid deleting sessions on transient scan failures.
-        self.reindex_filtered(filter, false)
+    pub fn reindex_providers(
+        &self,
+        filter: Option<&[Provider]>,
+        aggressive: bool,
+    ) -> Result<usize, String> {
+        self.reindex_filtered(filter, aggressive)
     }
 
     fn reindex_filtered(

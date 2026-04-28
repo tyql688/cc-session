@@ -141,11 +141,10 @@ export default function App() {
       document.documentElement.style.setProperty("--titlebar-inset", "78px");
     }
 
-    void loadProviderSnapshots();
-    void sync.coldStart().then(() => void refreshStatusBarStats());
-    setTimeout(() => void checkForUpdate(), 2000);
-
     window.addEventListener("usage-data-changed", handleUsageChanged);
+    void loadProviderSnapshots();
+    void sync.coldStart();
+    setTimeout(() => void checkForUpdate(), 2000);
 
     document.addEventListener("keydown", handleGlobalKeyDown);
 
@@ -231,6 +230,7 @@ export default function App() {
     window.removeEventListener("usage-data-changed", handleUsageChanged);
     unlistenWatcher?.();
     unlistenMaintenance?.();
+    sync.stopPolling();
     clearTimeout(debounceTimer);
     debouncedChangedPaths.clear();
   });
@@ -385,6 +385,11 @@ export default function App() {
               onOpenSession={openSession}
               onPreviewSession={openPreview}
               onRefreshTree={sync.refreshTree}
+              onRefreshProvider={(provider) => {
+                void sync
+                  .syncProviders([provider])
+                  .then(() => void loadProviderSnapshots(true));
+              }}
               onCollapse={() => setSidebarCollapsed(true)}
               onDeleteSession={async (id: string) => {
                 try {
@@ -409,15 +414,17 @@ export default function App() {
           <Show when={activeView() === "blocked"}>
             <BlockedView onRefreshTree={sync.refreshTree} />
           </Show>
-          <div
-            style={{
-              display: activeView() === "usage" ? "flex" : "none",
-              flex: "1",
-              "min-width": "0",
-            }}
-          >
-            <UsagePanel />
-          </div>
+          <Show when={activeView() === "usage"}>
+            <div
+              style={{
+                display: "flex",
+                flex: "1",
+                "min-width": "0",
+              }}
+            >
+              <UsagePanel />
+            </div>
+          </Show>
           <Show when={showExplorer()}>
             <EditorGroupsContainer
               onTabSelect={(groupId, tabId) => {

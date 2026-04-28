@@ -1,5 +1,5 @@
 import type { MenuItemDef } from "../ContextMenu";
-import type { TreeNode } from "../../lib/types";
+import type { Provider, TreeNode } from "../../lib/types";
 import { openInFolder } from "../../lib/tauri";
 import { errorMessage } from "../../lib/errors";
 import { toast, toastError } from "../../stores/toast";
@@ -138,6 +138,7 @@ export interface NodeMenuContext {
   collapseNode: (nodeId: string) => void;
   trashAllUnderNode: (node: TreeNode) => void;
   onRefreshTree?: () => void;
+  onRefreshProvider?: (provider: Provider) => void;
   addBlockedFolder: (path: string) => void;
 }
 
@@ -151,7 +152,10 @@ export function buildNodeMenuItems(ctx: NodeMenuContext): MenuItemDef[] {
       },
       {
         label: t("contextMenu.refresh"),
-        onClick: () => ctx.onRefreshTree?.(),
+        onClick: () => {
+          if (node.provider) ctx.onRefreshProvider?.(node.provider);
+          else ctx.onRefreshTree?.();
+        },
       },
       { label: "", separator: true, onClick: () => {} },
       {

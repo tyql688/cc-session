@@ -12,6 +12,7 @@ const MERGED_TOOL_WEIGHT = 8;
 const MIN_BLOCK_HEIGHT = 2;
 const BLOCK_GAP = 1;
 const MIN_ENTRIES_TO_SHOW = 10;
+const MAX_BLOCKS = 600;
 
 interface MinimapProps {
   entries: ProcessedEntry[];
@@ -35,7 +36,8 @@ export function TimelineMinimap(props: MinimapProps) {
     canvasHeight: number,
   ): Block[] {
     const items: { color: string; weight: number; entryIndex: number }[] = [];
-    for (let i = 0; i < entries.length; i++) {
+    const stride = Math.max(1, Math.ceil(entries.length / MAX_BLOCKS));
+    for (let i = 0; i < entries.length; i += stride) {
       const e = entries[i];
       if (e.type === "time-sep") continue;
       if (e.type === "merged-tools") {

@@ -504,4 +504,45 @@ mod tests {
             .unwrap();
         assert_eq!(usage_rows, 0);
     }
+
+    #[test]
+    fn child_session_counts_returns_counts_for_requested_parents() {
+        let dir = TempDir::new().unwrap();
+        let db = Database::open(dir.path()).unwrap();
+        let parent_a = sample_meta("parent-a");
+        let parent_b = sample_meta("parent-b");
+        let mut child_a1 = sample_meta("child-a-1");
+        child_a1.parent_id = Some(parent_a.id.clone());
+        child_a1.is_sidechain = true;
+        let mut child_a2 = sample_meta("child-a-2");
+        child_a2.parent_id = Some(parent_a.id.clone());
+        child_a2.is_sidechain = true;
+        let mut child_b1 = sample_meta("child-b-1");
+        child_b1.parent_id = Some(parent_b.id.clone());
+        child_b1.is_sidechain = true;
+
+        let parsed = [
+            parent_a.clone(),
+            parent_b.clone(),
+            child_a1,
+            child_a2,
+            child_b1,
+        ]
+        .into_iter()
+        .map(|meta| ParsedSession {
+            meta,
+            messages: Vec::new(),
+            content_text: String::new(),
+            parse_warning_count: 0,
+        })
+        .collect::<Vec<_>>();
+        db.sync_provider_snapshot(&Provider::Claude, &parsed, true)
+            .unwrap();
+
+        let counts = db
+            .child_session_counts(&[parent_a.id.clone(), parent_b.id.clone()])
+            .unwrap();
+        assert_eq!(counts.get(&parent_a.id), Some(&2));
+        assert_eq!(counts.get(&parent_b.id), Some(&1));
+    }
 }

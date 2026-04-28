@@ -145,11 +145,6 @@ pub async fn refresh_pricing_catalog(
 }
 
 #[tauri::command]
-pub fn rebuild_index(state: State<AppState>) -> CommandResult<usize> {
-    state.indexer.reindex().map_err(CommandError::from)
-}
-
-#[tauri::command]
 pub async fn start_rebuild_index(
     app: AppHandle,
     state: State<'_, AppState>,

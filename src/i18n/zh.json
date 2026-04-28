@@ -93,7 +93,8 @@
     "clearIndexOk": "索引已清除",
     "refreshUsageStarted": "用量已在后台开始刷新",
     "clearUsageOk": "用量统计已清除",
-    "refreshUsageOk": "用量已刷新"
+    "refreshUsageOk": "用量已刷新",
+    "reloadFailed": "会话重新加载失败"
   },
   "favorites": {
     "title": "收藏",

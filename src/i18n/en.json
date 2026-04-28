@@ -93,7 +93,8 @@
     "clearIndexOk": "Index cleared",
     "refreshUsageStarted": "Usage refresh started in the background",
     "clearUsageOk": "Usage stats cleared",
-    "refreshUsageOk": "Usage refreshed"
+    "refreshUsageOk": "Usage refreshed",
+    "reloadFailed": "Failed to reload session"
   },
   "favorites": {
     "title": "Favorites",

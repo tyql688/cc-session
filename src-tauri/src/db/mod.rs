@@ -212,6 +212,12 @@ impl Database {
         if !has_parent_id {
             write_conn.execute_batch("ALTER TABLE sessions ADD COLUMN parent_id TEXT;")?;
         }
+        write_conn.execute_batch(
+            "CREATE INDEX IF NOT EXISTS idx_sessions_parent_updated
+                ON sessions(parent_id, updated_at DESC);
+             CREATE INDEX IF NOT EXISTS idx_sessions_parent_created
+                ON sessions(parent_id, created_at);",
+        )?;
 
         write_conn.execute_batch(
             "CREATE TABLE IF NOT EXISTS session_token_stats (

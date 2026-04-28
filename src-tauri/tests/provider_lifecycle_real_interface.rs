@@ -81,6 +81,7 @@ fn build_app() -> (TempDir, App<MockRuntime>, tauri::WebviewWindow<MockRuntime>)
         .manage(state)
         .invoke_handler(tauri::generate_handler![
             commands::get_provider_snapshots,
+            commands::reindex,
             commands::get_tree,
             commands::list_recent_sessions,
             commands::get_session_detail,
@@ -623,7 +624,7 @@ fn cleanup_generated_sessions<W: AsRef<Webview<MockRuntime>>>(
     markers: &[String],
     known_ids: &[String],
 ) {
-    let _ = invoke::<usize, _>(webview, "rebuild_index", json!({}));
+    let _ = invoke::<usize, _>(webview, "reindex", json!({}));
 
     let matching_recent: Vec<String> = list_recent(webview)
         .into_iter()
@@ -722,7 +723,7 @@ fn real_provider_sessions_support_interface_semantics() {
     let known_ids = Mutex::new(Vec::<String>::new());
 
     let result = catch_unwind(AssertUnwindSafe(|| {
-        let indexed: usize = invoke(&webview, "rebuild_index", json!({})).expect("rebuild_index");
+        let indexed: usize = invoke(&webview, "reindex", json!({})).expect("reindex");
         assert!(indexed > 0, "expected sessions to be indexed");
 
         assert_provider_snapshots(&webview);

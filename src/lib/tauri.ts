@@ -77,8 +77,11 @@ export async function reindex(): Promise<number> {
   return invoke<number>("reindex");
 }
 
-export async function reindexProviders(providers: string[]): Promise<number> {
-  return invoke<number>("reindex_providers", { providers });
+export async function reindexProviders(
+  providers: string[],
+  aggressive = false,
+): Promise<number> {
+  return invoke<number>("reindex_providers", { providers, aggressive });
 }
 
 export async function syncSources(paths: string[]): Promise<number> {
@@ -128,6 +131,14 @@ export async function getChildSessions(
   parentId: string,
 ): Promise<SessionMeta[]> {
   return invoke<SessionMeta[]>("get_child_sessions", { parentId });
+}
+
+export async function getChildSessionCounts(
+  parentIds: string[],
+): Promise<Record<string, number>> {
+  return invoke<Record<string, number>>("get_child_session_counts", {
+    parentIds,
+  });
 }
 
 export async function getIndexStats(): Promise<IndexStats> {

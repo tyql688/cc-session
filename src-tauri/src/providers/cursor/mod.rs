@@ -320,6 +320,30 @@ impl SessionProvider for CursorProvider {
         Ok(sessions)
     }
 
+    fn scan_source(&self, source_path: &str) -> Result<Vec<ParsedSession>, ProviderError> {
+        let path = Path::new(source_path);
+        if !path.is_file() {
+            return Ok(Vec::new());
+        }
+
+        let cli_stores = self.collect_cli_session_stores();
+        let Some(mut session) = self.parse_transcript_jsonl(path) else {
+            return Ok(Vec::new());
+        };
+
+        let store_session_id = session
+            .meta
+            .parent_id
+            .as_deref()
+            .unwrap_or(&session.meta.id);
+        if !cli_stores.contains_key(store_session_id) {
+            return Ok(Vec::new());
+        }
+
+        self.apply_store_workspace_path(&mut session, &cli_stores);
+        Ok(vec![session])
+    }
+
     fn deletion_plan(&self, meta: &SessionMeta, children: &[SessionMeta]) -> DeletionPlan {
         if meta.parent_id.is_some() {
             return DeletionPlan {
@@ -473,5 +497,68 @@ mod tests {
             sessions[0].meta.project_name,
             "ccsession-real-hidden-cursor"
         );
+    }
+
+    #[test]
+    fn scan_source_parses_only_requested_cli_transcript() {
+        let dir = tempfile::TempDir::new().unwrap();
+        let session_id = "cursor-session-002";
+        let other_session_id = "cursor-session-ignored";
+        let workspace_dir = dir.path().join("workspace").join("cursor-source");
+        std::fs::create_dir_all(&workspace_dir).unwrap();
+
+        let source_path = write_main_transcript(
+            dir.path(),
+            "cursor-source",
+            session_id,
+            r#"{"role":"user","message":{"content":[{"type":"text","text":"<user_query>Reply with OK only.</user_query>"}]}}
+{"role":"assistant","message":{"content":[{"type":"text","text":"OK"}]}}"#,
+        );
+        write_main_transcript(
+            dir.path(),
+            "cursor-source",
+            other_session_id,
+            r#"{"role":"user","message":{"content":[{"type":"text","text":"This transcript should not be returned"}]}}"#,
+        );
+        write_store_db(
+            dir.path(),
+            session_id,
+            workspace_dir.to_string_lossy().as_ref(),
+        );
+
+        let provider = CursorProvider {
+            home_dir: dir.path().to_path_buf(),
+        };
+
+        let sessions = provider
+            .scan_source(source_path.to_string_lossy().as_ref())
+            .unwrap();
+        assert_eq!(sessions.len(), 1);
+        assert_eq!(sessions[0].meta.id, session_id);
+        assert_eq!(
+            sessions[0].meta.project_path,
+            workspace_dir.to_string_lossy().to_string()
+        );
+    }
+
+    #[test]
+    fn scan_source_skips_cursor_transcript_without_cli_store() {
+        let dir = tempfile::TempDir::new().unwrap();
+        let session_id = "cursor-session-ide";
+        let source_path = write_main_transcript(
+            dir.path(),
+            "cursor-source",
+            session_id,
+            r#"{"role":"user","message":{"content":[{"type":"text","text":"IDE transcript"}]}}"#,
+        );
+
+        let provider = CursorProvider {
+            home_dir: dir.path().to_path_buf(),
+        };
+
+        let sessions = provider
+            .scan_source(source_path.to_string_lossy().as_ref())
+            .unwrap();
+        assert!(sessions.is_empty());
     }
 }

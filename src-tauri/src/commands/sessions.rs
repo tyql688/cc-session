@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::path::Path;
 
 use anyhow::{anyhow, Context};
@@ -23,6 +24,7 @@ pub async fn reindex(state: State<'_, AppState>) -> CommandResult<usize> {
 #[tauri::command]
 pub async fn reindex_providers(
     providers: Vec<String>,
+    aggressive: Option<bool>,
     state: State<'_, AppState>,
 ) -> CommandResult<usize> {
     let state = state.inner().clone();
@@ -34,7 +36,9 @@ pub async fn reindex_providers(
         if filter.is_empty() {
             return Ok(0);
         }
-        state.indexer.reindex_providers(Some(&filter))
+        state
+            .indexer
+            .reindex_providers(Some(&filter), aggressive.unwrap_or(false))
     })
     .await
     .context("task join error")?
@@ -73,11 +77,15 @@ pub fn get_tree(state: State<AppState>) -> CommandResult<Vec<crate::models::Tree
 }
 
 #[tauri::command]
-pub fn get_session_detail(
+pub async fn get_session_detail(
     session_id: String,
-    state: State<AppState>,
+    state: State<'_, AppState>,
 ) -> CommandResult<SessionDetail> {
-    Ok(load_detail(&session_id, &state.db)?)
+    let state = state.inner().clone();
+    let detail = tokio::task::spawn_blocking(move || load_detail(&session_id, &state.db))
+        .await
+        .context("task join error")??;
+    Ok(detail)
 }
 
 #[tauri::command]
@@ -91,6 +99,18 @@ pub fn get_child_sessions(
         .context("failed to load child sessions")?;
     hydrate_variant_names(&mut sessions);
     Ok(sessions)
+}
+
+#[tauri::command]
+pub fn get_child_session_counts(
+    parent_ids: Vec<String>,
+    state: State<AppState>,
+) -> CommandResult<HashMap<String, u64>> {
+    state
+        .db
+        .child_session_counts(&parent_ids)
+        .context("failed to load child session counts")
+        .map_err(CommandError::from)
 }
 
 #[tauri::command]

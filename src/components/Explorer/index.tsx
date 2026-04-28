@@ -70,6 +70,7 @@ export function Explorer(props: {
   onDeleteSession?: (id: string) => void;
   onExportSession?: (id: string) => void;
   onRefreshTree?: () => void;
+  onRefreshProvider?: (provider: SessionRef["provider"]) => void;
   onCollapse?: () => void;
   isLoading?: boolean;
 }) {
@@ -353,6 +354,7 @@ export function Explorer(props: {
       },
       trashAllUnderNode,
       onRefreshTree: props.onRefreshTree,
+      onRefreshProvider: props.onRefreshProvider,
       addBlockedFolder,
     });
   }

@@ -37,6 +37,7 @@ import { useAutoLoad } from "./useAutoLoad";
 
 export function SessionView(props: {
   session: SessionRef;
+  active: boolean;
   onRefreshTree: () => void;
   onCloseTab: (id: string) => void;
 }) {
@@ -45,6 +46,7 @@ export function SessionView(props: {
   const processedEntries = createMemo(() => processMessages(messages()));
   const BATCH_SIZE = 80;
   const LOAD_MORE_THRESHOLD = 1;
+  const MINIMAP_JUMP_BATCH = 1200;
   const [visibleCount, setVisibleCount] = createSignal(BATCH_SIZE);
   const [hiddenRoles, setHiddenRoles] = createSignal<Set<MessageRole>>(
     new Set(),
@@ -243,12 +245,23 @@ export function SessionView(props: {
   }
 
   // Global keyboard shortcut listeners — must be inside lifecycle hooks
-  const onResume = () => handleResume();
-  const onExport = () => setShowExportDialog(true);
-  const onFavorite = () => handleToggleFavorite();
-  const onWatch = () => setWatching((v) => !v);
-  const onDelete = () => setShowDeleteConfirm(true);
+  const onResume = () => {
+    if (props.active) void handleResume();
+  };
+  const onExport = () => {
+    if (props.active) setShowExportDialog(true);
+  };
+  const onFavorite = () => {
+    if (props.active) void handleToggleFavorite();
+  };
+  const onWatch = () => {
+    if (props.active) setWatching((v) => !v);
+  };
+  const onDelete = () => {
+    if (props.active) setShowDeleteConfirm(true);
+  };
   const onSessionSearch = () => {
+    if (!props.active) return;
     setSearchBarOpen(true);
     requestAnimationFrame(() => {
       (
@@ -312,7 +325,8 @@ export function SessionView(props: {
         });
       }
     } catch (e) {
-      console.warn("live watch reload failed:", e);
+      console.error("live watch reload failed:", e);
+      toastError(`${t("toast.reloadFailed")}: ${errorMessage(e)}`);
     }
   }
 
@@ -487,10 +501,18 @@ export function SessionView(props: {
             entries={filteredEntries()}
             messagesRef={messagesRef}
             onScrollToFraction={(fraction) => {
-              // Load all entries so scrollHeight reflects the full conversation
               const total = filteredEntries().length;
-              if (visibleCount() < total) {
-                setVisibleCount(total);
+              const targetCount = Math.min(
+                total,
+                Math.ceil(total * (1 - fraction)) + BATCH_SIZE,
+              );
+              if (targetCount > visibleCount()) {
+                setVisibleCount((current) =>
+                  Math.min(
+                    total,
+                    Math.min(targetCount, current + MINIMAP_JUMP_BATCH),
+                  ),
+                );
               }
               // fraction: 0=top(oldest), 1=bottom(newest)
               // column-reverse: scrollTop=0 is bottom, negative is up

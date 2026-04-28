@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use rusqlite::{params, Connection};
+use rusqlite::{params, params_from_iter, Connection};
 
 use crate::models::{SearchFilters, SearchResult, SessionMeta};
 
@@ -239,6 +239,37 @@ impl Database {
             }
         }
         Ok(sessions)
+    }
+
+    pub fn child_session_counts(
+        &self,
+        parent_ids: &[String],
+    ) -> Result<HashMap<String, u64>, rusqlite::Error> {
+        if parent_ids.is_empty() {
+            return Ok(HashMap::new());
+        }
+
+        let conn = self.lock_read()?;
+        let placeholders = std::iter::repeat_n("?", parent_ids.len())
+            .collect::<Vec<_>>()
+            .join(", ");
+        let sql = format!(
+            "SELECT parent_id, COUNT(*)
+             FROM sessions
+             WHERE parent_id IN ({placeholders})
+             GROUP BY parent_id"
+        );
+        let mut stmt = conn.prepare(&sql)?;
+        let rows = stmt.query_map(params_from_iter(parent_ids.iter()), |row| {
+            Ok((row.get::<_, String>(0)?, row.get::<_, u64>(1)?))
+        })?;
+
+        let mut counts = HashMap::new();
+        for row in rows {
+            let (parent_id, count) = row?;
+            counts.insert(parent_id, count);
+        }
+        Ok(counts)
     }
 
     pub fn add_favorite(&self, session_id: &str) -> Result<(), rusqlite::Error> {

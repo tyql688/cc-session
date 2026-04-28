@@ -83,6 +83,37 @@ export function createSyncManager(callbacks: SyncCallbacks) {
     }
   }
 
+  async function syncProviders(providers: string[], showSpinner = true) {
+    if (providers.length === 0) return;
+
+    if (syncInFlight) {
+      pendingFullSync = true;
+      return;
+    }
+
+    syncInFlight = true;
+    if (showSpinner) callbacks.setIsLoading(true);
+
+    try {
+      await reindexProviders(providers, true);
+      await refreshTree();
+    } catch (e) {
+      toastError(String(e));
+    } finally {
+      syncInFlight = false;
+      if (showSpinner) callbacks.setIsLoading(false);
+      if (pendingFullSync) {
+        pendingFullSync = false;
+        pendingChangedPaths.clear();
+        void syncFromDisk({ showSpinner });
+      } else if (pendingChangedPaths.size > 0) {
+        const queuedPaths = [...pendingChangedPaths];
+        pendingChangedPaths.clear();
+        void syncFromDisk({ changedPaths: queuedPaths });
+      }
+    }
+  }
+
   /** Poll sync — serialized with FS-event sync via syncInFlight guard. */
   async function pollSync(providers: string[]) {
     if (syncInFlight) return;
@@ -175,6 +206,7 @@ export function createSyncManager(callbacks: SyncCallbacks) {
 
   return {
     syncFromDisk,
+    syncProviders,
     refreshTree,
     coldStart,
     stopPolling,

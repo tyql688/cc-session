@@ -271,6 +271,7 @@ pub fn run() {
             commands::get_tree,
             commands::get_session_detail,
             commands::get_child_sessions,
+            commands::get_child_session_counts,
             commands::search_sessions,
             commands::rename_session,
             commands::delete_session,
