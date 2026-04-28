@@ -45,7 +45,7 @@ pub fn canonical_tool_name(provider: Provider, name: &str) -> String {
 
     match name {
         "Shell" | "shell" | "bash" | "exec_command" | "shell_command" | "run_shell_command"
-        | "run_in_terminal" | "write_stdin" => "Bash",
+        | "run_in_terminal" | "write_stdin" | "Monitor" | "LocalShellCall" => "Bash",
         "Read" | "read" | "ReadFile" | "read_file" | "view" => "Read",
         "read_mcp_resource" => "ListMcpResourcesTool",
         "Write" | "write" | "WriteFile" | "write_file" | "create" => "Write",
@@ -67,12 +67,19 @@ pub fn canonical_tool_name(provider: Provider, name: &str) -> String {
         "followup_task" => "FollowupTask",
         "list_agents" => "ListAgents",
         "update_plan" | "TodoWrite" | "todo" | "todowrite" | "Enter Plan Mode"
-        | "enter_plan_mode" | "exit_plan_mode" => "Plan",
+        | "EnterPlanMode" | "ExitPlanMode" | "enter_plan_mode" | "exit_plan_mode" => "Plan",
         "request_user_input" | "ask_user" | "question" => "AskUserQuestion",
         "request_permissions" => "RequestPermissions",
+        "ScheduleWakeup" => "ScheduleWakeup",
         "ReadLints" => "Lint",
         "web_fetch" | "webfetch" => "WebFetch",
         "web_search" | "web_search_call" | "websearch" => "WebSearch",
+        "image_generation_call" | "image_generation_end" => "ImageGeneration",
+        "dynamic_tool_call"
+        | "dynamic_tool_call_request"
+        | "dynamic_tool_call_response"
+        | "load_workspace_dependencies"
+        | "install_workspace_dependencies" => "DynamicTool",
         "codesearch" => "ToolSearch",
         "list_mcp_resources" | "list_mcp_resource_templates" => "ListMcpResourcesTool",
         "skill" => "Skill",
@@ -95,8 +102,10 @@ fn tool_category(canonical_name: &str, raw_name: &str) -> String {
         "TaskCreate" | "TaskUpdate" | "TaskList" | "TaskStop" => "task",
         "FollowupTask" => "task",
         "WebSearch" | "WebFetch" => "web",
+        "ImageGeneration" => "media",
+        "DynamicTool" => "tool",
         "Skill" => "skill",
-        "CronCreate" | "CronDelete" => "cron",
+        "CronCreate" | "CronDelete" | "ScheduleWakeup" => "cron",
         "EnterPlanMode" | "ExitPlanMode" | "Plan" => "plan",
         "AskUserQuestion" | "RequestPermissions" => "interaction",
         "SQL" => "database",
@@ -111,6 +120,8 @@ fn display_tool_name(raw_name: &str, canonical_name: &str) -> String {
     }
     match raw_name {
         "write_stdin" => "write stdin".to_string(),
+        "Monitor" => "monitor".to_string(),
+        "ScheduleWakeup" => "schedule wakeup".to_string(),
         "update_plan" => "update plan".to_string(),
         "request_user_input" => "request user input".to_string(),
         "request_permissions" => "request permissions".to_string(),
@@ -129,6 +140,12 @@ fn display_tool_name(raw_name: &str, canonical_name: &str) -> String {
         "question" => "question".to_string(),
         "webfetch" => "web fetch".to_string(),
         "websearch" => "web search".to_string(),
+        "image_generation_call" | "image_generation_end" => "image generation".to_string(),
+        "dynamic_tool_call" | "dynamic_tool_call_request" | "dynamic_tool_call_response" => {
+            "dynamic tool".to_string()
+        }
+        "load_workspace_dependencies" => "load workspace dependencies".to_string(),
+        "install_workspace_dependencies" => "install workspace dependencies".to_string(),
         "codesearch" => "code search".to_string(),
         "skill" => "skill".to_string(),
         "list" => "list".to_string(),
@@ -158,6 +175,21 @@ fn input_summary(canonical_name: &str, raw_name: &str, input: Option<&Value>) ->
         "Bash" => string_field(input, &["description", "command", "cmd"])
             .map(|s| compact_string(s, 80))
             .unwrap_or_default(),
+        "ScheduleWakeup" => {
+            let delay = input
+                .get("delaySeconds")
+                .or_else(|| input.get("delay_seconds"))
+                .and_then(|v| v.as_u64())
+                .map(|seconds| format!("{seconds}s"));
+            let reason = string_field(input, &["reason"])
+                .map(|s| compact_string(s, 80))
+                .unwrap_or_default();
+            [delay.unwrap_or_default(), reason]
+                .into_iter()
+                .filter(|part| !part.is_empty())
+                .collect::<Vec<_>>()
+                .join(" · ")
+        }
         "Grep" => string_field(input, &["pattern", "query"])
             .map(|pattern| {
                 let mut value = format!("/{}/", compact_string(pattern, 60));
@@ -229,6 +261,13 @@ fn input_summary(canonical_name: &str, raw_name: &str, input: Option<&Value>) ->
         "WebFetch" => string_field(input, &["url"])
             .unwrap_or_default()
             .to_string(),
+        "ImageGeneration" => string_field(input, &["revised_prompt", "prompt"])
+            .map(|s| compact_string(s, 80))
+            .unwrap_or_default(),
+        "DynamicTool" => string_field(input, &["tool", "name"])
+            .or_else(|| Some(raw_name).filter(|name| *name != "dynamic_tool_call"))
+            .map(|s| compact_string(s, 80))
+            .unwrap_or_default(),
         "ListMcpResourcesTool" => {
             let server = string_field(input, &["server"]).unwrap_or_default();
             let uri = string_field(input, &["uri"]).unwrap_or_default();
@@ -306,7 +345,7 @@ fn compact_json_value(value: &Value, depth: usize) -> Value {
         Value::Object(obj) => {
             let mut next = Map::new();
             for (key, value) in obj {
-                if key == "originalFile" {
+                if should_omit_large_field(key, value) {
                     next.insert(key.clone(), json!("<omitted>"));
                     continue;
                 }
@@ -326,6 +365,19 @@ fn compact_json_value(value: &Value, depth: usize) -> Value {
         }
         _ => value.clone(),
     }
+}
+
+fn should_omit_large_field(key: &str, value: &Value) -> bool {
+    match key {
+        "originalFile" | "base64" | "b64_json" => true,
+        "data" | "image" => value.as_str().is_some_and(is_inline_base64_image),
+        _ => false,
+    }
+}
+
+fn is_inline_base64_image(value: &str) -> bool {
+    let value = value.trim_start();
+    value.starts_with("data:image/") && value.contains(";base64,")
 }
 
 fn compact_structured_patch(value: &Value) -> Value {
@@ -372,6 +424,9 @@ fn compact_structured_patch(value: &Value) -> Value {
 fn result_kind_for_tool(raw_name: &str, result: Option<&Value>) -> Option<String> {
     if raw_name.starts_with("mcp__") {
         return Some("mcp".to_string());
+    }
+    if canonical_tool_name(Provider::Codex, raw_name) == "ImageGeneration" {
+        return Some("image".to_string());
     }
     let result = result?;
     if result_output_path(result).is_some() {
@@ -590,6 +645,12 @@ mod tests {
             ("EditNotebook", "Edit"),
             ("delete", "Delete"),
             ("update_plan", "Plan"),
+            ("ExitPlanMode", "Plan"),
+            ("ScheduleWakeup", "ScheduleWakeup"),
+            ("Monitor", "Bash"),
+            ("image_generation_call", "ImageGeneration"),
+            ("dynamic_tool_call", "DynamicTool"),
+            ("load_workspace_dependencies", "DynamicTool"),
             ("write_stdin", "Bash"),
             ("request_user_input", "AskUserQuestion"),
             ("question", "AskUserQuestion"),
@@ -787,6 +848,88 @@ mod tests {
         assert_eq!(mcp.server, "plugin_playwright");
         assert_eq!(mcp.tool, "browser_snapshot");
         assert_eq!(mcp.display, "browser snapshot");
+    }
+
+    #[test]
+    fn summarizes_new_tool_aliases_and_omits_large_media_fields() {
+        let wakeup = build_tool_metadata(ToolCallFacts {
+            provider: Provider::Claude,
+            raw_name: "ScheduleWakeup",
+            input: Some(&json!({
+                "delaySeconds": 60,
+                "reason": "wait for service startup"
+            })),
+            call_id: None,
+            assistant_id: None,
+        });
+        assert_eq!(wakeup.category, "cron");
+        assert_eq!(
+            wakeup.summary.as_deref(),
+            Some("60s · wait for service startup")
+        );
+
+        let image = build_tool_metadata(ToolCallFacts {
+            provider: Provider::Codex,
+            raw_name: "image_generation_call",
+            input: Some(&json!({ "revised_prompt": "make an icon" })),
+            call_id: Some("ig_1"),
+            assistant_id: None,
+        });
+        assert_eq!(image.category, "media");
+        assert_eq!(image.summary.as_deref(), Some("make an icon"));
+
+        let mut dynamic = build_tool_metadata(ToolCallFacts {
+            provider: Provider::Codex,
+            raw_name: "load_workspace_dependencies",
+            input: Some(&json!({ "tool": "load_workspace_dependencies" })),
+            call_id: Some("call_1"),
+            assistant_id: None,
+        });
+        assert_eq!(dynamic.category, "tool");
+        assert_eq!(
+            dynamic.summary.as_deref(),
+            Some("load_workspace_dependencies")
+        );
+        enrich_tool_metadata(
+            &mut dynamic,
+            ToolResultFacts {
+                raw_result: Some(&json!({
+                    "success": true,
+                    "base64": "long image payload",
+                    "data": { "message": "keep structured data" },
+                    "image": "data:image/png;base64,long image payload",
+                    "content": "ok"
+                })),
+                is_error: Some(false),
+                status: None,
+                artifact_path: None,
+            },
+        );
+        assert_eq!(
+            dynamic
+                .structured
+                .as_ref()
+                .and_then(|value| value.get("base64"))
+                .and_then(|value| value.as_str()),
+            Some("<omitted>")
+        );
+        assert_eq!(
+            dynamic
+                .structured
+                .as_ref()
+                .and_then(|value| value.get("data"))
+                .and_then(|value| value.get("message"))
+                .and_then(|value| value.as_str()),
+            Some("keep structured data")
+        );
+        assert_eq!(
+            dynamic
+                .structured
+                .as_ref()
+                .and_then(|value| value.get("image"))
+                .and_then(|value| value.as_str()),
+            Some("<omitted>")
+        );
     }
 
     #[test]

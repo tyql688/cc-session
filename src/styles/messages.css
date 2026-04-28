@@ -527,6 +527,10 @@
   color: var(--text-warning, #e5a00d);
 }
 
+.msg-system-tag.sys-info {
+  color: var(--text-secondary);
+}
+
 /* Session info meta tags */
 .session-info-model {
   max-width: 200px;

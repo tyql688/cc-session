@@ -244,7 +244,13 @@
     "compact": "Compact",
     "microcompact": "Microcompact",
     "hooks": "Hooks",
-    "apiError": "API Error"
+    "apiError": "API Error",
+    "awaySummary": "离开摘要",
+    "scheduledTask": "定时唤醒",
+    "prLink": "PR",
+    "error": "错误",
+    "turnAborted": "已中断",
+    "contextCompacted": "上下文已压缩"
   },
   "blocked": { "hint": "右键项目文件夹，选择「屏蔽此文件夹」" },
   "trash": {

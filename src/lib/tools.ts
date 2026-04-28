@@ -64,6 +64,8 @@ const TOOL_ICONS: Record<string, string> = {
   Agent: "🤖",
   WebSearch: "🌐",
   WebFetch: "🌐",
+  ImageGeneration: "🖼️",
+  DynamicTool: "🧩",
   TaskCreate: "📋",
   TaskUpdate: "📋",
   TaskList: "📋",
@@ -594,6 +596,40 @@ export function formatToolResultMetadata(
         }
       }
       break;
+    case "ImageGeneration": {
+      const savedPath = firstString(structured, ["savedPath", "saved_path"]);
+      if (savedPath) lines.push(toolLine("savedPath", savedPath));
+      const prompt = firstString(structured, [
+        "revisedPrompt",
+        "revised_prompt",
+      ]);
+      if (prompt) lines.push({ label: "revisedPrompt", value: prompt });
+      break;
+    }
+    case "DynamicTool": {
+      const tool = firstString(structured, ["tool", "name"]);
+      if (tool) lines.push({ label: "tool", value: tool });
+      if (typeof structured.success === "boolean") {
+        lines.push({
+          label: "success",
+          value: structured.success ? "true" : "false",
+        });
+      }
+      const duration = nestedRecord(structured.duration);
+      const secs =
+        typeof duration?.secs === "number" ? duration.secs : undefined;
+      const nanos =
+        typeof duration?.nanos === "number" ? duration.nanos : undefined;
+      if (secs !== undefined || nanos !== undefined) {
+        lines.push({
+          label: "duration",
+          value: `${((secs ?? 0) + (nanos ?? 0) / 1_000_000_000).toLocaleString()}s`,
+        });
+      }
+      const content = firstString(structured, ["content"]);
+      if (content) lines.push({ label: "result", value: content });
+      break;
+    }
     default:
       if (metadata.category === "task") {
         for (const key of ["taskId", "task_id", "statusChange", "message"]) {

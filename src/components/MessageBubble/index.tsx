@@ -40,6 +40,28 @@ const SYSTEM_SUBTYPE_CONFIG: Record<
     cls: "sys-hook",
   },
   api_error: { icon: "\u26A0", labelKey: "system.apiError", cls: "sys-error" },
+  away_summary: {
+    icon: "\u23F8",
+    labelKey: "system.awaySummary",
+    cls: "sys-info",
+  },
+  scheduled_task_fire: {
+    icon: "\u23F0",
+    labelKey: "system.scheduledTask",
+    cls: "sys-info",
+  },
+  pr_link: { icon: "\uD83D\uDD17", labelKey: "system.prLink", cls: "sys-info" },
+  error: { icon: "\u26A0", labelKey: "system.error", cls: "sys-error" },
+  turn_aborted: {
+    icon: "\u23F9",
+    labelKey: "system.turnAborted",
+    cls: "sys-error",
+  },
+  context_compacted: {
+    icon: "\u2702",
+    labelKey: "system.contextCompacted",
+    cls: "sys-compact",
+  },
 };
 
 function SystemMessage(props: { content: string }) {

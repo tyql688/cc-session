@@ -267,6 +267,114 @@ fn enrich_existing_tool_message(
     );
 }
 
+fn codex_call_id(payload: &Value) -> Option<&str> {
+    payload
+        .get("call_id")
+        .or_else(|| payload.get("callId"))
+        .or_else(|| payload.get("id"))
+        .and_then(|v| v.as_str())
+}
+
+fn codex_content_items_text(payload: &Value) -> String {
+    let items = payload
+        .get("content_items")
+        .or_else(|| payload.get("content"))
+        .and_then(|v| v.as_array());
+    let Some(items) = items else {
+        return payload
+            .get("message")
+            .or_else(|| payload.get("output"))
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .to_string();
+    };
+
+    items
+        .iter()
+        .filter_map(|item| {
+            item.get("text")
+                .or_else(|| item.get("output_text"))
+                .or_else(|| item.get("input_text"))
+                .and_then(|v| v.as_str())
+        })
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
+fn push_system_event(messages: &mut Vec<Message>, timestamp: Option<String>, content: String) {
+    messages.push(Message {
+        role: MessageRole::System,
+        content,
+        timestamp,
+        tool_name: None,
+        tool_input: None,
+        tool_metadata: None,
+        token_usage: None,
+        model: None,
+        usage_hash: None,
+    });
+}
+
+fn codex_image_generation_input(payload: &Value) -> Value {
+    let mut input = Map::new();
+    if let Some(prompt) = payload.get("revised_prompt").and_then(|v| v.as_str()) {
+        input.insert("revised_prompt".to_string(), json!(prompt));
+    }
+    if let Some(status) = payload.get("status").and_then(|v| v.as_str()) {
+        input.insert("status".to_string(), json!(status));
+    }
+    Value::Object(input)
+}
+
+fn codex_image_generation_result(payload: &Value) -> Value {
+    let mut result = Map::new();
+    if let Some(status) = payload.get("status").and_then(|v| v.as_str()) {
+        result.insert("status".to_string(), json!(status));
+    }
+    if let Some(prompt) = payload.get("revised_prompt").and_then(|v| v.as_str()) {
+        result.insert("revisedPrompt".to_string(), json!(prompt));
+    }
+    if let Some(saved_path) = payload.get("saved_path").and_then(|v| v.as_str()) {
+        result.insert("savedPath".to_string(), json!(saved_path));
+    }
+    Value::Object(result)
+}
+
+fn dynamic_tool_input(payload: &Value) -> Value {
+    let mut input = Map::new();
+    if let Some(tool) = payload.get("tool").and_then(|v| v.as_str()) {
+        input.insert("tool".to_string(), json!(tool));
+    }
+    if let Some(namespace) = payload.get("namespace") {
+        input.insert("namespace".to_string(), namespace.clone());
+    }
+    if let Some(arguments) = payload.get("arguments") {
+        input.insert("arguments".to_string(), arguments.clone());
+    }
+    Value::Object(input)
+}
+
+fn dynamic_tool_result(payload: &Value) -> Value {
+    let mut result = Map::new();
+    for key in [
+        "tool",
+        "namespace",
+        "arguments",
+        "success",
+        "error",
+        "duration",
+    ] {
+        if let Some(value) = payload.get(key) {
+            result.insert(key.to_string(), value.clone());
+        }
+    }
+    let content = codex_content_items_text(payload);
+    if !content.is_empty() {
+        result.insert("content".to_string(), json!(content));
+    }
+    Value::Object(result)
+}
+
 impl CodexProvider {
     pub fn parse_session_file(&self, path: &PathBuf) -> Option<ParsedSession> {
         let file = match File::open(path) {
@@ -306,6 +414,7 @@ impl CodexProvider {
             std::collections::HashMap::new();
         let mut model: Option<String> = None;
         let mut model_provider: Option<String> = None;
+        let mut thread_name: Option<String> = None;
         let mut current_model: Option<String> = None;
         let mut cc_version: Option<String> = None;
         let mut git_branch: Option<String> = None;
@@ -478,7 +587,7 @@ impl CodexProvider {
 
                     match item_type {
                         "message" => {
-                            let text = extract_codex_content(payload);
+                            let text = omit_base64_image_sources(&extract_codex_content(payload));
                             let normalized_text = strip_inline_image_sources(&text);
                             let role = match role_str {
                                 "user" => MessageRole::User,
@@ -737,6 +846,108 @@ impl CodexProvider {
                                 usage_hash: None,
                             });
                         }
+                        "image_generation_call" => {
+                            let call_id = codex_call_id(payload);
+                            let input_value = codex_image_generation_input(payload);
+                            let metadata = build_tool_metadata(ToolCallFacts {
+                                provider: Provider::Codex,
+                                raw_name: "image_generation_call",
+                                input: Some(&input_value),
+                                call_id,
+                                assistant_id: None,
+                            });
+                            let idx = messages.len();
+                            if let Some(call_id) = call_id {
+                                call_id_map.insert(call_id.to_string(), idx);
+                            }
+                            messages.push(Message {
+                                role: MessageRole::Tool,
+                                content: String::new(),
+                                timestamp: entry.timestamp.clone(),
+                                tool_name: Some(metadata.canonical_name.clone()),
+                                tool_input: Some(input_value.to_string()),
+                                tool_metadata: Some(metadata),
+                                token_usage: None,
+                                model: None,
+                                usage_hash: None,
+                            });
+                        }
+                        "local_shell_call" | "LocalShellCall" => {
+                            let raw_name = "LocalShellCall";
+                            let input_value = payload.clone();
+                            let metadata = build_tool_metadata(ToolCallFacts {
+                                provider: Provider::Codex,
+                                raw_name,
+                                input: Some(&input_value),
+                                call_id: codex_call_id(payload),
+                                assistant_id: None,
+                            });
+                            let idx = messages.len();
+                            if let Some(call_id) = codex_call_id(payload) {
+                                call_id_map.insert(call_id.to_string(), idx);
+                            }
+                            messages.push(Message {
+                                role: MessageRole::Tool,
+                                content: String::new(),
+                                timestamp: entry.timestamp.clone(),
+                                tool_name: Some(metadata.canonical_name.clone()),
+                                tool_input: Some(input_value.to_string()),
+                                tool_metadata: Some(metadata),
+                                token_usage: None,
+                                model: None,
+                                usage_hash: None,
+                            });
+                        }
+                        "tool_search_call" | "ToolSearchCall" => {
+                            let input_value = payload.clone();
+                            let metadata = build_tool_metadata(ToolCallFacts {
+                                provider: Provider::Codex,
+                                raw_name: "ToolSearch",
+                                input: Some(&input_value),
+                                call_id: codex_call_id(payload),
+                                assistant_id: None,
+                            });
+                            let idx = messages.len();
+                            if let Some(call_id) = codex_call_id(payload) {
+                                call_id_map.insert(call_id.to_string(), idx);
+                            }
+                            messages.push(Message {
+                                role: MessageRole::Tool,
+                                content: String::new(),
+                                timestamp: entry.timestamp.clone(),
+                                tool_name: Some(metadata.canonical_name.clone()),
+                                tool_input: Some(input_value.to_string()),
+                                tool_metadata: Some(metadata),
+                                token_usage: None,
+                                model: None,
+                                usage_hash: None,
+                            });
+                        }
+                        "tool_search_output" | "ToolSearchOutput" => {
+                            let output = codex_content_items_text(payload);
+                            if !output.is_empty() {
+                                content_parts.push(output.clone());
+                            }
+                            if let Some(idx) = codex_call_id(payload)
+                                .and_then(|cid| call_id_map.get(cid))
+                                .copied()
+                            {
+                                messages[idx].content = output;
+                                enrich_existing_tool_message(
+                                    &mut messages[idx],
+                                    payload.clone(),
+                                    None,
+                                    payload.get("status").and_then(|v| v.as_str()),
+                                );
+                            }
+                        }
+                        "compaction" | "Compaction" => {
+                            push_system_event(
+                                &mut messages,
+                                entry.timestamp.clone(),
+                                "[context_compacted]".to_string(),
+                            );
+                        }
                         "custom_tool_call" => {
                             let raw_name = payload
                                 .get("name")
@@ -873,6 +1084,89 @@ impl CodexProvider {
                                 timestamp,
                             );
                         }
+                        "item_completed" => {
+                            flush_pending_user_message(
+                                &mut pending_user_message,
+                                &mut messages,
+                                &mut content_parts,
+                                &mut first_user_message,
+                            );
+                            let item = payload.get("item");
+                            if item.and_then(|v| v.get("type")).and_then(|v| v.as_str())
+                                == Some("Plan")
+                            {
+                                let text = item
+                                    .and_then(|v| v.get("text"))
+                                    .and_then(|v| v.as_str())
+                                    .unwrap_or("");
+                                if !text.trim().is_empty() {
+                                    content_parts.push(text.to_string());
+                                    messages.push(Message {
+                                        role: MessageRole::Assistant,
+                                        content: text.to_string(),
+                                        timestamp: entry.timestamp.clone(),
+                                        tool_name: None,
+                                        tool_input: None,
+                                        token_usage: None,
+                                        model: current_model.clone(),
+                                        usage_hash: None,
+                                        tool_metadata: None,
+                                    });
+                                }
+                            }
+                        }
+                        "thread_name_updated" => {
+                            if let Some(name) = payload
+                                .get("thread_name")
+                                .and_then(|v| v.as_str())
+                                .filter(|s| !s.trim().is_empty())
+                            {
+                                thread_name = Some(name.to_string());
+                            }
+                        }
+                        "error" => {
+                            let message = payload
+                                .get("message")
+                                .and_then(|v| v.as_str())
+                                .unwrap_or("unknown error");
+                            let info = payload
+                                .get("codex_error_info")
+                                .and_then(|v| v.as_str())
+                                .unwrap_or("");
+                            let detail = if info.is_empty() {
+                                message.to_string()
+                            } else {
+                                format!("{info}: {message}")
+                            };
+                            push_system_event(
+                                &mut messages,
+                                entry.timestamp.clone(),
+                                format!("[error] {detail}"),
+                            );
+                        }
+                        "turn_aborted" => {
+                            let reason = payload
+                                .get("reason")
+                                .and_then(|v| v.as_str())
+                                .unwrap_or("aborted");
+                            let duration = payload
+                                .get("duration_ms")
+                                .and_then(|v| v.as_u64())
+                                .map(|ms| format!(" ({:.1}s)", ms as f64 / 1000.0))
+                                .unwrap_or_default();
+                            push_system_event(
+                                &mut messages,
+                                entry.timestamp.clone(),
+                                format!("[turn_aborted] {reason}{duration}"),
+                            );
+                        }
+                        "context_compacted" => {
+                            push_system_event(
+                                &mut messages,
+                                entry.timestamp.clone(),
+                                "[context_compacted]".to_string(),
+                            );
+                        }
                         "token_count" => {
                             if let Some(info) = payload.get("info") {
                                 if let Some(last) = info.get("last_token_usage") {
@@ -965,6 +1259,128 @@ impl CodexProvider {
                                 timestamp: entry.timestamp.clone(),
                                 tool_name: Some(metadata.canonical_name.clone()),
                                 tool_input: action.map(|value| value.to_string()),
+                                tool_metadata: Some(metadata),
+                                token_usage: None,
+                                model: None,
+                                usage_hash: None,
+                            });
+                        }
+                        "image_generation_end" => {
+                            let Some(call_id) = codex_call_id(payload) else {
+                                continue;
+                            };
+                            let Some(idx) = call_id_map.get(call_id).copied() else {
+                                log::warn!(
+                                    "missing Codex image generation tool message for event call_id {} in '{}'",
+                                    call_id,
+                                    path.display()
+                                );
+                                continue;
+                            };
+                            if idx >= messages.len() {
+                                continue;
+                            }
+
+                            if let Some(saved_path) =
+                                payload.get("saved_path").and_then(|v| v.as_str())
+                            {
+                                messages[idx].content = format!("[Image: source: {saved_path}]");
+                            }
+                            let result_value = codex_image_generation_result(payload);
+                            enrich_existing_tool_message(
+                                &mut messages[idx],
+                                result_value,
+                                None,
+                                payload.get("status").and_then(|v| v.as_str()),
+                            );
+                        }
+                        "dynamic_tool_call_request" => {
+                            let input_value = dynamic_tool_input(payload);
+                            let raw_name = input_value
+                                .get("tool")
+                                .and_then(|v| v.as_str())
+                                .unwrap_or("dynamic_tool_call");
+                            let metadata = build_tool_metadata(ToolCallFacts {
+                                provider: Provider::Codex,
+                                raw_name,
+                                input: Some(&input_value),
+                                call_id: codex_call_id(payload),
+                                assistant_id: None,
+                            });
+                            let idx = messages.len();
+                            if let Some(call_id) = codex_call_id(payload) {
+                                call_id_map.insert(call_id.to_string(), idx);
+                            }
+                            messages.push(Message {
+                                role: MessageRole::Tool,
+                                content: String::new(),
+                                timestamp: entry.timestamp.clone(),
+                                tool_name: Some(metadata.canonical_name.clone()),
+                                tool_input: Some(input_value.to_string()),
+                                tool_metadata: Some(metadata),
+                                token_usage: None,
+                                model: None,
+                                usage_hash: None,
+                            });
+                        }
+                        "dynamic_tool_call_response" => {
+                            let output = codex_content_items_text(payload);
+                            if !output.is_empty() {
+                                content_parts.push(output.clone());
+                            }
+                            let result_value = dynamic_tool_result(payload);
+                            let is_error = payload
+                                .get("success")
+                                .and_then(|v| v.as_bool())
+                                .map(|success| !success);
+                            let status = payload
+                                .get("success")
+                                .and_then(|v| v.as_bool())
+                                .map(|success| if success { "success" } else { "error" });
+
+                            if let Some(idx) = codex_call_id(payload)
+                                .and_then(|cid| call_id_map.get(cid))
+                                .copied()
+                            {
+                                if idx < messages.len() {
+                                    messages[idx].content = output;
+                                    enrich_existing_tool_message(
+                                        &mut messages[idx],
+                                        result_value,
+                                        is_error,
+                                        status,
+                                    );
+                                    continue;
+                                }
+                            }
+
+                            let input_value = dynamic_tool_input(payload);
+                            let raw_name = input_value
+                                .get("tool")
+                                .and_then(|v| v.as_str())
+                                .unwrap_or("dynamic_tool_call");
+                            let mut metadata = build_tool_metadata(ToolCallFacts {
+                                provider: Provider::Codex,
+                                raw_name,
+                                input: Some(&input_value),
+                                call_id: codex_call_id(payload),
+                                assistant_id: None,
+                            });
+                            enrich_tool_metadata(
+                                &mut metadata,
+                                ToolResultFacts {
+                                    raw_result: Some(&result_value),
+                                    is_error,
+                                    status,
+                                    artifact_path: None,
+                                },
+                            );
+                            messages.push(Message {
+                                role: MessageRole::Tool,
+                                content: output,
+                                timestamp: entry.timestamp.clone(),
+                                tool_name: Some(metadata.canonical_name.clone()),
+                                tool_input: Some(input_value.to_string()),
                                 tool_metadata: Some(metadata),
                                 token_usage: None,
                                 model: None,
@@ -1148,6 +1564,34 @@ impl CodexProvider {
                                 status,
                             );
                         }
+                        "collab_agent_interaction_end" => {
+                            let Some(call_id) = payload.get("call_id").and_then(|v| v.as_str())
+                            else {
+                                continue;
+                            };
+                            let Some(idx) = call_id_map.get(call_id).copied() else {
+                                log::warn!(
+                                    "missing Codex send_input tool message for event call_id {} in '{}'",
+                                    call_id,
+                                    path.display()
+                                );
+                                continue;
+                            };
+                            if idx >= messages.len() {
+                                continue;
+                            }
+
+                            let status = payload
+                                .get("status")
+                                .and_then(|v| v.as_str())
+                                .or(Some("completed"));
+                            enrich_existing_tool_message(
+                                &mut messages[idx],
+                                payload.clone(),
+                                None,
+                                status,
+                            );
+                        }
                         "collab_close_end" => {
                             let Some(call_id) = payload.get("call_id").and_then(|v| v.as_str())
                             else {
@@ -1212,9 +1656,8 @@ impl CodexProvider {
             )
         });
 
-        let title = agent_nickname
-            .as_deref()
-            .map(|n| n.to_string())
+        let title = thread_name
+            .or(agent_nickname.as_deref().map(|n| n.to_string()))
             .unwrap_or_else(|| session_title(first_user_message.as_deref()));
 
         let project_path = cwd.unwrap_or_else(|| NO_PROJECT.to_string());
@@ -1456,6 +1899,7 @@ fn append_user_message(
     content: String,
     timestamp: Option<String>,
 ) {
+    let content = omit_base64_image_sources(&content);
     if content.is_empty() {
         return;
     }
@@ -1716,6 +2160,131 @@ mod tests {
                 .and_then(|files| files.first())
                 .and_then(|value| value.as_str()),
             Some("src/file.rs")
+        );
+    }
+
+    #[test]
+    fn parse_session_file_handles_recent_codex_events_without_base64_output() {
+        let dir = TempDir::new().unwrap();
+        let file = dir.path().join("codex.jsonl");
+        fs::write(
+            &file,
+            concat!(
+                "{\"timestamp\":\"2026-04-28T10:00:00Z\",\"type\":\"session_meta\",\"payload\":{\"id\":\"thread-1\",\"cwd\":\"/tmp/project\"}}\n",
+                "{\"timestamp\":\"2026-04-28T10:00:01Z\",\"type\":\"turn_context\",\"payload\":{\"model\":\"gpt-5.4\"}}\n",
+                "{\"timestamp\":\"2026-04-28T10:00:02Z\",\"type\":\"event_msg\",\"payload\":{\"type\":\"thread_name_updated\",\"thread_id\":\"thread-1\",\"thread_name\":\"Generated image task\"}}\n",
+                "{\"timestamp\":\"2026-04-28T10:00:02Z\",\"type\":\"event_msg\",\"payload\":{\"type\":\"user_message\",\"message\":\"see image\",\"local_images\":[\"data:image/png;base64,USER_IMAGE\"]}}\n",
+                "{\"timestamp\":\"2026-04-28T10:00:02Z\",\"type\":\"response_item\",\"payload\":{\"type\":\"function_call_output\",\"call_id\":\"missing_image\",\"output\":\"[{\\\"detail\\\":\\\"original\\\",\\\"image_url\\\":\\\"data:image/png;base64,TOOL_IMAGE\\\"}]\"}}\n",
+                "{\"timestamp\":\"2026-04-28T10:00:03Z\",\"type\":\"response_item\",\"payload\":{\"type\":\"image_generation_call\",\"id\":\"ig_1\",\"status\":\"generating\",\"revised_prompt\":\"make an icon\"}}\n",
+                "{\"timestamp\":\"2026-04-28T10:00:04Z\",\"type\":\"event_msg\",\"payload\":{\"type\":\"image_generation_end\",\"call_id\":\"ig_1\",\"status\":\"completed\",\"revised_prompt\":\"make an icon\",\"saved_path\":\"/Users/alice/.codex/generated_images/ig_1.png\",\"base64\":\"SHOULD_NOT_APPEAR\"}}\n",
+                "{\"timestamp\":\"2026-04-28T10:00:05Z\",\"type\":\"event_msg\",\"payload\":{\"type\":\"dynamic_tool_call_request\",\"callId\":\"dyn_1\",\"tool\":\"load_workspace_dependencies\",\"arguments\":{}}}\n",
+                "{\"timestamp\":\"2026-04-28T10:00:06Z\",\"type\":\"event_msg\",\"payload\":{\"type\":\"dynamic_tool_call_response\",\"call_id\":\"dyn_1\",\"tool\":\"load_workspace_dependencies\",\"arguments\":{},\"content_items\":[{\"type\":\"inputText\",\"text\":\"Workspace dependencies are available\"}],\"success\":true,\"error\":null,\"duration\":{\"secs\":0,\"nanos\":1000000}}}\n",
+                "{\"timestamp\":\"2026-04-28T10:00:07Z\",\"type\":\"event_msg\",\"payload\":{\"type\":\"item_completed\",\"item\":{\"type\":\"Plan\",\"id\":\"plan_1\",\"text\":\"# Plan\\n- Do the work\"}}}\n",
+                "{\"timestamp\":\"2026-04-28T10:00:08Z\",\"type\":\"event_msg\",\"payload\":{\"type\":\"error\",\"message\":\"unexpected status 502 Bad Gateway\",\"codex_error_info\":\"other\"}}\n",
+                "{\"timestamp\":\"2026-04-28T10:00:09Z\",\"type\":\"event_msg\",\"payload\":{\"type\":\"turn_aborted\",\"turn_id\":\"turn_1\",\"reason\":\"interrupted\",\"duration_ms\":1500}}\n",
+                "{\"timestamp\":\"2026-04-28T10:00:10Z\",\"type\":\"event_msg\",\"payload\":{\"type\":\"context_compacted\"}}\n",
+                "{\"timestamp\":\"2026-04-28T10:00:11Z\",\"type\":\"response_item\",\"payload\":{\"type\":\"function_call\",\"name\":\"send_input\",\"arguments\":\"{\\\"target\\\":\\\"agent-1\\\",\\\"message\\\":\\\"continue\\\"}\",\"call_id\":\"send_1\"}}\n",
+                "{\"timestamp\":\"2026-04-28T10:00:12Z\",\"type\":\"event_msg\",\"payload\":{\"type\":\"collab_agent_interaction_end\",\"call_id\":\"send_1\",\"status\":\"completed\",\"receiver_thread_id\":\"agent-1\"}}\n"
+            ),
+        )
+        .unwrap();
+
+        let provider = CodexProvider {
+            home_dir: PathBuf::from("/tmp"),
+        };
+        let parsed = provider.parse_session_file(&file).expect("parsed session");
+        assert_eq!(parsed.meta.title, "Generated image task");
+        assert!(
+            !parsed
+                .messages
+                .iter()
+                .any(|message| message.content.contains(";base64,")),
+            "base64 image payloads should not be stored in message content"
+        );
+
+        let image = parsed
+            .messages
+            .iter()
+            .find(|message| message.tool_name.as_deref() == Some("ImageGeneration"))
+            .expect("image generation tool");
+        assert_eq!(
+            image.content,
+            "[Image: source: /Users/alice/.codex/generated_images/ig_1.png]"
+        );
+        assert!(!image.content.contains("SHOULD_NOT_APPEAR"));
+        let image_metadata = image.tool_metadata.as_ref().expect("image metadata");
+        assert_eq!(image_metadata.category, "media");
+        assert_eq!(image_metadata.result_kind.as_deref(), Some("image"));
+        assert_eq!(
+            image_metadata
+                .structured
+                .as_ref()
+                .and_then(|value| value.get("savedPath"))
+                .and_then(|value| value.as_str()),
+            Some("/Users/alice/.codex/generated_images/ig_1.png")
+        );
+
+        let dynamic = parsed
+            .messages
+            .iter()
+            .find(|message| {
+                message
+                    .tool_metadata
+                    .as_ref()
+                    .is_some_and(|metadata| metadata.raw_name == "load_workspace_dependencies")
+            })
+            .expect("dynamic tool");
+        assert_eq!(dynamic.tool_name.as_deref(), Some("DynamicTool"));
+        assert_eq!(dynamic.content, "Workspace dependencies are available");
+        assert_eq!(
+            dynamic
+                .tool_metadata
+                .as_ref()
+                .and_then(|metadata| metadata.status.as_deref()),
+            Some("success")
+        );
+
+        assert!(
+            parsed.messages.iter().any(|message| message.role
+                == crate::models::MessageRole::Assistant
+                && message.content.starts_with("# Plan")),
+            "Plan item should be emitted as a visible assistant message"
+        );
+        for marker in ["[error]", "[turn_aborted]", "[context_compacted]"] {
+            assert!(
+                parsed
+                    .messages
+                    .iter()
+                    .any(|message| message.content.contains(marker)),
+                "{marker} should be visible as a system event"
+            );
+        }
+
+        let send_input = parsed
+            .messages
+            .iter()
+            .find(|message| {
+                message
+                    .tool_metadata
+                    .as_ref()
+                    .is_some_and(|metadata| metadata.raw_name == "send_input")
+            })
+            .expect("send_input tool");
+        assert_eq!(
+            send_input
+                .tool_metadata
+                .as_ref()
+                .and_then(|metadata| metadata.status.as_deref()),
+            Some("completed")
+        );
+        assert_eq!(
+            send_input
+                .tool_metadata
+                .as_ref()
+                .and_then(|metadata| metadata.structured.as_ref())
+                .and_then(|value| value.get("receiver_thread_id"))
+                .and_then(|value| value.as_str()),
+            Some("agent-1")
         );
     }
 }

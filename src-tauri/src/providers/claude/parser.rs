@@ -107,6 +107,7 @@ pub fn parse_session_file(path: &PathBuf) -> Option<ParsedSession> {
     let mut summary_text: Option<String> = None;
     let mut custom_title: Option<String> = None;
     let mut ai_title: Option<String> = None;
+    let mut agent_name: Option<String> = None;
     let mut first_timestamp: Option<String> = None;
     let mut last_timestamp: Option<String> = None;
     let mut cwd: Option<String> = None;
@@ -279,6 +280,23 @@ pub fn parse_session_file(path: &PathBuf) -> Option<ParsedSession> {
                 }
                 continue;
             }
+            "agent-name" => {
+                if let Some(name) = entry
+                    .get("agentName")
+                    .or_else(|| entry.get("name"))
+                    .or_else(|| entry.get("title"))
+                    .and_then(|v| v.as_str())
+                    .filter(|s| !s.trim().is_empty())
+                {
+                    agent_name = Some(name.to_string());
+                }
+                continue;
+            }
+            "pr-link" => {
+                flush_pending(&mut state);
+                handle_pr_link(&entry, &mut state, timestamp);
+                continue;
+            }
             // Skip all other types
             _ => {
                 if preserves_pending_user_message(line_type.as_str()) {
@@ -379,6 +397,7 @@ pub fn parse_session_file(path: &PathBuf) -> Option<ParsedSession> {
     let title = custom_title
         .or(ai_title)
         .or(subagent_title)
+        .or(agent_name)
         .unwrap_or_else(|| {
             session_title(
                 state
@@ -981,12 +1000,55 @@ fn handle_system_message(entry: &Value, state: &mut ParseState, timestamp: Optio
                 .unwrap_or(0);
             format!("[api_error] {code} (retry {retry}/{max_retries})")
         }
+        "away_summary" => entry
+            .get("content")
+            .and_then(|v| v.as_str())
+            .filter(|s| !s.trim().is_empty())
+            .map(|content| format!("[away_summary] {content}"))
+            .unwrap_or_else(|| "[away_summary]".to_string()),
+        "scheduled_task_fire" => entry
+            .get("content")
+            .and_then(|v| v.as_str())
+            .filter(|s| !s.trim().is_empty())
+            .map(|content| format!("[scheduled_task_fire] {content}"))
+            .unwrap_or_else(|| "[scheduled_task_fire]".to_string()),
         _ => return,
     };
 
     state.messages.push(Message {
         role: MessageRole::System,
         content,
+        timestamp,
+        tool_name: None,
+        tool_input: None,
+        token_usage: None,
+        model: None,
+        usage_hash: None,
+        tool_metadata: None,
+    });
+}
+
+fn handle_pr_link(entry: &Value, state: &mut ParseState, timestamp: Option<String>) {
+    let pr_url = entry
+        .get("prUrl")
+        .or_else(|| entry.get("pr_url"))
+        .or_else(|| entry.get("url"))
+        .and_then(|v| v.as_str())
+        .unwrap_or("");
+    if pr_url.is_empty() {
+        return;
+    }
+
+    let label = entry
+        .get("prNumber")
+        .or_else(|| entry.get("number"))
+        .and_then(|v| v.as_u64())
+        .map(|number| format!("PR #{number}"))
+        .unwrap_or_else(|| "PR".to_string());
+
+    state.messages.push(Message {
+        role: MessageRole::System,
+        content: format!("[pr_link] {label}: {pr_url}"),
         timestamp,
         tool_name: None,
         tool_input: None,
@@ -1463,5 +1525,85 @@ mod tests {
                 .and_then(|value| value.as_str()),
             Some("<omitted>")
         );
+    }
+
+    #[test]
+    fn parse_session_file_handles_new_claude_events_and_tool_aliases() {
+        let dir = TempDir::new().unwrap();
+        let file = dir.path().join("session.jsonl");
+        let agent_name = r#"{"type":"agent-name","agentName":"blush-task-polling-refactor"}"#;
+        let attachment = r#"{"type":"attachment","timestamp":"2026-04-25T02:03:02Z","attachment":{"type":"skill_listing","content":"skill listing noise that should not render"}}"#;
+        let assistant = r##"{"type":"assistant","uuid":"assistant-1","timestamp":"2026-04-25T02:03:03Z","message":{"id":"msg-1","model":"claude-opus-4-7","role":"assistant","content":[{"type":"tool_use","id":"toolu_wakeup","name":"ScheduleWakeup","input":{"delaySeconds":60,"reason":"wait for startup"}},{"type":"tool_use","id":"toolu_monitor","name":"Monitor","input":{"command":"tail -f app.log","description":"Watch startup logs"}},{"type":"tool_use","id":"toolu_plan","name":"ExitPlanMode","input":{"plan":"# Plan\nDo it"}}]}}"##;
+        let away = r#"{"type":"system","subtype":"away_summary","timestamp":"2026-04-25T02:03:04Z","content":"Work is paused."}"#;
+        let scheduled = r#"{"type":"system","subtype":"scheduled_task_fire","timestamp":"2026-04-25T02:03:05Z","content":"Claude resuming /loop wakeup"}"#;
+        let pr = r#"{"type":"pr-link","timestamp":"2026-04-25T02:03:06Z","prUrl":"https://github.com/example/repo/pull/7","prNumber":7}"#;
+        fs::write(
+            &file,
+            format!("{agent_name}\n{attachment}\n{assistant}\n{away}\n{scheduled}\n{pr}\n"),
+        )
+        .unwrap();
+
+        let parsed = parse_session_file(&file).expect("parsed");
+        assert_eq!(parsed.meta.title, "blush-task-polling-refactor");
+        assert!(
+            !parsed
+                .messages
+                .iter()
+                .any(|message| message.content.contains("skill listing noise")),
+            "attachment skill listings must stay hidden"
+        );
+
+        let wakeup = parsed
+            .messages
+            .iter()
+            .find(|message| message.tool_name.as_deref() == Some("ScheduleWakeup"))
+            .expect("ScheduleWakeup tool");
+        let wakeup_metadata = wakeup.tool_metadata.as_ref().expect("metadata");
+        assert_eq!(wakeup_metadata.category, "cron");
+        assert_eq!(
+            wakeup_metadata.summary.as_deref(),
+            Some("60s · wait for startup")
+        );
+
+        let monitor = parsed
+            .messages
+            .iter()
+            .find(|message| {
+                message
+                    .tool_metadata
+                    .as_ref()
+                    .is_some_and(|metadata| metadata.raw_name == "Monitor")
+            })
+            .expect("Monitor tool");
+        assert_eq!(monitor.tool_name.as_deref(), Some("Bash"));
+        assert_eq!(
+            monitor
+                .tool_metadata
+                .as_ref()
+                .and_then(|metadata| metadata.summary.as_deref()),
+            Some("Watch startup logs")
+        );
+
+        let exit_plan = parsed
+            .messages
+            .iter()
+            .find(|message| {
+                message
+                    .tool_metadata
+                    .as_ref()
+                    .is_some_and(|metadata| metadata.raw_name == "ExitPlanMode")
+            })
+            .expect("ExitPlanMode tool");
+        assert_eq!(exit_plan.tool_name.as_deref(), Some("Plan"));
+
+        for marker in ["[away_summary]", "[scheduled_task_fire]", "[pr_link]"] {
+            assert!(
+                parsed
+                    .messages
+                    .iter()
+                    .any(|message| message.content.contains(marker)),
+                "{marker} should be visible as a system event"
+            );
+        }
     }
 }

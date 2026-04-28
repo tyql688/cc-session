@@ -65,23 +65,35 @@ pub fn extract_tool_output(raw: &str) -> String {
     if trimmed.starts_with('{') {
         if let Ok(v) = serde_json::from_str::<Value>(trimmed) {
             if let Some(out) = v.get("output").and_then(|o| o.as_str()) {
-                return out.to_string();
+                return omit_base64_image_sources(out);
             }
         }
     }
     // Try JSON array of text parts (MCP tool output)
     if trimmed.starts_with('[') {
         if let Ok(arr) = serde_json::from_str::<Vec<Value>>(trimmed) {
-            let texts: Vec<&str> = arr
+            let parts: Vec<String> = arr
                 .iter()
-                .filter_map(|item| item.get("text").and_then(|t| t.as_str()))
+                .filter_map(|item| {
+                    if let Some(text) = item.get("text").and_then(|t| t.as_str()) {
+                        return Some(omit_base64_image_sources(text));
+                    }
+                    if item
+                        .get("image_url")
+                        .and_then(|v| v.as_str())
+                        .is_some_and(is_base64_image_url)
+                    {
+                        return Some("[Image]".to_string());
+                    }
+                    None
+                })
                 .collect();
-            if !texts.is_empty() {
-                return texts.join("\n");
+            if !parts.is_empty() {
+                return parts.join("\n");
             }
         }
     }
-    raw.to_string()
+    omit_base64_image_sources(raw)
 }
 
 pub fn strip_inline_image_sources(text: &str) -> String {
@@ -100,6 +112,36 @@ pub fn strip_inline_image_sources(text: &str) -> String {
         })
         .collect::<Vec<_>>()
         .join("\n")
+}
+
+pub fn omit_base64_image_sources(text: &str) -> String {
+    if !text.contains(";base64,") {
+        return text.to_string();
+    }
+
+    let mut result = String::new();
+    let mut remaining = text;
+    while let Some(start) = remaining.find("[Image: source: data:image/") {
+        result.push_str(&remaining[..start]);
+        let image_marker = &remaining[start..];
+        let Some(end) = image_marker.find(']') else {
+            result.push_str("[Image]");
+            return result;
+        };
+        result.push_str("[Image]");
+        remaining = &image_marker[end + 1..];
+    }
+    result.push_str(remaining);
+
+    if result.contains(";base64,") && is_base64_image_url(result.trim()) {
+        "[Image]".to_string()
+    } else {
+        result
+    }
+}
+
+fn is_base64_image_url(value: &str) -> bool {
+    value.starts_with("data:image/") && value.contains(";base64,")
 }
 
 pub fn build_codex_user_message(payload: &Value, response_image_segments: &[String]) -> String {

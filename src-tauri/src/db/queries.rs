@@ -7,6 +7,9 @@ use crate::models::{SearchFilters, SearchResult, SessionMeta};
 use super::row_mapper::row_to_session_meta;
 use super::Database;
 
+const LIKE_SNIPPET_CONTEXT_CHARS: usize = 80;
+const LIKE_SNIPPET_MAX_CHARS: usize = 200;
+
 #[derive(Debug, Clone)]
 pub(crate) struct UsageByModelRow {
     pub model: String,
@@ -84,8 +87,8 @@ impl Database {
         filters: &SearchFilters,
     ) -> Result<Vec<SearchResult>, rusqlite::Error> {
         let conn = self.lock_read()?;
+        let has_query = !filters.query.trim().is_empty();
         let safe_query = build_fts_query(&filters.query);
-        let has_query = safe_query.is_some();
         let has_filters = filters.provider.is_some()
             || filters.project.is_some()
             || filters.after.is_some()
@@ -765,7 +768,10 @@ fn search_with_like(
                 CASE
                     WHEN ?1 <> '' THEN substr(s.content_text, 1, 200)
                     ELSE ''
-                END AS snip
+                END AS snip,
+                s.title AS like_title,
+                s.content_text AS like_content_text,
+                s.project_name AS like_project_name
          FROM sessions s
          WHERE 1=1",
     );
@@ -786,7 +792,7 @@ fn search_with_like(
     let next_index = param_values.len() + 1;
     append_search_filters_numbered(&mut sql, &mut param_values, filters, next_index);
     sql.push_str(" ORDER BY s.created_at DESC LIMIT 100");
-    query_search_results(conn, &sql, &param_values)
+    query_like_search_results(conn, &sql, &param_values, &tokens)
 }
 
 fn append_search_filters(
@@ -865,6 +871,184 @@ fn query_search_results(
     Ok(results)
 }
 
+fn query_like_search_results(
+    conn: &Connection,
+    sql: &str,
+    param_values: &[Box<dyn rusqlite::types::ToSql>],
+    tokens: &[String],
+) -> Result<Vec<SearchResult>, rusqlite::Error> {
+    let mut stmt = conn.prepare(sql)?;
+    let params_refs: Vec<&dyn rusqlite::types::ToSql> = param_values
+        .iter()
+        .map(std::convert::AsRef::as_ref)
+        .collect();
+    let rows = stmt.query_map(params_refs.as_slice(), |row| {
+        let fallback_snippet: String = row.get(16)?;
+        let title: String = row.get(17)?;
+        let content_text: String = row.get(18)?;
+        let project_name: String = row.get(19)?;
+        let snippet = build_like_snippet(&title, &content_text, &project_name, tokens)
+            .unwrap_or(fallback_snippet);
+
+        Ok(SearchResult {
+            session: row_to_session_meta(row)?,
+            snippet,
+        })
+    })?;
+
+    let mut results = Vec::new();
+    for row in rows {
+        results.push(row?);
+    }
+    Ok(results)
+}
+
+fn build_like_snippet(
+    title: &str,
+    content_text: &str,
+    project_name: &str,
+    tokens: &[String],
+) -> Option<String> {
+    if tokens.is_empty() {
+        return Some(String::new());
+    }
+
+    for source in [title, content_text, project_name] {
+        if source.trim().is_empty() {
+            continue;
+        }
+        if let Some(match_start) = find_first_like_match(source, tokens) {
+            return Some(snippet_around_match(source, match_start, tokens));
+        }
+    }
+
+    None
+}
+
+fn snippet_around_match(source: &str, match_byte_start: usize, tokens: &[String]) -> String {
+    let total_chars = source.chars().count();
+    if total_chars <= LIKE_SNIPPET_MAX_CHARS {
+        return highlight_like_tokens(source, tokens);
+    }
+
+    let match_char_start = source[..match_byte_start].chars().count();
+    let mut start_char = match_char_start.saturating_sub(LIKE_SNIPPET_CONTEXT_CHARS);
+    let mut end_char = (start_char + LIKE_SNIPPET_MAX_CHARS).min(total_chars);
+    if end_char == total_chars {
+        start_char = total_chars.saturating_sub(LIKE_SNIPPET_MAX_CHARS);
+        end_char = total_chars;
+    }
+
+    let start_byte = byte_index_for_char(source, start_char);
+    let end_byte = byte_index_for_char(source, end_char);
+    let mut snippet = String::new();
+    if start_char > 0 {
+        snippet.push_str("...");
+    }
+    snippet.push_str(&source[start_byte..end_byte]);
+    if end_char < total_chars {
+        snippet.push_str("...");
+    }
+
+    highlight_like_tokens(&snippet, tokens)
+}
+
+fn byte_index_for_char(source: &str, char_index: usize) -> usize {
+    if char_index == 0 {
+        return 0;
+    }
+
+    source
+        .char_indices()
+        .nth(char_index)
+        .map(|(idx, _)| idx)
+        .unwrap_or(source.len())
+}
+
+fn find_first_like_match(source: &str, tokens: &[String]) -> Option<usize> {
+    tokens
+        .iter()
+        .filter(|token| !token.is_empty())
+        .filter_map(|token| find_like_match(source, token))
+        .min()
+}
+
+fn find_like_match(source: &str, token: &str) -> Option<usize> {
+    source.find(token).or_else(|| {
+        if token.is_ascii() {
+            source
+                .to_ascii_lowercase()
+                .find(&token.to_ascii_lowercase())
+        } else {
+            None
+        }
+    })
+}
+
+fn highlight_like_tokens(snippet: &str, tokens: &[String]) -> String {
+    let mut ranges = Vec::new();
+    for token in tokens {
+        collect_like_match_ranges(snippet, token, &mut ranges);
+    }
+    ranges.sort_by(|a, b| {
+        let a_len = a.1 - a.0;
+        let b_len = b.1 - b.0;
+        a.0.cmp(&b.0).then_with(|| b_len.cmp(&a_len))
+    });
+
+    let mut selected = Vec::new();
+    let mut covered_until = 0;
+    for (start, end) in ranges {
+        if start >= covered_until {
+            selected.push((start, end));
+            covered_until = end;
+        }
+    }
+
+    if selected.is_empty() {
+        return snippet.to_string();
+    }
+
+    let mut highlighted = String::with_capacity(snippet.len() + selected.len() * 13);
+    let mut cursor = 0;
+    for (start, end) in selected {
+        highlighted.push_str(&snippet[cursor..start]);
+        highlighted.push_str("<mark>");
+        highlighted.push_str(&snippet[start..end]);
+        highlighted.push_str("</mark>");
+        cursor = end;
+    }
+    highlighted.push_str(&snippet[cursor..]);
+    highlighted
+}
+
+fn collect_like_match_ranges(snippet: &str, token: &str, ranges: &mut Vec<(usize, usize)>) {
+    if token.is_empty() {
+        return;
+    }
+
+    if token.is_ascii() {
+        let haystack = snippet.to_ascii_lowercase();
+        let needle = token.to_ascii_lowercase();
+        let mut offset = 0;
+        while let Some(relative_start) = haystack[offset..].find(&needle) {
+            let start = offset + relative_start;
+            let end = start + token.len();
+            ranges.push((start, end));
+            offset = end;
+        }
+        return;
+    }
+
+    let mut offset = 0;
+    while let Some(relative_start) = snippet[offset..].find(token) {
+        let start = offset + relative_start;
+        let end = start + token.len();
+        ranges.push((start, end));
+        offset = end;
+    }
+}
+
 fn build_fts_query(raw: &str) -> Option<String> {
     // Trigram tokenizer requires each query term to have at least 3 characters
     // (codepoints). If any token is shorter we bail out so the caller falls
@@ -890,4 +1074,116 @@ fn build_fts_query(raw: &str) -> Option<String> {
             .collect::<Vec<_>>()
             .join(" AND "),
     )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::models::Provider;
+    use crate::provider::ParsedSession;
+    use tempfile::TempDir;
+
+    fn sample_meta(session_id: &str) -> SessionMeta {
+        SessionMeta {
+            id: session_id.to_string(),
+            provider: Provider::Claude,
+            title: "Test".into(),
+            project_path: "/tmp/project".into(),
+            project_name: "project".into(),
+            created_at: 1_775_635_200,
+            updated_at: 1_775_635_200,
+            message_count: 1,
+            file_size_bytes: 0,
+            source_path: format!("/tmp/{session_id}.jsonl"),
+            is_sidechain: false,
+            variant_name: None,
+            model: Some("claude-opus-4-6".into()),
+            cc_version: None,
+            git_branch: None,
+            parent_id: None,
+        }
+    }
+
+    fn parsed_session(meta: SessionMeta, content_text: String) -> ParsedSession {
+        ParsedSession {
+            meta,
+            messages: Vec::new(),
+            content_text,
+            parse_warning_count: 0,
+        }
+    }
+
+    #[test]
+    fn like_search_centers_and_marks_short_chinese_match() {
+        let dir = TempDir::new().unwrap();
+        let db = Database::open(dir.path()).unwrap();
+        let prefix = "开头内容".repeat(70);
+        let content = format!("{prefix}这里才出现中文搜索命中，后面还有内容。");
+        db.sync_provider_snapshot(
+            &Provider::Claude,
+            &[parsed_session(sample_meta("session-cn"), content)],
+            true,
+        )
+        .unwrap();
+
+        let results = db
+            .search_filtered(&SearchFilters {
+                query: "中文".into(),
+                ..SearchFilters::default()
+            })
+            .unwrap();
+
+        assert_eq!(results.len(), 1);
+        assert!(results[0].snippet.starts_with("..."));
+        assert!(results[0].snippet.contains("<mark>中文</mark>"));
+    }
+
+    #[test]
+    fn like_search_marks_short_chinese_title_match() {
+        let dir = TempDir::new().unwrap();
+        let db = Database::open(dir.path()).unwrap();
+        let mut meta = sample_meta("session-title-cn");
+        meta.title = "中文搜索标题".into();
+        db.sync_provider_snapshot(
+            &Provider::Claude,
+            &[parsed_session(meta, "正文没有目标词".into())],
+            true,
+        )
+        .unwrap();
+
+        let results = db
+            .search_filtered(&SearchFilters {
+                query: "中文".into(),
+                ..SearchFilters::default()
+            })
+            .unwrap();
+
+        assert_eq!(results.len(), 1);
+        assert_eq!(results[0].snippet, "<mark>中文</mark>搜索标题");
+    }
+
+    #[test]
+    fn like_search_keeps_empty_snippet_for_filter_only_results() {
+        let dir = TempDir::new().unwrap();
+        let db = Database::open(dir.path()).unwrap();
+        db.sync_provider_snapshot(
+            &Provider::Claude,
+            &[parsed_session(
+                sample_meta("session-filter"),
+                "中文正文".into(),
+            )],
+            true,
+        )
+        .unwrap();
+
+        let results = db
+            .search_filtered(&SearchFilters {
+                provider: Some(Provider::Claude.key().to_string()),
+                ..SearchFilters::default()
+            })
+            .unwrap();
+
+        assert_eq!(results.len(), 1);
+        assert!(results[0].snippet.is_empty());
+    }
 }

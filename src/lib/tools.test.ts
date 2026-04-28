@@ -179,4 +179,48 @@ describe("tool registry", () => {
       "*** Update File: ~/project/src/app.ts",
     );
   });
+
+  it("formats image generation and dynamic tool metadata", () => {
+    const imageDetail = formatToolResultMetadata({
+      raw_name: "image_generation_call",
+      canonical_name: "ImageGeneration",
+      display_name: "image generation",
+      category: "media",
+      status: "completed",
+      result_kind: "image",
+      structured: {
+        savedPath: "/Users/alice/.codex/generated_images/ig_1.png",
+        revisedPrompt: "make an icon",
+      },
+    });
+
+    expect(toolIcon("ImageGeneration")).toBe("🖼️");
+    expect(imageDetail?.lines).toContainEqual({
+      label: "savedPath",
+      value: "~/.codex/generated_images/ig_1.png",
+    });
+
+    const dynamicDetail = formatToolResultMetadata({
+      raw_name: "load_workspace_dependencies",
+      canonical_name: "DynamicTool",
+      display_name: "load workspace dependencies",
+      category: "tool",
+      status: "success",
+      structured: {
+        tool: "load_workspace_dependencies",
+        success: true,
+        content: "Workspace dependencies are available",
+      },
+    });
+
+    expect(toolIcon("DynamicTool")).toBe("🧩");
+    expect(dynamicDetail?.lines).toContainEqual({
+      label: "tool",
+      value: "load_workspace_dependencies",
+    });
+    expect(dynamicDetail?.lines).toContainEqual({
+      label: "result",
+      value: "Workspace dependencies are available",
+    });
+  });
 });

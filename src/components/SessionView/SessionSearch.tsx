@@ -3,8 +3,10 @@ import { useI18n } from "../../i18n/index";
 
 export function SessionSearch(props: {
   sessionSearch: Accessor<string>;
+  activeSessionSearch: Accessor<string>;
   setSessionSearch: Setter<string>;
   searchMatchIdx: Accessor<number>;
+  searchMatchCount: Accessor<number>;
   setSearchMatchIdx: Setter<number>;
   setSearchBarOpen: Setter<boolean>;
   messagesRef: HTMLDivElement | undefined;
@@ -53,17 +55,6 @@ export function SessionSearch(props: {
         onInput={(e) => {
           props.setSessionSearch(e.currentTarget.value);
           props.setSearchMatchIdx(0);
-          // Auto-jump to first match after DOM re-renders
-          requestAnimationFrame(() => {
-            const marks = getMarksInVisualOrder();
-            if (marks.length > 0) {
-              props.messagesRef
-                ?.querySelector("mark.search-active")
-                ?.classList.remove("search-active");
-              marks[0].classList.add("search-active");
-              marks[0].scrollIntoView({ behavior: "smooth", block: "center" });
-            }
-          });
         }}
         onKeyDown={(e) => {
           if (e.key === "Enter") {
@@ -81,10 +72,13 @@ export function SessionSearch(props: {
       />
       <span class="session-search-count">
         {(() => {
-          const total = getMarksInVisualOrder().length;
+          const query = props.sessionSearch().trim();
+          const activeQuery = props.activeSessionSearch().trim();
+          if (!query) return "";
+          if (query !== activeQuery) return "";
+          const total = props.searchMatchCount();
           if (total > 0) return `${props.searchMatchIdx() + 1}/${total}`;
-          if (props.sessionSearch().trim()) return t("session.searchNoMatch");
-          return "";
+          return t("session.searchNoMatch");
         })()}
       </span>
       <button

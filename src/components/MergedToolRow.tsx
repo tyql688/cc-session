@@ -10,12 +10,16 @@ export function MergedToolRow(props: {
   highlightTerm?: string;
 }) {
   const [manualExpanded, setManualExpanded] = createSignal(false);
-  // Force-expand while an in-session search is active, so matches inside
-  // tool output are actually rendered (and counted) in the DOM.
-  const searchActive = createMemo(
-    () => (props.highlightTerm ?? "").trim().length > 0,
-  );
-  const expanded = () => manualExpanded() || searchActive();
+  const searchMatchesGroup = createMemo(() => {
+    const term = (props.highlightTerm ?? "").trim().toLocaleLowerCase();
+    if (!term) return false;
+    return props.messages.some((message) =>
+      [message.tool_name, message.tool_input, message.content]
+        .filter((value): value is string => !!value)
+        .some((value) => value.toLocaleLowerCase().includes(term)),
+    );
+  });
+  const expanded = () => manualExpanded() || searchMatchesGroup();
 
   const label = () =>
     props.tools.length > 0

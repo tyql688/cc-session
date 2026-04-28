@@ -178,6 +178,8 @@ pub(crate) fn tool_icon(name: &str, metadata: Option<&ToolMetadata>) -> &'static
         "Plan" | "TaskCreate" | "TaskUpdate" | "TaskList" => "📋",
         "TaskStop" => "🛑",
         "WebSearch" | "WebFetch" => "🌐",
+        "ImageGeneration" => "🖼️",
+        "DynamicTool" => "🧩",
         "ToolSearch" => "🧰",
         "Skill" => "⚡",
         "AskUserQuestion" => "❓",
@@ -419,6 +421,21 @@ pub(crate) fn render_tool_result_detail(metadata: Option<&ToolMetadata>) -> Stri
         }
         "WebFetch" => {
             for key in ["url", "code", "codeText", "durationMs"] {
+                if let Some(value) = structured.get(key) {
+                    html.push_str(&render_field(key, &value_to_short_string(value)));
+                }
+            }
+        }
+        "ImageGeneration" => {
+            if let Some(path) = string_field(structured, &["savedPath", "saved_path"]) {
+                html.push_str(&render_field("savedPath", path));
+            }
+            if let Some(prompt) = string_field(structured, &["revisedPrompt", "revised_prompt"]) {
+                html.push_str(&render_field("revisedPrompt", prompt));
+            }
+        }
+        "DynamicTool" => {
+            for key in ["tool", "name", "success", "duration", "content"] {
                 if let Some(value) = structured.get(key) {
                     html.push_str(&render_field(key, &value_to_short_string(value)));
                 }

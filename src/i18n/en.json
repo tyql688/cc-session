@@ -244,7 +244,13 @@
     "compact": "Compact",
     "microcompact": "Microcompact",
     "hooks": "Hooks",
-    "apiError": "API Error"
+    "apiError": "API Error",
+    "awaySummary": "Away summary",
+    "scheduledTask": "Scheduled wakeup",
+    "prLink": "PR",
+    "error": "Error",
+    "turnAborted": "Aborted",
+    "contextCompacted": "Compacted"
   },
   "blocked": {
     "hint": "Right-click a project folder and select \"Block This Folder\""

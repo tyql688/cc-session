@@ -547,10 +547,13 @@ fn codex_user_message_event_merges_placeholder_with_embedded_image_source() {
         .expect("expected a parsed user message");
     assert_eq!(first.role, MessageRole::User);
     assert!(
-        first
-            .content
-            .contains("[Image: source: data:image/png;base64,abc123]"),
-        "expected embedded image source, got: {}",
+        first.content.contains("[Image: source: /tmp/replay.png]"),
+        "expected local image source without embedded base64, got: {}",
+        first.content
+    );
+    assert!(
+        !first.content.contains("data:image/png;base64"),
+        "embedded base64 image data must not be stored in message content, got: {}",
         first.content
     );
     assert!(
