@@ -7,6 +7,12 @@ versioned with [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.3.29] - 2026-05-01
+
+### Fixed
+
+- Session token totals were undercounted for large sessions after the 0.3.28 streaming pagination change; totals now read from precomputed DB aggregates in SessionMeta (e449f19)
+
 ## [0.3.28] - 2026-05-01
 
 ### Fixed
