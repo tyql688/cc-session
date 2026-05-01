@@ -7,6 +7,18 @@ versioned with [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.3.28] - 2026-05-01
+
+### Fixed
+
+- Windows UI no longer freezes when opening large Claude sessions (b3394f9)
+
+### Changed
+
+- Large sessions now stream the latest 300 messages first and page older entries on scroll, instead of loading the entire transcript up front (b3394f9)
+- Persisted-output blocks in tool results resolve lazily on first view rather than during session load (b3394f9)
+- Switching tabs during a long session parse cancels the in-flight load (b3394f9)
+
 ## [0.3.27] - 2026-05-01
 
 ### Fixed
