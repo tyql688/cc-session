@@ -319,15 +319,17 @@ impl SessionProvider for CcMirrorProvider {
     fn scan_source(&self, source_path: &str) -> Result<Vec<ParsedSession>, ProviderError> {
         let path = PathBuf::from(source_path);
         let variant = self.variant_by_path(source_path).cloned();
-        Ok(parser::parse_session_file(&path)
-            .map(|mut parsed| {
+        let related_paths = crate::provider::jsonl_subagent_related_paths(&path);
+        Ok(related_paths
+            .par_iter()
+            .filter_map(|path| {
+                let mut parsed = parser::parse_session_file(path)?;
                 parsed.meta.provider = Provider::CcMirror;
                 if let Some(variant) = &variant {
                     Self::apply_variant(&mut parsed, variant);
                 }
-                parsed
+                Some(parsed)
             })
-            .into_iter()
             .collect())
     }
 
@@ -350,10 +352,7 @@ impl SessionProvider for CcMirrorProvider {
 
         // Mirror Claude provider: defer persisted-output resolution to the
         // viewer (resolve_persisted_output command). See providers/claude/mod.rs.
-        Ok(LoadedSession {
-            messages: parsed.messages,
-            parse_warning_count: parsed.parse_warning_count,
-        })
+        Ok(LoadedSession::from_parsed(parsed))
     }
 }
 

@@ -160,10 +160,7 @@ impl CursorProvider {
             .map_err(|e| ProviderError::Parse(format!("failed to read transcript: {e}")))?;
         let (messages, parse_warning_count) =
             crate::providers::cursor::parser::parse_transcript_messages(&content, source_path);
-        Ok(LoadedSession {
-            messages,
-            parse_warning_count,
-        })
+        Ok(LoadedSession::from_messages(messages, parse_warning_count))
     }
 
     fn extract_workspace_path_from_store_db(&self, store_db_path: &Path) -> Option<String> {

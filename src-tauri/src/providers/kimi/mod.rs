@@ -189,9 +189,6 @@ impl SessionProvider for KimiProvider {
                 ProviderError::Parse(format!("session {session_id} not found in {}", source_path))
             })?;
 
-        Ok(LoadedSession {
-            messages: parsed.messages,
-            parse_warning_count: parsed.parse_warning_count,
-        })
+        Ok(LoadedSession::from_parsed(parsed))
     }
 }

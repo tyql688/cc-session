@@ -39,7 +39,9 @@ export function SessionToolbar(props: {
     const output = meta.output_tokens ?? 0;
     const cacheRead = meta.cache_read_tokens ?? 0;
     const cacheWrite = meta.cache_write_tokens ?? 0;
-    return input + output > 0 ? { input, output, cacheRead, cacheWrite } : null;
+    return input + output + cacheRead + cacheWrite > 0
+      ? { input, output, cacheRead, cacheWrite }
+      : null;
   };
 
   return (

@@ -2,13 +2,12 @@ use std::collections::HashMap;
 
 use rusqlite::{params, params_from_iter, Connection};
 
-use crate::models::{SearchFilters, SearchResult, SessionMeta};
+use crate::models::{SearchFilters, SearchResult, SessionMeta, TokenTotals};
 
 use super::row_mapper::row_to_session_meta;
 use super::Database;
 
 const LIKE_SNIPPET_CONTEXT_CHARS: usize = 80;
-
 
 const LIKE_SNIPPET_MAX_CHARS: usize = 200;
 
@@ -74,6 +73,35 @@ impl Database {
             Some(Err(e)) => Err(e),
             None => Ok(None),
         }
+    }
+
+    pub fn get_session_token_totals(
+        &self,
+        session_id: &str,
+    ) -> Result<Option<TokenTotals>, rusqlite::Error> {
+        let conn = self.lock_read()?;
+        conn.query_row(
+            "SELECT COUNT(*),
+                    COALESCE(SUM(input_tokens), 0),
+                    COALESCE(SUM(output_tokens), 0),
+                    COALESCE(SUM(cache_read_tokens), 0),
+                    COALESCE(SUM(cache_write_tokens), 0)
+             FROM session_token_stats
+             WHERE session_id = ?1",
+            params![session_id],
+            |row| {
+                let count: u64 = row.get(0)?;
+                if count == 0 {
+                    return Ok(None);
+                }
+                Ok(Some(TokenTotals {
+                    input_tokens: row.get(1)?,
+                    output_tokens: row.get(2)?,
+                    cache_read_tokens: row.get(3)?,
+                    cache_write_tokens: row.get(4)?,
+                }))
+            },
+        )
     }
 
     pub fn list_sessions(&self) -> Result<Vec<SessionMeta>, rusqlite::Error> {
@@ -1109,6 +1137,7 @@ fn build_fts_query(raw: &str) -> Option<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::db::sync::TokenStatRow;
     use crate::models::Provider;
     use crate::provider::ParsedSession;
     use tempfile::TempDir;
@@ -1145,6 +1174,58 @@ mod tests {
             content_text,
             parse_warning_count: 0,
         }
+    }
+
+    #[test]
+    fn get_session_token_totals_prefers_indexed_usage_rows() {
+        let dir = TempDir::new().unwrap();
+        let db = Database::open(dir.path()).unwrap();
+        let meta = sample_meta("session-usage");
+        db.sync_provider_snapshot(
+            &Provider::Claude,
+            &[parsed_session(meta.clone(), String::new())],
+            true,
+        )
+        .unwrap();
+
+        assert_eq!(db.get_session_token_totals(&meta.id).unwrap(), None);
+
+        db.replace_token_stats(
+            &meta.id,
+            &[
+                TokenStatRow {
+                    date: "2026-04-09".into(),
+                    model: "claude-opus-4-6".into(),
+                    turn_count: 1,
+                    input_tokens: 100,
+                    output_tokens: 50,
+                    cache_read_tokens: 20,
+                    cache_write_tokens: 10,
+                    cost_usd: 0.01,
+                },
+                TokenStatRow {
+                    date: "2026-04-10".into(),
+                    model: "claude-opus-4-6".into(),
+                    turn_count: 1,
+                    input_tokens: 7,
+                    output_tokens: 3,
+                    cache_read_tokens: 2,
+                    cache_write_tokens: 1,
+                    cost_usd: 0.001,
+                },
+            ],
+        )
+        .unwrap();
+
+        assert_eq!(
+            db.get_session_token_totals(&meta.id).unwrap(),
+            Some(TokenTotals {
+                input_tokens: 107,
+                output_tokens: 53,
+                cache_read_tokens: 22,
+                cache_write_tokens: 11,
+            })
+        );
     }
 
     #[test]

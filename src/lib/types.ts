@@ -32,6 +32,13 @@ export interface SessionMeta {
   cache_write_tokens: number;
 }
 
+export interface TokenTotals {
+  input_tokens: number;
+  output_tokens: number;
+  cache_read_tokens: number;
+  cache_write_tokens: number;
+}
+
 /** Lightweight reference for opening sessions from the tree.
  * SessionMeta satisfies this interface via structural typing. */
 export interface SessionRef {

@@ -13,6 +13,7 @@ import type {
   SessionMeta,
   Message,
   MessageRole,
+  TokenTotals,
 } from "../../lib/types";
 import {
   getSessionMeta,
@@ -154,6 +155,19 @@ export function SessionView(props: {
   let suppressNextSearchEffect = false;
   let prevSessionId: string | null = null;
 
+  function withTokenTotals(
+    metaData: SessionMeta,
+    totals: TokenTotals,
+  ): SessionMeta {
+    return {
+      ...metaData,
+      input_tokens: totals.input_tokens,
+      output_tokens: totals.output_tokens,
+      cache_read_tokens: totals.cache_read_tokens,
+      cache_write_tokens: totals.cache_write_tokens,
+    };
+  }
+
   createEffect(
     on(
       () => props.session.id,
@@ -179,7 +193,6 @@ export function SessionView(props: {
           const metaData = await getSessionMeta(sessionId);
           if (version !== loadVersion) return;
           setMeta(metaData);
-
           // Newest tail next — backend caches the parsed messages so
           // subsequent older-page reads are O(1) slicing.
           const tail = await getSessionMessagesWindow(
@@ -188,6 +201,7 @@ export function SessionView(props: {
             INITIAL_TAIL,
           );
           if (version !== loadVersion) return;
+          setMeta(withTokenTotals(metaData, tail.token_totals));
           setMessages(tail.messages);
           setParseWarningCount(tail.parse_warning_count ?? 0);
           setTotalMessages(tail.total);
@@ -294,6 +308,7 @@ export function SessionView(props: {
     try {
       const older = await getSessionMessagesWindow(sessionId, newStart, span);
       if (sessionId !== props.session.id) return;
+      setMeta((prev) => withTokenTotals(prev, older.token_totals));
       // Prepend the newly fetched older messages and grow `visibleCount`
       // by the same amount so the just-fetched entries actually become
       // visible at the top of the viewport (column-reverse layout).
@@ -430,7 +445,7 @@ export function SessionView(props: {
         getSessionMessagesWindow(sessionId, -INITIAL_TAIL, INITIAL_TAIL),
       ]);
       if (sessionId !== props.session.id) return;
-      setMeta(metaData);
+      setMeta(withTokenTotals(metaData, tail.token_totals));
       setMessages(tail.messages);
       setParseWarningCount(tail.parse_warning_count ?? 0);
       setTotalMessages(tail.total);

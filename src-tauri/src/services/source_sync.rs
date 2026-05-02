@@ -59,9 +59,19 @@ impl<'a> SourceSyncService<'a> {
             }
         };
 
+        let mut parents = Vec::new();
+        let mut children = Vec::new();
+        for parsed in &sessions {
+            if parsed.meta.parent_id.is_none() {
+                parents.push(parsed);
+            } else {
+                children.push(parsed);
+            }
+        }
+
         let mut seen_hashes = HashSet::new();
         let mut stats_batch: Vec<(String, Vec<crate::db::sync::TokenStatRow>)> = Vec::new();
-        for parsed in &sessions {
+        for parsed in parents.iter().chain(children.iter()) {
             let stat_rows = compute_token_stats_with_catalog_dedup(
                 parsed,
                 pricing_catalog.as_ref(),

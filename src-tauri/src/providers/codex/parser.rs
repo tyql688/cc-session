@@ -416,6 +416,7 @@ impl CodexProvider {
         let mut model_provider: Option<String> = None;
         let mut thread_name: Option<String> = None;
         let mut current_model: Option<String> = None;
+        let mut previous_token_totals: Option<CodexRawUsageCounts> = None;
         let mut cc_version: Option<String> = None;
         let mut git_branch: Option<String> = None;
         let mut is_sidechain = false;
@@ -1169,36 +1170,23 @@ impl CodexProvider {
                         }
                         "token_count" => {
                             if let Some(info) = payload.get("info") {
-                                if let Some(last) = info.get("last_token_usage") {
-                                    let input = last
-                                        .get("input_tokens")
-                                        .and_then(|v| v.as_u64())
-                                        .unwrap_or(0)
-                                        as u32;
-                                    let output = last
-                                        .get("output_tokens")
-                                        .and_then(|v| v.as_u64())
-                                        .unwrap_or(0)
-                                        as u32;
-                                    let cached = last
-                                        .get("cached_input_tokens")
-                                        .and_then(|v| v.as_u64())
-                                        .unwrap_or(0)
-                                        as u32;
-                                    let usage = TokenUsage {
-                                        input_tokens: input,
-                                        output_tokens: output,
-                                        cache_read_input_tokens: cached,
-                                        cache_creation_input_tokens: 0,
-                                    };
-                                    if let Some(last_msg) = messages
-                                        .iter_mut()
-                                        .rev()
-                                        .find(|m| m.role == MessageRole::Assistant)
-                                    {
-                                        last_msg.token_usage = Some(usage);
-                                    }
+                                let Some((usage_model, usage_counts)) =
+                                    codex_usage_from_info(info, &mut previous_token_totals)
+                                else {
+                                    continue;
+                                };
+                                let Some(usage) = codex_token_usage_from_counts(usage_counts)
+                                else {
+                                    continue;
+                                };
+                                let resolved_model = extract_codex_model(info)
+                                    .or_else(|| extract_codex_model(payload))
+                                    .or_else(|| current_model.clone())
+                                    .or(usage_model);
+                                if let Some(model_name) = resolved_model.clone() {
+                                    current_model = Some(model_name);
                                 }
+                                add_usage_to_last_assistant(&mut messages, usage, resolved_model);
                             }
                         }
                         "web_search_end" => {
@@ -1718,7 +1706,7 @@ pub fn extract_usage_events_from_file(path: &PathBuf) -> Vec<CodexUsageEvent> {
     let reader = BufReader::new(file);
 
     let mut current_model: Option<String> = None;
-    let mut previous_totals: Option<(u64, u64, u64, u64, u64)> = None;
+    let mut previous_totals: Option<CodexRawUsageCounts> = None;
     let mut events = Vec::new();
 
     for line in reader.lines() {
@@ -1766,27 +1754,9 @@ pub fn extract_usage_events_from_file(path: &PathBuf) -> Vec<CodexUsageEvent> {
                     continue;
                 };
 
-                let last_usage = info
-                    .get("last_token_usage")
-                    .and_then(normalize_codex_raw_usage);
-                let total_usage = info
-                    .get("total_token_usage")
-                    .and_then(normalize_codex_raw_usage);
-
-                let raw_usage = match (last_usage, total_usage) {
-                    (Some(last), _) => {
-                        previous_totals = Some(last.1);
-                        Some(last)
-                    }
-                    (None, Some(total)) => {
-                        let delta = subtract_codex_usage(total.1, previous_totals);
-                        previous_totals = Some(total.1);
-                        Some((total.0, delta))
-                    }
-                    (None, None) => None,
-                };
-
-                let Some((model, (input, cached, output, reasoning, total))) = raw_usage else {
+                let Some((model, (input, cached, output, reasoning, total))) =
+                    codex_usage_from_info(info, &mut previous_totals)
+                else {
                     continue;
                 };
                 if input == 0 && cached == 0 && output == 0 && reasoning == 0 && total == 0 {
@@ -1799,15 +1769,12 @@ pub fn extract_usage_events_from_file(path: &PathBuf) -> Vec<CodexUsageEvent> {
                     .unwrap_or_else(|| model.unwrap_or_else(|| "gpt-5".to_string()));
                 current_model = Some(model.clone());
 
-                let cache_read = cached.min(input);
-                let non_cached_input = input.saturating_sub(cache_read);
-
                 events.push(CodexUsageEvent {
                     timestamp,
                     model,
-                    input_tokens: non_cached_input,
+                    input_tokens: input,
                     output_tokens: output,
-                    cache_read_input_tokens: cache_read,
+                    cache_read_input_tokens: cached.min(input),
                 });
             }
             _ => {}
@@ -1849,7 +1816,8 @@ fn extract_codex_model(value: &Value) -> Option<String> {
         })
 }
 
-type RawCodexUsage = (Option<String>, (u64, u64, u64, u64, u64));
+type CodexRawUsageCounts = (u64, u64, u64, u64, u64);
+type RawCodexUsage = (Option<String>, CodexRawUsageCounts);
 
 fn normalize_codex_raw_usage(value: &Value) -> Option<RawCodexUsage> {
     let input = value
@@ -1882,10 +1850,89 @@ fn normalize_codex_raw_usage(value: &Value) -> Option<RawCodexUsage> {
     Some((model, (input, cached, output, reasoning, total)))
 }
 
+fn codex_usage_from_info(
+    info: &Value,
+    previous_totals: &mut Option<CodexRawUsageCounts>,
+) -> Option<RawCodexUsage> {
+    let last_usage = info
+        .get("last_token_usage")
+        .and_then(normalize_codex_raw_usage);
+    let total_usage = info
+        .get("total_token_usage")
+        .and_then(normalize_codex_raw_usage);
+
+    match (last_usage, total_usage) {
+        (Some(last), total) => {
+            if let Some((_, total_counts)) = total {
+                *previous_totals = Some(total_counts);
+            }
+            Some(last)
+        }
+        (None, Some((model, total_counts))) => {
+            let delta = subtract_codex_usage(total_counts, *previous_totals);
+            *previous_totals = Some(total_counts);
+            Some((model, delta))
+        }
+        (None, None) => None,
+    }
+}
+
+fn codex_token_usage_from_counts(
+    (input, cached, output, reasoning, total): CodexRawUsageCounts,
+) -> Option<TokenUsage> {
+    if input == 0 && cached == 0 && output == 0 && reasoning == 0 && total == 0 {
+        return None;
+    }
+
+    Some(TokenUsage {
+        input_tokens: token_count_to_u32("input_tokens", input)?,
+        output_tokens: token_count_to_u32("output_tokens", output)?,
+        cache_read_input_tokens: token_count_to_u32("cache_read_input_tokens", cached.min(input))?,
+        cache_creation_input_tokens: 0,
+    })
+}
+
+fn token_count_to_u32(field: &str, value: u64) -> Option<u32> {
+    match u32::try_from(value) {
+        Ok(value) => Some(value),
+        Err(_) => {
+            log::warn!("skipping Codex token usage event: {field}={value} exceeds u32");
+            None
+        }
+    }
+}
+
+fn add_usage_to_last_assistant(messages: &mut [Message], usage: TokenUsage, model: Option<String>) {
+    let Some(last_msg) = messages
+        .iter_mut()
+        .rev()
+        .find(|m| m.role == MessageRole::Assistant)
+    else {
+        return;
+    };
+
+    if last_msg.model.is_none() {
+        last_msg.model = model;
+    }
+
+    if let Some(existing) = last_msg.token_usage.as_mut() {
+        existing.input_tokens = existing.input_tokens.saturating_add(usage.input_tokens);
+        existing.output_tokens = existing.output_tokens.saturating_add(usage.output_tokens);
+        existing.cache_read_input_tokens = existing
+            .cache_read_input_tokens
+            .saturating_add(usage.cache_read_input_tokens);
+        existing.cache_creation_input_tokens = existing
+            .cache_creation_input_tokens
+            .saturating_add(usage.cache_creation_input_tokens);
+    } else {
+        last_msg.token_usage = Some(usage);
+    }
+}
+
 fn subtract_codex_usage(
-    current: (u64, u64, u64, u64, u64),
-    previous: Option<(u64, u64, u64, u64, u64)>,
-) -> (u64, u64, u64, u64, u64) {
+    current: CodexRawUsageCounts,
+    previous: Option<CodexRawUsageCounts>,
+) -> CodexRawUsageCounts {
     let prev = previous.unwrap_or((0, 0, 0, 0, 0));
     (
         current.0.saturating_sub(prev.0),
@@ -1963,7 +2010,7 @@ mod tests {
     use tempfile::TempDir;
 
     #[test]
-    fn extract_usage_events_splits_cached_input_from_input() {
+    fn extract_usage_events_keeps_total_input_and_cached_input() {
         let dir = TempDir::new().unwrap();
         let file = dir.path().join("codex.jsonl");
         fs::write(
@@ -1978,9 +2025,69 @@ mod tests {
         let events = extract_usage_events_from_file(&file);
         assert_eq!(events.len(), 1);
         assert_eq!(events[0].model, "gpt-5.4");
-        assert_eq!(events[0].input_tokens, 400);
+        assert_eq!(events[0].input_tokens, 1000);
         assert_eq!(events[0].cache_read_input_tokens, 600);
         assert_eq!(events[0].output_tokens, 50);
+    }
+
+    #[test]
+    fn extract_usage_events_matches_ccusage_last_usage_preference() {
+        let dir = TempDir::new().unwrap();
+        let file = dir.path().join("codex.jsonl");
+        fs::write(
+            &file,
+            concat!(
+                "{\"timestamp\":\"2026-04-10T10:00:00Z\",\"type\":\"turn_context\",\"payload\":{\"model\":\"gpt-5.4\"}}\n",
+                "{\"timestamp\":\"2026-04-10T10:00:01Z\",\"type\":\"event_msg\",\"payload\":{\"type\":\"token_count\",\"info\":{\"total_token_usage\":{\"input_tokens\":1000,\"cached_input_tokens\":600,\"output_tokens\":50,\"reasoning_output_tokens\":25,\"total_tokens\":1050},\"last_token_usage\":{\"input_tokens\":1000,\"cached_input_tokens\":600,\"output_tokens\":50,\"reasoning_output_tokens\":25,\"total_tokens\":1050}}}}\n",
+                "{\"timestamp\":\"2026-04-10T10:00:02Z\",\"type\":\"event_msg\",\"payload\":{\"type\":\"token_count\",\"info\":{\"total_token_usage\":{\"input_tokens\":1000,\"cached_input_tokens\":600,\"output_tokens\":50,\"reasoning_output_tokens\":25,\"total_tokens\":1050},\"last_token_usage\":{\"input_tokens\":1000,\"cached_input_tokens\":600,\"output_tokens\":50,\"reasoning_output_tokens\":25,\"total_tokens\":1050}}}}\n",
+                "{\"timestamp\":\"2026-04-10T10:00:03Z\",\"type\":\"event_msg\",\"payload\":{\"type\":\"token_count\",\"info\":{\"total_token_usage\":{\"input_tokens\":1700,\"cached_input_tokens\":1000,\"output_tokens\":70,\"reasoning_output_tokens\":25,\"total_tokens\":1770},\"last_token_usage\":{\"input_tokens\":700,\"cached_input_tokens\":400,\"output_tokens\":20,\"reasoning_output_tokens\":0,\"total_tokens\":720}}}}\n"
+            ),
+        )
+        .unwrap();
+
+        let events = extract_usage_events_from_file(&file);
+        assert_eq!(events.len(), 3);
+        assert_eq!(events[0].input_tokens, 1000);
+        assert_eq!(events[0].cache_read_input_tokens, 600);
+        assert_eq!(events[0].output_tokens, 50);
+        assert_eq!(events[1].input_tokens, 1000);
+        assert_eq!(events[1].cache_read_input_tokens, 600);
+        assert_eq!(events[1].output_tokens, 50);
+        assert_eq!(events[2].input_tokens, 700);
+        assert_eq!(events[2].cache_read_input_tokens, 400);
+        assert_eq!(events[2].output_tokens, 20);
+    }
+
+    #[test]
+    fn parse_session_file_accumulates_repeated_last_token_usage() {
+        let dir = TempDir::new().unwrap();
+        let file = dir.path().join("codex.jsonl");
+        fs::write(
+            &file,
+            concat!(
+                "{\"timestamp\":\"2026-04-10T10:00:00Z\",\"type\":\"turn_context\",\"payload\":{\"model\":\"gpt-5.4\"}}\n",
+                "{\"timestamp\":\"2026-04-10T10:00:01Z\",\"type\":\"response_item\",\"payload\":{\"type\":\"message\",\"role\":\"assistant\",\"content\":[{\"type\":\"output_text\",\"text\":\"hello\"}]}}\n",
+                "{\"timestamp\":\"2026-04-10T10:00:02Z\",\"type\":\"event_msg\",\"payload\":{\"type\":\"token_count\",\"info\":{\"total_token_usage\":{\"input_tokens\":1000,\"cached_input_tokens\":600,\"output_tokens\":50,\"reasoning_output_tokens\":25,\"total_tokens\":1050},\"last_token_usage\":{\"input_tokens\":1000,\"cached_input_tokens\":600,\"output_tokens\":50,\"reasoning_output_tokens\":25,\"total_tokens\":1050}}}}\n",
+                "{\"timestamp\":\"2026-04-10T10:00:03Z\",\"type\":\"event_msg\",\"payload\":{\"type\":\"token_count\",\"info\":{\"total_token_usage\":{\"input_tokens\":1000,\"cached_input_tokens\":600,\"output_tokens\":50,\"reasoning_output_tokens\":25,\"total_tokens\":1050},\"last_token_usage\":{\"input_tokens\":1000,\"cached_input_tokens\":600,\"output_tokens\":50,\"reasoning_output_tokens\":25,\"total_tokens\":1050}}}}\n"
+            ),
+        )
+        .unwrap();
+
+        let provider = CodexProvider {
+            home_dir: PathBuf::from("/tmp"),
+        };
+        let parsed = provider.parse_session_file(&file).expect("parsed session");
+        let assistant = parsed
+            .messages
+            .iter()
+            .find(|message| message.role == crate::models::MessageRole::Assistant)
+            .expect("assistant message");
+        let usage = assistant.token_usage.as_ref().expect("token usage");
+
+        assert_eq!(assistant.model.as_deref(), Some("gpt-5.4"));
+        assert_eq!(usage.input_tokens, 2000);
+        assert_eq!(usage.cache_read_input_tokens, 1200);
+        assert_eq!(usage.output_tokens, 100);
     }
 
     #[test]

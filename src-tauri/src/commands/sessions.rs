@@ -7,7 +7,7 @@ use tauri::State;
 
 use crate::db::Database;
 use crate::error::{CommandError, CommandResult};
-use crate::models::{BatchResult, Message, Provider, SessionDetail, SessionMeta};
+use crate::models::{BatchResult, Message, Provider, SessionDetail, SessionMeta, TokenTotals};
 use crate::services::load_cancel::{self, CancelFlag};
 use crate::services::{load_session_meta, SessionLifecycleService, SourceSyncService};
 
@@ -128,6 +128,7 @@ pub struct SessionMessagesWindow {
     pub start: usize,
     pub messages: Vec<Message>,
     pub parse_warning_count: u32,
+    pub token_totals: TokenTotals,
 }
 
 #[tauri::command]
@@ -200,7 +201,7 @@ pub async fn sync_sources(paths: Vec<String>, state: State<'_, AppState>) -> Com
             // re-parses against the (possibly mutated) source. Belt-and-
             // suspenders with the mtime check; explicit eviction frees
             // memory sooner for sessions the user is no longer viewing.
-            state.session_cache.invalidate(&path);
+            state.session_cache.invalidate_source(&path);
         }
 
         Ok::<usize, String>(synced)
@@ -230,10 +231,15 @@ pub async fn get_session_detail(
         let meta = load_session_meta(&state.db, &session_id).map_err(anyhow::Error::msg)?;
         let source_path = meta.source_path.clone();
         with_load_guard(&state, &session_id, &source_path, |_flag| {
-            let (messages, parse_warning_count) = load_messages_cached(&state, &meta)?;
+            let (messages, parse_warning_count, token_totals) =
+                load_messages_cached(&state, &meta)?;
             if load_cancel::is_canceled() {
                 return Err(canceled_error());
             }
+            let mut meta = meta;
+            let token_totals =
+                indexed_or_loaded_token_totals(&state.db, &session_id, token_totals)?;
+            apply_token_totals(&mut meta, token_totals);
             Ok(SessionDetail {
                 meta,
                 messages: (*messages).clone(),
@@ -273,10 +279,13 @@ pub async fn get_session_messages_window(
         let meta = load_session_meta(&state.db, &session_id).map_err(anyhow::Error::msg)?;
         let source_path = meta.source_path.clone();
         with_load_guard(&state, &session_id, &source_path, |_flag| {
-            let (messages, parse_warning_count) = load_messages_cached(&state, &meta)?;
+            let (messages, parse_warning_count, token_totals) =
+                load_messages_cached(&state, &meta)?;
             if load_cancel::is_canceled() {
                 return Err(canceled_error());
             }
+            let token_totals =
+                indexed_or_loaded_token_totals(&state.db, &session_id, token_totals)?;
             let total = messages.len();
             // Negative offset = window from the end. -N selects the newest N
             // messages; -1 + limit=200 means "last 200". Positive offset is a
@@ -294,6 +303,7 @@ pub async fn get_session_messages_window(
                 start,
                 messages: slice,
                 parse_warning_count,
+                token_totals,
             })
         })
     })
@@ -512,7 +522,7 @@ pub(crate) fn load_detail(session_id: &str, db: &Database) -> anyhow::Result<Ses
 pub(crate) fn load_messages_cached(
     state: &AppState,
     meta: &SessionMeta,
-) -> anyhow::Result<(Arc<Vec<Message>>, u32)> {
+) -> anyhow::Result<(Arc<Vec<Message>>, u32, TokenTotals)> {
     if load_cancel::is_canceled() {
         return Err(canceled_error());
     }
@@ -520,26 +530,58 @@ pub(crate) fn load_messages_cached(
     if meta.source_path.is_empty() {
         let loaded =
             load_messages_from_provider_or_canceled(&meta.provider, &meta.id, &meta.source_path)?;
-        return Ok((Arc::new(loaded.messages), loaded.parse_warning_count));
+        return Ok((
+            Arc::new(loaded.messages),
+            loaded.parse_warning_count,
+            loaded.token_totals,
+        ));
     }
 
     let mtime = std::fs::metadata(&meta.source_path)
         .ok()
         .and_then(|m| m.modified().ok());
 
-    if let Some(hit) = state.session_cache.get(&meta.source_path, mtime) {
-        return Ok((hit.messages, hit.parse_warning_count));
+    let cache_key = session_cache_key(meta);
+    if let Some(hit) = state.session_cache.get(&cache_key, mtime) {
+        return Ok((hit.messages, hit.parse_warning_count, hit.token_totals));
     }
 
     let loaded =
         load_messages_from_provider_or_canceled(&meta.provider, &meta.id, &meta.source_path)?;
     let cached = state.session_cache.insert(
+        cache_key,
         meta.source_path.clone(),
         loaded.messages,
         loaded.parse_warning_count,
+        loaded.token_totals,
         mtime,
     );
-    Ok((cached.messages, cached.parse_warning_count))
+    Ok((
+        cached.messages,
+        cached.parse_warning_count,
+        cached.token_totals,
+    ))
+}
+
+fn session_cache_key(meta: &SessionMeta) -> String {
+    format!("{}:{}:{}", meta.provider.key(), meta.id, meta.source_path)
+}
+
+fn apply_token_totals(meta: &mut SessionMeta, totals: TokenTotals) {
+    meta.input_tokens = totals.input_tokens;
+    meta.output_tokens = totals.output_tokens;
+    meta.cache_read_tokens = totals.cache_read_tokens;
+    meta.cache_write_tokens = totals.cache_write_tokens;
+}
+
+fn indexed_or_loaded_token_totals(
+    db: &Database,
+    session_id: &str,
+    loaded_totals: TokenTotals,
+) -> anyhow::Result<TokenTotals> {
+    db.get_session_token_totals(session_id)
+        .with_context(|| format!("failed to load token totals for session {session_id}"))
+        .map(|totals| totals.unwrap_or(loaded_totals))
 }
 
 fn hydrate_variant_names(sessions: &mut [SessionMeta]) {

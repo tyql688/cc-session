@@ -12,6 +12,7 @@ import type {
   ProviderSnapshot,
   TrashMeta,
   SessionMeta,
+  TokenTotals,
   UsageStats,
   Message,
 } from "./types";
@@ -34,6 +35,7 @@ export interface SessionMessagesWindow {
   start: number;
   messages: Message[];
   parse_warning_count: number;
+  token_totals: TokenTotals;
 }
 
 /**

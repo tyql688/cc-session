@@ -3,14 +3,16 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::SystemTime;
 
-use crate::models::Message;
+use crate::models::{Message, TokenTotals};
 
 /// Snapshot of a parsed session's messages. `Arc` keeps clones cheap when
 /// multiple windowed reads run concurrently.
 #[derive(Clone)]
 pub struct CachedMessages {
+    pub source_path: String,
     pub messages: Arc<Vec<Message>>,
     pub parse_warning_count: u32,
+    pub token_totals: TokenTotals,
     pub mtime: Option<SystemTime>,
     last_access: u64,
 }
@@ -63,14 +65,18 @@ impl SessionCache {
     pub fn insert(
         &self,
         key: String,
+        source_path: String,
         messages: Vec<Message>,
         parse_warning_count: u32,
+        token_totals: TokenTotals,
         mtime: Option<SystemTime>,
     ) -> CachedMessages {
         let access = self.counter.fetch_add(1, Ordering::Relaxed) + 1;
         let entry = CachedMessages {
+            source_path,
             messages: Arc::new(messages),
             parse_warning_count,
+            token_totals,
             mtime,
             last_access: access,
         };
@@ -107,6 +113,16 @@ impl SessionCache {
         inner.map.remove(key);
     }
 
+    pub fn invalidate_source(&self, source_path: &str) {
+        let mut inner = match self.inner.lock() {
+            Ok(g) => g,
+            Err(poisoned) => poisoned.into_inner(),
+        };
+        inner
+            .map
+            .retain(|_, entry| entry.source_path != source_path);
+    }
+
     pub fn clear(&self) {
         let mut inner = match self.inner.lock() {
             Ok(g) => g,
@@ -136,14 +152,25 @@ mod tests {
             .collect()
     }
 
+    fn insert_dummy(cache: &SessionCache, key: &str, source_path: &str, mtime: Option<SystemTime>) {
+        cache.insert(
+            key.into(),
+            source_path.into(),
+            dummy_messages(1),
+            0,
+            TokenTotals::default(),
+            mtime,
+        );
+    }
+
     #[test]
     fn evicts_least_recently_used() {
         let cache = SessionCache::new(2);
-        cache.insert("a".into(), dummy_messages(1), 0, None);
-        cache.insert("b".into(), dummy_messages(1), 0, None);
+        insert_dummy(&cache, "a", "/tmp/a.jsonl", None);
+        insert_dummy(&cache, "b", "/tmp/b.jsonl", None);
         // Touch "a" so "b" becomes LRU
         let _ = cache.get("a", None);
-        cache.insert("c".into(), dummy_messages(1), 0, None);
+        insert_dummy(&cache, "c", "/tmp/c.jsonl", None);
 
         assert!(cache.get("a", None).is_some(), "a must remain (recent)");
         assert!(cache.get("b", None).is_none(), "b must be evicted");
@@ -155,7 +182,7 @@ mod tests {
         let cache = SessionCache::new(4);
         let t0 = SystemTime::UNIX_EPOCH;
         let t1 = SystemTime::UNIX_EPOCH + std::time::Duration::from_secs(1);
-        cache.insert("a".into(), dummy_messages(1), 0, Some(t0));
+        insert_dummy(&cache, "a", "/tmp/a.jsonl", Some(t0));
         assert!(cache.get("a", Some(t0)).is_some());
         assert!(cache.get("a", Some(t1)).is_none());
         // After mismatch, entry must have been removed
@@ -165,8 +192,37 @@ mod tests {
     #[test]
     fn invalidate_removes_entry() {
         let cache = SessionCache::new(4);
-        cache.insert("a".into(), dummy_messages(1), 0, None);
+        insert_dummy(&cache, "a", "/tmp/a.jsonl", None);
         cache.invalidate("a");
         assert!(cache.get("a", None).is_none());
+    }
+
+    #[test]
+    fn invalidate_source_removes_all_entries_for_source() {
+        let cache = SessionCache::new(4);
+        insert_dummy(
+            &cache,
+            "codex:s1:/tmp/shared.jsonl",
+            "/tmp/shared.jsonl",
+            None,
+        );
+        insert_dummy(
+            &cache,
+            "codex:s2:/tmp/shared.jsonl",
+            "/tmp/shared.jsonl",
+            None,
+        );
+        insert_dummy(
+            &cache,
+            "codex:s3:/tmp/other.jsonl",
+            "/tmp/other.jsonl",
+            None,
+        );
+
+        cache.invalidate_source("/tmp/shared.jsonl");
+
+        assert!(cache.get("codex:s1:/tmp/shared.jsonl", None).is_none());
+        assert!(cache.get("codex:s2:/tmp/shared.jsonl", None).is_none());
+        assert!(cache.get("codex:s3:/tmp/other.jsonl", None).is_some());
     }
 }

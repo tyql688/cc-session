@@ -268,10 +268,7 @@ impl SessionProvider for GeminiProvider {
                 ProviderError::Parse(format!("session {session_id} not found in {source_path}"))
             })?;
 
-        Ok(LoadedSession {
-            messages: session.messages,
-            parse_warning_count: session.parse_warning_count,
-        })
+        Ok(LoadedSession::from_parsed(session))
     }
 
     fn deletion_plan(&self, meta: &SessionMeta, children: &[SessionMeta]) -> DeletionPlan {

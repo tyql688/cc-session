@@ -2,7 +2,9 @@ use std::path::{Path, PathBuf};
 
 use thiserror::Error;
 
-use crate::models::{Message, Provider, SessionMeta, TrashMeta};
+use crate::models::{
+    token_totals_from_messages, Message, Provider, SessionMeta, TokenTotals, TrashMeta,
+};
 
 // ---------------------------------------------------------------------------
 // Deletion plan types — provider returns a plan, command layer executes it
@@ -299,6 +301,66 @@ pub fn jsonl_subagents_deletion_plan(meta: &SessionMeta, children: &[SessionMeta
     }
 }
 
+pub fn jsonl_subagent_related_paths(source: &Path) -> Vec<PathBuf> {
+    let is_child = source
+        .parent()
+        .and_then(|parent| parent.file_name())
+        .and_then(|name| name.to_str())
+        == Some("subagents");
+
+    let (parent_file, subagents_dir) = if is_child {
+        let Some(subagents_dir) = source.parent() else {
+            return existing_path(source);
+        };
+        let Some(session_dir) = subagents_dir.parent() else {
+            return existing_path(source);
+        };
+        (
+            session_dir.with_extension("jsonl"),
+            subagents_dir.to_path_buf(),
+        )
+    } else {
+        (
+            source.to_path_buf(),
+            source.with_extension("").join("subagents"),
+        )
+    };
+
+    let mut paths = Vec::new();
+    if parent_file.is_file() {
+        paths.push(parent_file);
+    }
+
+    if subagents_dir.is_dir() {
+        let mut children = match std::fs::read_dir(&subagents_dir) {
+            Ok(entries) => entries
+                .filter_map(Result::ok)
+                .map(|entry| entry.path())
+                .filter(|path| path.extension().and_then(|ext| ext.to_str()) == Some("jsonl"))
+                .collect::<Vec<_>>(),
+            Err(error) => {
+                log::warn!(
+                    "failed to read subagent dir '{}': {error}",
+                    subagents_dir.display()
+                );
+                Vec::new()
+            }
+        };
+        children.sort();
+        paths.extend(children);
+    }
+
+    paths
+}
+
+fn existing_path(source: &Path) -> Vec<PathBuf> {
+    if source.is_file() {
+        vec![source.to_path_buf()]
+    } else {
+        Vec::new()
+    }
+}
+
 /// Result of trashing a session (internal, used by move_to_trash).
 enum TrashResult {
     Moved { trash_file: String },
@@ -340,14 +402,25 @@ pub struct ParsedSession {
 pub struct LoadedSession {
     pub messages: Vec<Message>,
     pub parse_warning_count: u32,
+    pub token_totals: TokenTotals,
 }
 
 impl LoadedSession {
     pub fn new(messages: Vec<Message>) -> Self {
+        Self::from_messages(messages, 0)
+    }
+
+    pub fn from_messages(messages: Vec<Message>, parse_warning_count: u32) -> Self {
+        let token_totals = token_totals_from_messages(&messages);
         Self {
             messages,
-            parse_warning_count: 0,
+            parse_warning_count,
+            token_totals,
         }
+    }
+
+    pub fn from_parsed(parsed: ParsedSession) -> Self {
+        Self::from_messages(parsed.messages, parsed.parse_warning_count)
     }
 }
 
@@ -723,6 +796,7 @@ pub fn infer_restore_action(entry: &TrashMeta) -> RestoreAction {
 mod tests {
     use super::*;
     use std::path::PathBuf;
+    use tempfile::TempDir;
 
     struct DummyProvider;
 
@@ -836,6 +910,36 @@ mod tests {
         );
         // Unknown
         assert_eq!(Provider::parse_display_key("unknown"), None);
+    }
+
+    #[test]
+    fn jsonl_subagent_related_paths_returns_parent_and_children() {
+        let dir = TempDir::new().unwrap();
+        let project = dir.path().join("project");
+        let session_dir = project.join("parent");
+        let subagents_dir = session_dir.join("subagents");
+        std::fs::create_dir_all(&subagents_dir).unwrap();
+        let parent = project.join("parent.jsonl");
+        let child_a = subagents_dir.join("agent-a.jsonl");
+        let child_b = subagents_dir.join("agent-b.jsonl");
+        std::fs::write(&parent, "").unwrap();
+        std::fs::write(&child_b, "").unwrap();
+        std::fs::write(&child_a, "").unwrap();
+
+        assert_eq!(
+            jsonl_subagent_related_paths(&child_a),
+            vec![parent.clone(), child_a.clone(), child_b.clone()]
+        );
+        assert_eq!(
+            jsonl_subagent_related_paths(&parent),
+            vec![parent.clone(), child_a.clone(), child_b.clone()]
+        );
+
+        std::fs::remove_file(&child_a).unwrap();
+        assert_eq!(
+            jsonl_subagent_related_paths(&child_a),
+            vec![parent, child_b]
+        );
     }
 
     #[test]

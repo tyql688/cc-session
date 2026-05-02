@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashSet};
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
 #[serde(rename_all = "lowercase")]
@@ -16,6 +16,14 @@ pub enum Provider {
     CcMirror,
     Qwen,
     Copilot,
+}
+
+#[derive(Debug, Clone, Copy, Default, Serialize, Deserialize, PartialEq, Eq)]
+pub struct TokenTotals {
+    pub input_tokens: u64,
+    pub output_tokens: u64,
+    pub cache_read_tokens: u64,
+    pub cache_write_tokens: u64,
 }
 
 impl std::fmt::Display for Provider {
@@ -70,6 +78,15 @@ pub struct TokenUsage {
     pub cache_read_input_tokens: u32,
 }
 
+impl TokenTotals {
+    pub fn add_usage(&mut self, usage: &TokenUsage) {
+        self.input_tokens += u64::from(usage.input_tokens);
+        self.output_tokens += u64::from(usage.output_tokens);
+        self.cache_read_tokens += u64::from(usage.cache_read_input_tokens);
+        self.cache_write_tokens += u64::from(usage.cache_creation_input_tokens);
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct McpToolMetadata {
     pub server: String,
@@ -119,6 +136,115 @@ pub struct Message {
     /// and `indexer.rs::compute_token_stats` simply skips dedup for those rows.
     #[serde(skip, default)]
     pub usage_hash: Option<String>,
+}
+
+pub fn token_totals_from_messages(messages: &[Message]) -> TokenTotals {
+    let mut totals = TokenTotals::default();
+    let mut seen_hashes = HashSet::new();
+    for message in messages {
+        if !message_counts_for_usage(message) {
+            continue;
+        }
+        if let Some(hash) = message.usage_hash.as_deref() {
+            if !seen_hashes.insert(hash) {
+                continue;
+            }
+        }
+        if let Some(usage) = &message.token_usage {
+            totals.add_usage(usage);
+        }
+    }
+    totals
+}
+
+fn message_counts_for_usage(message: &Message) -> bool {
+    if message.token_usage.is_none() {
+        return false;
+    }
+    if message.timestamp.as_deref().is_none_or(str::is_empty) {
+        return false;
+    }
+    matches!(
+        message.model.as_deref(),
+        Some(model) if !model.is_empty() && model != "<synthetic>"
+    )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{token_totals_from_messages, Message, MessageRole, TokenTotals, TokenUsage};
+
+    fn message(timestamp: Option<&str>, model: Option<&str>, usage: TokenUsage) -> Message {
+        message_with_hash(timestamp, model, usage, None)
+    }
+
+    fn message_with_hash(
+        timestamp: Option<&str>,
+        model: Option<&str>,
+        usage: TokenUsage,
+        usage_hash: Option<&str>,
+    ) -> Message {
+        Message {
+            role: MessageRole::Assistant,
+            content: String::new(),
+            timestamp: timestamp.map(str::to_string),
+            tool_name: None,
+            tool_input: None,
+            tool_metadata: None,
+            token_usage: Some(usage),
+            model: model.map(str::to_string),
+            usage_hash: usage_hash.map(str::to_string),
+        }
+    }
+
+    fn usage(input: u32, output: u32, cache_read: u32, cache_write: u32) -> TokenUsage {
+        TokenUsage {
+            input_tokens: input,
+            output_tokens: output,
+            cache_read_input_tokens: cache_read,
+            cache_creation_input_tokens: cache_write,
+        }
+    }
+
+    #[test]
+    fn token_totals_match_usage_indexing_requirements() {
+        let totals = token_totals_from_messages(&[
+            message(
+                Some("2026-04-10T10:00:00Z"),
+                Some("claude-opus-4-6"),
+                usage(100, 50, 20, 10),
+            ),
+            message(None, Some("claude-opus-4-6"), usage(1, 1, 1, 1)),
+            message(Some("2026-04-10T10:00:00Z"), None, usage(1, 1, 1, 1)),
+            message(
+                Some("2026-04-10T10:00:00Z"),
+                Some("<synthetic>"),
+                usage(1, 1, 1, 1),
+            ),
+            message_with_hash(
+                Some("2026-04-10T10:00:01Z"),
+                Some("claude-opus-4-6"),
+                usage(7, 3, 2, 1),
+                Some("msg-1:req-1"),
+            ),
+            message_with_hash(
+                Some("2026-04-10T10:00:02Z"),
+                Some("claude-opus-4-6"),
+                usage(700, 300, 200, 100),
+                Some("msg-1:req-1"),
+            ),
+        ]);
+
+        assert_eq!(
+            totals,
+            TokenTotals {
+                input_tokens: 107,
+                output_tokens: 53,
+                cache_read_tokens: 22,
+                cache_write_tokens: 11,
+            }
+        );
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

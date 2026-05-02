@@ -460,10 +460,13 @@ fn compute_codex_token_stats(
         entry.input_tokens += event.input_tokens;
         entry.output_tokens += event.output_tokens;
         entry.cache_read_tokens += event.cache_read_input_tokens;
+        let non_cached_input = event
+            .input_tokens
+            .saturating_sub(event.cache_read_input_tokens);
         entry.cost_usd += pricing::estimate_cost_with_catalog(
             pricing_catalog,
             &entry.model,
-            event.input_tokens,
+            non_cached_input,
             event.output_tokens,
             event.cache_read_input_tokens,
             0,
@@ -499,11 +502,11 @@ mod tests {
                 cc_version: None,
                 git_branch: None,
                 parent_id: None,
-            input_tokens: 0,
-            output_tokens: 0,
-            cache_read_tokens: 0,
-            cache_write_tokens: 0,
-        },
+                input_tokens: 0,
+                output_tokens: 0,
+                cache_read_tokens: 0,
+                cache_write_tokens: 0,
+            },
             messages,
             content_text: String::new(),
             parse_warning_count: 0,

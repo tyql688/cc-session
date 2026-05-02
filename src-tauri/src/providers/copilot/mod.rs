@@ -130,9 +130,6 @@ impl SessionProvider for CopilotProvider {
                 path.display()
             ))
         })?;
-        Ok(LoadedSession {
-            messages: parsed.messages,
-            parse_warning_count: parsed.parse_warning_count,
-        })
+        Ok(LoadedSession::from_parsed(parsed))
     }
 }

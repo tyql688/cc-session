@@ -138,7 +138,11 @@ impl SessionProvider for ClaudeProvider {
 
     fn scan_source(&self, source_path: &str) -> Result<Vec<ParsedSession>, ProviderError> {
         let path = PathBuf::from(source_path);
-        Ok(parser::parse_session_file(&path).into_iter().collect())
+        let related_paths = crate::provider::jsonl_subagent_related_paths(&path);
+        Ok(related_paths
+            .par_iter()
+            .filter_map(parser::parse_session_file)
+            .collect())
     }
 
     fn deletion_plan(&self, meta: &SessionMeta, children: &[SessionMeta]) -> DeletionPlan {
@@ -164,9 +168,6 @@ impl SessionProvider for ClaudeProvider {
         // `resolve_persisted_output` command when the user actually views
         // the relevant tool result, avoiding O(N·M) string scans + N
         // synchronous fs reads at session-open time on huge sessions.
-        Ok(LoadedSession {
-            messages: parsed.messages,
-            parse_warning_count: parsed.parse_warning_count,
-        })
+        Ok(LoadedSession::from_parsed(parsed))
     }
 }

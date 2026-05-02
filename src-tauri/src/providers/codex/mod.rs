@@ -6,7 +6,7 @@ use std::path::PathBuf;
 use rayon::prelude::*;
 use walkdir::WalkDir;
 
-use crate::models::{Provider, SessionMeta};
+use crate::models::{Provider, SessionMeta, TokenTotals};
 use crate::provider::{
     jsonl_subagents_deletion_plan, DeletionPlan, LoadedSession, ParsedSession, ProviderError,
     SessionProvider,
@@ -121,11 +121,21 @@ impl SessionProvider for CodexProvider {
             ))
         })?;
 
-        Ok(LoadedSession {
-            messages: parsed.messages,
-            parse_warning_count: parsed.parse_warning_count,
-        })
+        let mut loaded = LoadedSession::from_parsed(parsed);
+        loaded.token_totals = codex_token_totals_from_file(&path);
+        Ok(loaded)
     }
+}
+
+fn codex_token_totals_from_file(path: &PathBuf) -> TokenTotals {
+    parser::extract_usage_events_from_file(path)
+        .into_iter()
+        .fold(TokenTotals::default(), |mut totals, event| {
+            totals.input_tokens += event.input_tokens;
+            totals.output_tokens += event.output_tokens;
+            totals.cache_read_tokens += event.cache_read_input_tokens;
+            totals
+        })
 }
 
 #[cfg(test)]
