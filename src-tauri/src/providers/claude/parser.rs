@@ -1,9 +1,11 @@
 use std::collections::{HashMap, HashSet};
 use std::fs::{self, File};
-use std::io::{BufRead, BufReader};
+use std::io::{BufRead, BufReader, Seek, SeekFrom};
 use std::path::{Path, PathBuf};
 
 use serde_json::Value;
+
+use crate::services::tail_reader::tail_byte_offset;
 
 use crate::models::{Message, MessageRole, Provider, TokenUsage};
 use crate::provider::ParsedSession;
@@ -42,6 +44,237 @@ struct PendingToolResult {
     top_level_result: Option<Value>,
     timestamp: Option<String>,
     source_tool_assistant_uuid: Option<String>,
+}
+
+/// Per-scan accumulator shared between the full-file and tail-only
+/// entry points. Bundles the cross-line state the dispatch loop walks
+/// (parsed messages + the various "first occurrence" metadata fields)
+/// so we don't have to duplicate the body of the for-loop in both
+/// callers.
+struct ScanAccum {
+    state: ParseState,
+    summary_text: Option<String>,
+    custom_title: Option<String>,
+    ai_title: Option<String>,
+    agent_name: Option<String>,
+    first_timestamp: Option<String>,
+    last_timestamp: Option<String>,
+    cwd: Option<String>,
+    is_sidechain: bool,
+    model: Option<String>,
+    cc_version: Option<String>,
+    git_branch: Option<String>,
+    processed_hashes: HashSet<String>,
+}
+
+impl ScanAccum {
+    fn new() -> Self {
+        Self {
+            state: ParseState {
+                messages: Vec::new(),
+                content_parts: Vec::new(),
+                first_user_message: None,
+                pending_user_message: None,
+                tool_use_id_map: HashMap::new(),
+                assistant_tool_indices_by_uuid: HashMap::new(),
+                pending_tool_results_by_use_id: HashMap::new(),
+                parse_warning_count: 0,
+            },
+            summary_text: None,
+            custom_title: None,
+            ai_title: None,
+            agent_name: None,
+            first_timestamp: None,
+            last_timestamp: None,
+            cwd: None,
+            is_sidechain: false,
+            model: None,
+            cc_version: None,
+            git_branch: None,
+            processed_hashes: HashSet::new(),
+        }
+    }
+}
+
+/// Returned by `scan_jsonl_lines` so the caller can distinguish "parse
+/// finished" from "user navigated away mid-parse".
+enum ScanOutcome {
+    Completed,
+    Canceled,
+}
+
+/// Walk a JSONL stream line by line, dispatching each record to the
+/// matching per-type handler and folding the result into `accum`. The
+/// caller owns I/O setup (file open + optional seek) and final
+/// `flush_pending*` calls so both the full-file and tail-only parsers
+/// can reuse the same dispatch logic.
+fn scan_jsonl_lines<R: BufRead>(reader: R, path: &Path, accum: &mut ScanAccum) -> ScanOutcome {
+    let mut line_index: usize = 0;
+    for line in reader.lines() {
+        // Cooperative cancellation: bail out fast when the user navigated
+        // away mid-load. Checked every 1024 lines so the polling cost is
+        // negligible for normal-size sessions.
+        line_index = line_index.wrapping_add(1);
+        if line_index.is_multiple_of(1024) && crate::services::load_cancel::is_canceled() {
+            log::debug!(
+                "Claude parse canceled at line {} of '{}'",
+                line_index,
+                path.display()
+            );
+            return ScanOutcome::Canceled;
+        }
+
+        let line = match line {
+            Ok(l) => l,
+            Err(error) => {
+                log::warn!(
+                    "failed to read Claude session line from '{}': {}",
+                    path.display(),
+                    error
+                );
+                continue;
+            }
+        };
+        if line.trim().is_empty() {
+            continue;
+        }
+
+        let entry: Value = match serde_json::from_str(&line) {
+            Ok(e) => e,
+            Err(e) => {
+                log::warn!("skipping malformed JSONL in '{}': {}", path.display(), e);
+                accum.state.parse_warning_count = accum.state.parse_warning_count.saturating_add(1);
+                continue;
+            }
+        };
+
+        if let Some(dedup_hash) = dedup_hash_from_entry(&entry) {
+            if !accum.processed_hashes.insert(dedup_hash) {
+                continue;
+            }
+        }
+
+        let line_type = match entry.get("type").and_then(|t| t.as_str()) {
+            Some(t) => t.to_string(),
+            None => continue,
+        };
+
+        if accum.cwd.is_none() {
+            if let Some(c) = entry.get("cwd").and_then(|c| c.as_str()) {
+                if !c.is_empty() {
+                    accum.cwd = Some(c.to_string());
+                }
+            }
+        }
+
+        if !accum.is_sidechain
+            && entry
+                .get("isSidechain")
+                .and_then(|v| v.as_bool())
+                .unwrap_or(false)
+        {
+            accum.is_sidechain = true;
+        }
+
+        if accum.cc_version.is_none() {
+            if let Some(v) = entry.get("version").and_then(|v| v.as_str()) {
+                if !v.is_empty() {
+                    accum.cc_version = Some(v.to_string());
+                }
+            }
+        }
+
+        if accum.git_branch.is_none() {
+            if let Some(b) = entry.get("gitBranch").and_then(|b| b.as_str()) {
+                if !b.is_empty() && b != "HEAD" {
+                    accum.git_branch = Some(b.to_string());
+                }
+            }
+        }
+
+        if let Some(ts) = entry.get("timestamp").and_then(|t| t.as_str()) {
+            if accum.first_timestamp.is_none() {
+                accum.first_timestamp = Some(ts.to_string());
+            }
+            accum.last_timestamp = Some(ts.to_string());
+        }
+
+        let timestamp = entry
+            .get("timestamp")
+            .and_then(|t| t.as_str())
+            .map(std::string::ToString::to_string);
+
+        match line_type.as_str() {
+            "user" => {
+                handle_user_message(&entry, &mut accum.state, timestamp);
+            }
+            "assistant" => {
+                if accum.model.is_none() {
+                    if let Some(m) = entry
+                        .get("message")
+                        .and_then(|msg| msg.get("model"))
+                        .and_then(|m| m.as_str())
+                    {
+                        if !m.is_empty() {
+                            accum.model = Some(m.to_string());
+                        }
+                    }
+                }
+                handle_assistant_message(&entry, &mut accum.state, timestamp);
+            }
+            "summary" => {
+                handle_summary(&entry, &mut accum.summary_text, &mut accum.state);
+                continue;
+            }
+            "system" => {
+                handle_system_message(&entry, &mut accum.state, timestamp);
+            }
+            "custom-title" => {
+                flush_pending(&mut accum.state);
+                if let Some(t) = entry.get("title").and_then(|t| t.as_str()) {
+                    if !t.trim().is_empty() {
+                        accum.custom_title = Some(t.to_string());
+                    }
+                }
+                continue;
+            }
+            "ai-title" => {
+                flush_pending(&mut accum.state);
+                if let Some(t) = entry.get("title").and_then(|t| t.as_str()) {
+                    if !t.trim().is_empty() {
+                        accum.ai_title = Some(t.to_string());
+                    }
+                }
+                continue;
+            }
+            "agent-name" => {
+                if let Some(name) = entry
+                    .get("agentName")
+                    .or_else(|| entry.get("name"))
+                    .or_else(|| entry.get("title"))
+                    .and_then(|v| v.as_str())
+                    .filter(|s| !s.trim().is_empty())
+                {
+                    accum.agent_name = Some(name.to_string());
+                }
+                continue;
+            }
+            "pr-link" => {
+                flush_pending(&mut accum.state);
+                handle_pr_link(&entry, &mut accum.state, timestamp);
+                continue;
+            }
+            _ => {
+                if preserves_pending_user_message(line_type.as_str()) {
+                    continue;
+                }
+                flush_pending(&mut accum.state);
+                continue;
+            }
+        }
+    }
+
+    ScanOutcome::Completed
 }
 
 fn preserves_pending_user_message(line_type: &str) -> bool {
@@ -94,24 +327,7 @@ pub fn parse_session_file(path: &PathBuf) -> Option<ParsedSession> {
     let file_size = metadata.len();
 
     let reader = BufReader::new(file);
-    let mut state = ParseState {
-        messages: Vec::new(),
-        content_parts: Vec::new(),
-        first_user_message: None,
-        pending_user_message: None,
-        tool_use_id_map: HashMap::new(),
-        assistant_tool_indices_by_uuid: HashMap::new(),
-        pending_tool_results_by_use_id: HashMap::new(),
-        parse_warning_count: 0,
-    };
-    let mut summary_text: Option<String> = None;
-    let mut custom_title: Option<String> = None;
-    let mut ai_title: Option<String> = None;
-    let mut agent_name: Option<String> = None;
-    let mut first_timestamp: Option<String> = None;
-    let mut last_timestamp: Option<String> = None;
-    let mut cwd: Option<String> = None;
-    let mut is_sidechain = false;
+    let mut accum = ScanAccum::new();
     let parent_id = parent_id_from_path(path);
     let subagent_title = parent_id.as_ref().and_then(|_| {
         let meta_path = path.with_extension("meta.json");
@@ -145,188 +361,29 @@ pub fn parse_session_file(path: &PathBuf) -> Option<ParsedSession> {
             .and_then(|d| d.as_str())
             .map(|s| s.to_string())
     });
-    let mut model: Option<String> = None;
-    let mut cc_version: Option<String> = None;
-    let mut git_branch: Option<String> = None;
-    let mut processed_hashes: HashSet<String> = HashSet::new();
-    let mut line_index: usize = 0;
-
-    for line in reader.lines() {
-        // Cooperative cancellation: bail out fast when the user navigated
-        // away mid-load. Checked every 1024 lines so the polling cost is
-        // negligible for normal-size sessions.
-        line_index = line_index.wrapping_add(1);
-        if line_index.is_multiple_of(1024) && crate::services::load_cancel::is_canceled() {
-            log::debug!(
-                "Claude parse canceled at line {} of '{}'",
-                line_index,
-                path.display()
-            );
-            return None;
-        }
-
-        let line = match line {
-            Ok(l) => l,
-            Err(error) => {
-                log::warn!(
-                    "failed to read Claude session line from '{}': {}",
-                    path.display(),
-                    error
-                );
-                continue;
-            }
-        };
-        if line.trim().is_empty() {
-            continue;
-        }
-
-        let entry: Value = match serde_json::from_str(&line) {
-            Ok(e) => e,
-            Err(e) => {
-                log::warn!("skipping malformed JSONL in '{}': {}", path.display(), e);
-                state.parse_warning_count = state.parse_warning_count.saturating_add(1);
-                continue;
-            }
-        };
-
-        if let Some(dedup_hash) = dedup_hash_from_entry(&entry) {
-            if !processed_hashes.insert(dedup_hash) {
-                continue;
-            }
-        }
-
-        let line_type = match entry.get("type").and_then(|t| t.as_str()) {
-            Some(t) => t.to_string(),
-            None => continue,
-        };
-
-        // Extract cwd from the first message that has it
-        if cwd.is_none() {
-            if let Some(c) = entry.get("cwd").and_then(|c| c.as_str()) {
-                if !c.is_empty() {
-                    cwd = Some(c.to_string());
-                }
-            }
-        }
-
-        // Detect sidechain sessions (subagent messages)
-        if !is_sidechain
-            && entry
-                .get("isSidechain")
-                .and_then(|v| v.as_bool())
-                .unwrap_or(false)
-        {
-            is_sidechain = true;
-        }
-
-        // Extract cc_version from the first entry that has it
-        if cc_version.is_none() {
-            if let Some(v) = entry.get("version").and_then(|v| v.as_str()) {
-                if !v.is_empty() {
-                    cc_version = Some(v.to_string());
-                }
-            }
-        }
-
-        // Extract git_branch from the first entry that has it (filter out "HEAD")
-        if git_branch.is_none() {
-            if let Some(b) = entry.get("gitBranch").and_then(|b| b.as_str()) {
-                if !b.is_empty() && b != "HEAD" {
-                    git_branch = Some(b.to_string());
-                }
-            }
-        }
-
-        // Extract timestamp
-        if let Some(ts) = entry.get("timestamp").and_then(|t| t.as_str()) {
-            if first_timestamp.is_none() {
-                first_timestamp = Some(ts.to_string());
-            }
-            last_timestamp = Some(ts.to_string());
-        }
-
-        let timestamp = entry
-            .get("timestamp")
-            .and_then(|t| t.as_str())
-            .map(std::string::ToString::to_string);
-
-        match line_type.as_str() {
-            "user" => {
-                handle_user_message(&entry, &mut state, timestamp);
-            }
-            "assistant" => {
-                // Extract model from the first assistant message that has it
-                if model.is_none() {
-                    if let Some(m) = entry
-                        .get("message")
-                        .and_then(|msg| msg.get("model"))
-                        .and_then(|m| m.as_str())
-                    {
-                        if !m.is_empty() {
-                            model = Some(m.to_string());
-                        }
-                    }
-                }
-                handle_assistant_message(&entry, &mut state, timestamp);
-            }
-            "summary" => {
-                handle_summary(&entry, &mut summary_text, &mut state);
-                continue;
-            }
-            "system" => {
-                handle_system_message(&entry, &mut state, timestamp);
-            }
-            "custom-title" => {
-                flush_pending(&mut state);
-                if let Some(t) = entry.get("title").and_then(|t| t.as_str()) {
-                    if !t.trim().is_empty() {
-                        custom_title = Some(t.to_string());
-                    }
-                }
-                continue;
-            }
-            "ai-title" => {
-                flush_pending(&mut state);
-                if let Some(t) = entry.get("title").and_then(|t| t.as_str()) {
-                    if !t.trim().is_empty() {
-                        ai_title = Some(t.to_string());
-                    }
-                }
-                continue;
-            }
-            "agent-name" => {
-                if let Some(name) = entry
-                    .get("agentName")
-                    .or_else(|| entry.get("name"))
-                    .or_else(|| entry.get("title"))
-                    .and_then(|v| v.as_str())
-                    .filter(|s| !s.trim().is_empty())
-                {
-                    agent_name = Some(name.to_string());
-                }
-                continue;
-            }
-            "pr-link" => {
-                flush_pending(&mut state);
-                handle_pr_link(&entry, &mut state, timestamp);
-                continue;
-            }
-            // Skip all other types
-            _ => {
-                if preserves_pending_user_message(line_type.as_str()) {
-                    continue;
-                }
-                flush_pending(&mut state);
-                continue;
-            }
-        }
+    match scan_jsonl_lines(reader, path, &mut accum) {
+        ScanOutcome::Completed => {}
+        ScanOutcome::Canceled => return None,
     }
 
-    flush_pending(&mut state);
-    flush_pending_tool_results(&mut state);
+    flush_pending(&mut accum.state);
+    flush_pending_tool_results(&mut accum.state);
 
-    // Subagent files detected by path are always sidechains
-    let is_sidechain = is_sidechain || parent_id.is_some();
+    // Hoist accumulator fields out so the rest of the function reads
+    // exactly like the pre-refactor code did.
+    let state = accum.state;
+    let summary_text = accum.summary_text;
+    let custom_title = accum.custom_title;
+    let ai_title = accum.ai_title;
+    let agent_name = accum.agent_name;
+    let first_timestamp = accum.first_timestamp;
+    let last_timestamp = accum.last_timestamp;
+    let cwd = accum.cwd;
+    // Subagent files detected by path are always sidechains.
+    let is_sidechain = accum.is_sidechain || parent_id.is_some();
+    let model = accum.model;
+    let cc_version = accum.cc_version;
+    let git_branch = accum.git_branch;
 
     if state.messages.is_empty() {
         return None;
@@ -458,6 +515,102 @@ pub fn parse_session_file(path: &PathBuf) -> Option<ParsedSession> {
         child_session_ids: Vec::new(),
         usage_events: Vec::new(),
         source_mtime,
+    })
+}
+
+/// Tail-only parse result. Carries the most recent N messages plus the
+/// metadata bits the caller needs to assemble a `SessionMessagesWindow`
+/// without re-parsing the whole file.
+pub struct ClaudeTailResult {
+    pub messages: Vec<Message>,
+    pub parse_warning_count: u32,
+    pub last_timestamp: Option<String>,
+}
+
+/// Parse only the tail of a Claude session file — the last
+/// `target_messages` (or so) emitted messages — by mmap'ing the file
+/// and seeking the BufReader past the byte offset of the first line
+/// we care about.
+///
+/// Trade-offs vs the full-file parser:
+/// - **Cross-line tool merging is best-effort.** A `tool_result` line
+///   in the tail whose matching `tool_use` was earlier in the file
+///   surfaces as a standalone (unmerged) tool message. The background
+///   full-parse promote pass replaces the cache with the merged version
+///   once it completes, so the imperfect tail is short-lived.
+/// - **No title / project_path / metadata computation.** The caller
+///   already has `SessionMeta` from the DB; this function returns only
+///   the message slice + parse warnings.
+/// - **No cancellation check inside the byte-offset scan.** mmap walk
+///   is O(small constant) — usually a few hundred KB of trailing bytes
+///   — so there's nothing meaningful to cancel before the dispatch
+///   loop is entered.
+pub fn parse_session_tail(path: &Path, target_messages: usize) -> Option<ClaudeTailResult> {
+    // Pull a small extra buffer above the requested window so a tool
+    // call/result pair that happens to span the cut boundary has a
+    // reasonable chance of landing fully inside the parsed range.
+    let safety_buffer = target_messages / 4 + 50;
+    let scan_lines = target_messages.saturating_add(safety_buffer);
+    let window = match tail_byte_offset(path, scan_lines) {
+        Ok(w) => w,
+        Err(error) => {
+            log::warn!(
+                "failed to locate Claude session tail in '{}': {}",
+                path.display(),
+                error
+            );
+            return None;
+        }
+    };
+
+    let file = match File::open(path) {
+        Ok(f) => f,
+        Err(error) => {
+            log::warn!(
+                "failed to open Claude session for tail parse '{}': {}",
+                path.display(),
+                error
+            );
+            return None;
+        }
+    };
+    let mut reader = BufReader::new(file);
+    if window.start_offset > 0 {
+        if let Err(error) = reader.seek(SeekFrom::Start(window.start_offset)) {
+            log::warn!(
+                "failed to seek Claude session for tail parse '{}': {}",
+                path.display(),
+                error
+            );
+            return None;
+        }
+    }
+
+    let mut accum = ScanAccum::new();
+    match scan_jsonl_lines(reader, path, &mut accum) {
+        ScanOutcome::Completed => {}
+        ScanOutcome::Canceled => return None,
+    }
+
+    flush_pending(&mut accum.state);
+    flush_pending_tool_results(&mut accum.state);
+
+    if accum.state.messages.is_empty() {
+        return None;
+    }
+
+    // Trim to exactly `target_messages` — we deliberately over-scan so
+    // tool merging at the boundary works, but the caller asked for
+    // a specific window size.
+    let len = accum.state.messages.len();
+    if len > target_messages {
+        accum.state.messages.drain(0..(len - target_messages));
+    }
+
+    Some(ClaudeTailResult {
+        messages: accum.state.messages,
+        parse_warning_count: accum.state.parse_warning_count,
+        last_timestamp: accum.last_timestamp,
     })
 }
 
@@ -1477,7 +1630,7 @@ fn extract_tool_result_content(result: &Value) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::parse_session_file;
+    use super::{parse_session_file, parse_session_tail};
     use std::fs;
     use tempfile::TempDir;
 
@@ -1748,5 +1901,57 @@ mod tests {
                 "{marker} should be visible as a system event"
             );
         }
+    }
+
+    #[test]
+    fn parse_session_tail_returns_only_the_last_n_messages() {
+        let dir = TempDir::new().unwrap();
+        let file = dir.path().join("session.jsonl");
+
+        let mut content = String::new();
+        for i in 0..200 {
+            let ts = format!("2026-04-10T10:00:{:02}Z", i % 60);
+            content.push_str(&format!(
+                r#"{{"type":"user","timestamp":"{ts}","message":{{"content":"msg-{i}"}}}}"#
+            ));
+            content.push('\n');
+        }
+        fs::write(&file, content).unwrap();
+
+        let tail = parse_session_tail(&file, 20).expect("tail parse");
+        assert_eq!(tail.messages.len(), 20);
+        // Tail must be the LAST 20 messages — msg-180 through msg-199.
+        let first = tail.messages.first().expect("first").content.clone();
+        let last = tail.messages.last().expect("last").content.clone();
+        assert!(
+            first.ends_with("msg-180"),
+            "first tail message expected to contain msg-180, got {first:?}"
+        );
+        assert!(
+            last.ends_with("msg-199"),
+            "last tail message expected to contain msg-199, got {last:?}"
+        );
+    }
+
+    #[test]
+    fn parse_session_tail_falls_back_to_full_file_when_smaller_than_window() {
+        let dir = TempDir::new().unwrap();
+        let file = dir.path().join("session.jsonl");
+
+        let mut content = String::new();
+        for i in 0..5 {
+            content.push_str(&format!(
+                r#"{{"type":"user","timestamp":"2026-04-10T10:00:0{i}Z","message":{{"content":"only-{i}"}}}}"#
+            ));
+            content.push('\n');
+        }
+        fs::write(&file, content).unwrap();
+
+        let tail = parse_session_tail(&file, 100).expect("tail parse");
+        assert_eq!(
+            tail.messages.len(),
+            5,
+            "tail must return all messages when the file is smaller than the requested window"
+        );
     }
 }
