@@ -11,8 +11,9 @@ use std::collections::{HashMap, HashSet};
 use crate::models::{Provider, SessionMeta, TokenTotals};
 use crate::pricing::{self, PricingCatalog};
 use crate::provider::{
-    jsonl_subagents_deletion_plan, timestamp_to_local_date, DeletionPlan, LoadedSession,
-    ParsedSession, ProviderError, SessionProvider, TokenStatRow,
+    jsonl_subagents_deletion_plan, partition_files_by_freshness, timestamp_to_local_date,
+    DeletionPlan, LoadedSession, ParsedSession, ProviderError, ScanOutcome, SessionProvider,
+    SourceState, TokenStatRow,
 };
 
 pub struct Descriptor;
@@ -99,6 +100,22 @@ impl SessionProvider for CodexProvider {
             .collect();
 
         Ok(sessions)
+    }
+
+    fn scan_incremental(
+        &self,
+        known: &HashMap<String, SourceState>,
+    ) -> Result<ScanOutcome, ProviderError> {
+        let files = self.collect_jsonl_files();
+        let (to_parse, unchanged_source_paths) = partition_files_by_freshness(files, known);
+        let parsed: Vec<ParsedSession> = to_parse
+            .par_iter()
+            .filter_map(|path| self.parse_session_file(path))
+            .collect();
+        Ok(ScanOutcome {
+            parsed,
+            unchanged_source_paths,
+        })
     }
 
     fn scan_source(&self, source_path: &str) -> Result<Vec<ParsedSession>, ProviderError> {

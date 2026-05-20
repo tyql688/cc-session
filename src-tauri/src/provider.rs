@@ -378,6 +378,79 @@ pub enum ProviderError {
     Sqlite(#[from] rusqlite::Error),
 }
 
+/// File-level snapshot the indexer uses to decide whether a session
+/// needs to be re-parsed on the next scan. Mirrors what the `sessions`
+/// table stores per-row in `(file_size_bytes, source_mtime)`.
+///
+/// `mtime` is epoch seconds (i64) — matches `SystemTime → UNIX_EPOCH`
+/// duration and survives JSON / SQLite roundtrips without precision
+/// loss for the resolution we care about (sub-second changes always
+/// also bump file size on append-only JSONL).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct SourceState {
+    pub size: u64,
+    pub mtime: i64,
+}
+
+/// Returned by `SessionProvider::scan_all`. `parsed` carries the
+/// sessions the provider actually re-parsed; `unchanged_source_paths`
+/// carries the file paths whose `(size, mtime)` matched the `known`
+/// snapshot passed in and were therefore skipped. The indexer combines
+/// both lists when deciding which DB rows are still live (so an
+/// unchanged session isn't accidentally pruned just because it doesn't
+/// appear in `parsed`).
+#[derive(Default)]
+pub struct ScanOutcome {
+    pub parsed: Vec<ParsedSession>,
+    pub unchanged_source_paths: Vec<String>,
+}
+
+/// Convert a `SystemTime` into the integer epoch-seconds form we store
+/// in `sessions.source_mtime`. Returns `None` for clocks before the
+/// UNIX epoch (effectively never on real systems).
+pub fn system_time_to_epoch_seconds(t: std::time::SystemTime) -> Option<i64> {
+    t.duration_since(std::time::UNIX_EPOCH)
+        .ok()
+        .and_then(|d| i64::try_from(d.as_secs()).ok())
+}
+
+/// Split a flat list of JSONL paths into "must reparse" vs "unchanged".
+/// JSONL providers' `scan_incremental` calls this before kicking off the
+/// rayon parse pipeline so only stale files actually hit the parser.
+/// The unchanged list is returned as the path strings the DB stored,
+/// matching what `Database::source_states_for_provider` keys on.
+pub fn partition_files_by_freshness(
+    files: Vec<PathBuf>,
+    known: &HashMap<String, SourceState>,
+) -> (Vec<PathBuf>, Vec<String>) {
+    let mut to_parse = Vec::with_capacity(files.len());
+    let mut unchanged = Vec::new();
+    for file in files {
+        let path_str = file.to_string_lossy().to_string();
+        match known.get(&path_str) {
+            Some(state) if source_state_matches(&file, state) => unchanged.push(path_str),
+            _ => to_parse.push(file),
+        }
+    }
+    (to_parse, unchanged)
+}
+
+/// Stat `path` and decide whether the on-disk file still matches the
+/// `(size, mtime)` we recorded in the DB. Used by JSONL providers'
+/// `scan_all` override to skip parsing unchanged files.
+pub fn source_state_matches(path: &Path, known: &SourceState) -> bool {
+    let Ok(meta) = std::fs::metadata(path) else {
+        return false;
+    };
+    if meta.len() != known.size {
+        return false;
+    }
+    let Some(mtime) = meta.modified().ok().and_then(system_time_to_epoch_seconds) else {
+        return false;
+    };
+    mtime == known.mtime
+}
+
 /// A single per-(date, model) token-usage row, written to
 /// `session_token_stats` by the indexer. Defined here so the provider
 /// trait can produce them without depending on `db::sync`.
@@ -434,6 +507,12 @@ pub struct ParsedSession {
     /// own `compute_token_stats` override; empty for providers whose token
     /// counts are attached to messages directly.
     pub usage_events: Vec<UsageEvent>,
+    /// Last-modified epoch seconds of the source file at parse time.
+    /// 0 means "unknown" — the indexer treats that as "always reparse".
+    /// Used together with `meta.file_size_bytes` to short-circuit
+    /// unchanged files in `scan_incremental`. Not exposed to the
+    /// frontend; never read outside the indexer / sync layer.
+    pub source_mtime: i64,
 }
 
 /// Materialized session payload returned by `SessionProvider::load_messages`
@@ -744,6 +823,27 @@ pub trait SessionProvider: Send + Sync {
     fn provider(&self) -> Provider;
     fn watch_paths(&self) -> Vec<PathBuf>;
     fn scan_all(&self) -> Result<Vec<ParsedSession>, ProviderError>;
+
+    /// Incremental scan: parse only the source files whose
+    /// `(size, mtime)` differs from what's stored in `known`, and return
+    /// the rest as `unchanged_source_paths` so the indexer can preserve
+    /// their DB rows without re-upserting.
+    ///
+    /// Default implementation parses everything (matches `scan_all`) —
+    /// providers whose data lives in per-session files override this to
+    /// take advantage of the snapshot. Providers backed by a single
+    /// database file (OpenCode) inherit the default since per-file
+    /// mtime is meaningless for them.
+    fn scan_incremental(
+        &self,
+        _known: &HashMap<String, SourceState>,
+    ) -> Result<ScanOutcome, ProviderError> {
+        Ok(ScanOutcome {
+            parsed: self.scan_all()?,
+            unchanged_source_paths: Vec::new(),
+        })
+    }
+
     fn scan_source(&self, source_path: &str) -> Result<Vec<ParsedSession>, ProviderError> {
         Ok(self
             .scan_all()?

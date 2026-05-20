@@ -1703,8 +1703,17 @@ impl CodexProvider {
             parse_warning_count,
             child_session_ids: Vec::new(),
             usage_events,
+            source_mtime: source_mtime_epoch_seconds(&metadata),
         })
     }
+}
+
+fn source_mtime_epoch_seconds(metadata: &std::fs::Metadata) -> i64 {
+    metadata
+        .modified()
+        .ok()
+        .and_then(crate::provider::system_time_to_epoch_seconds)
+        .unwrap_or(0)
 }
 
 fn extract_codex_model(value: &Value) -> Option<String> {

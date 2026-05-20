@@ -9,8 +9,8 @@ use walkdir::WalkDir;
 
 use crate::models::{Provider, SessionMeta};
 use crate::provider::{
-    ChildPlan, DeletionPlan, FileAction, LoadedSession, ParsedSession, ProviderError,
-    SessionProvider,
+    partition_files_by_freshness, ChildPlan, DeletionPlan, FileAction, LoadedSession,
+    ParsedSession, ProviderError, ScanOutcome, SessionProvider, SourceState,
 };
 
 pub struct Descriptor;
@@ -124,6 +124,23 @@ impl SessionProvider for KimiProvider {
             .collect();
 
         Ok(sessions)
+    }
+
+    fn scan_incremental(
+        &self,
+        known: &HashMap<String, SourceState>,
+    ) -> Result<ScanOutcome, ProviderError> {
+        let files = self.collect_wire_files();
+        let (to_parse, unchanged_source_paths) = partition_files_by_freshness(files, known);
+        let project_map = self.build_project_map();
+        let parsed: Vec<ParsedSession> = to_parse
+            .par_iter()
+            .flat_map(|path| self.parse_session_with_subagents(path, &project_map))
+            .collect();
+        Ok(ScanOutcome {
+            parsed,
+            unchanged_source_paths,
+        })
     }
 
     fn scan_source(&self, source_path: &str) -> Result<Vec<ParsedSession>, ProviderError> {

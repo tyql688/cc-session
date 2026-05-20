@@ -157,6 +157,46 @@ impl Database {
         )
     }
 
+    /// Pre-fetch the `(source_path, size, mtime)` snapshot the indexer
+    /// uses to decide which files can skip parsing. Returned `mtime` is
+    /// the stored epoch seconds; rows that pre-date the migration have
+    /// `mtime = 0`, which forces a reparse the first time they're seen.
+    /// Rows with empty `source_path` (synthetic / detached sessions)
+    /// are excluded — they wouldn't survive a file-level check anyway.
+    pub fn source_states_for_provider(
+        &self,
+        provider_key: &str,
+    ) -> Result<std::collections::HashMap<String, crate::provider::SourceState>, rusqlite::Error>
+    {
+        let conn = self.lock_read()?;
+        let mut stmt = conn.prepare(
+            "SELECT source_path, file_size_bytes, source_mtime
+               FROM sessions
+              WHERE provider = ?1 AND source_path != ''",
+        )?;
+        let rows = stmt.query_map(params![provider_key], |row| {
+            let path: String = row.get(0)?;
+            let size: i64 = row.get(1)?;
+            let mtime: i64 = row.get(2)?;
+            Ok((
+                path,
+                crate::provider::SourceState {
+                    size: size.max(0) as u64,
+                    mtime,
+                },
+            ))
+        })?;
+        let mut out = std::collections::HashMap::new();
+        for row in rows {
+            let (path, state) = row?;
+            // Multiple session IDs can share one source_path (e.g. parent +
+            // subagent rows backed by the same JSONL). Any of them sufficing
+            // to mark the file "alive" — keep the first/latest state seen.
+            out.entry(path).or_insert(state);
+        }
+        Ok(out)
+    }
+
     pub fn count_sessions_for_source(
         &self,
         provider_key: &str,
@@ -1175,6 +1215,7 @@ mod tests {
             parse_warning_count: 0,
             child_session_ids: Vec::new(),
             usage_events: Vec::new(),
+            source_mtime: 0,
         }
     }
 
@@ -1187,6 +1228,7 @@ mod tests {
             &Provider::Claude,
             &[parsed_session(meta.clone(), String::new())],
             true,
+            &[],
         )
         .unwrap();
 
@@ -1240,6 +1282,7 @@ mod tests {
             &Provider::Claude,
             &[parsed_session(sample_meta("session-cn"), content)],
             true,
+            &[],
         )
         .unwrap();
 
@@ -1265,6 +1308,7 @@ mod tests {
             &Provider::Claude,
             &[parsed_session(meta, "正文没有目标词".into())],
             true,
+            &[],
         )
         .unwrap();
 
@@ -1290,6 +1334,7 @@ mod tests {
                 "中文正文".into(),
             )],
             true,
+            &[],
         )
         .unwrap();
 

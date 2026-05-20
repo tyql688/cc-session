@@ -864,7 +864,16 @@ pub fn parse_session_file(path: &Path) -> Option<ParsedSession> {
         project_name_from_path(&project_path)
     };
 
-    let file_size_bytes = std::fs::metadata(path).map(|m| m.len()).unwrap_or(0);
+    let (file_size_bytes, source_mtime) = std::fs::metadata(path)
+        .map(|m| {
+            let mtime = m
+                .modified()
+                .ok()
+                .and_then(crate::provider::system_time_to_epoch_seconds)
+                .unwrap_or(0);
+            (m.len(), mtime)
+        })
+        .unwrap_or((0, 0));
     let message_count = messages.len() as u32;
 
     let mut content_text = String::new();
@@ -910,6 +919,7 @@ pub fn parse_session_file(path: &Path) -> Option<ParsedSession> {
         parse_warning_count,
         child_session_ids,
         usage_events: Vec::new(),
+        source_mtime,
     })
 }
 

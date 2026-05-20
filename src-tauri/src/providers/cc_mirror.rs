@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::fs;
 use std::path::{Path, PathBuf};
 
@@ -5,7 +6,10 @@ use rayon::prelude::*;
 use serde::Deserialize;
 
 use crate::models::{Provider, SessionMeta};
-use crate::provider::{DeletionPlan, LoadedSession, ParsedSession, ProviderError, SessionProvider};
+use crate::provider::{
+    DeletionPlan, LoadedSession, ParsedSession, ProviderError, ScanOutcome, SessionProvider,
+    SourceState,
+};
 use crate::providers::claude::parser;
 
 pub struct Descriptor;
@@ -314,6 +318,39 @@ impl SessionProvider for CcMirrorProvider {
             })
             .collect();
         Ok(sessions)
+    }
+
+    fn scan_incremental(
+        &self,
+        known: &HashMap<String, SourceState>,
+    ) -> Result<ScanOutcome, ProviderError> {
+        // cc-mirror keeps `(path, variant)` pairs so we can't use the
+        // generic helper directly — variant identity matters for
+        // `apply_variant`. Inline the (size, mtime) check here.
+        let all_files = self.collect_jsonl_files();
+        let mut to_parse: Vec<(PathBuf, Variant)> = Vec::with_capacity(all_files.len());
+        let mut unchanged_source_paths: Vec<String> = Vec::new();
+        for (path, variant) in all_files {
+            let path_str = path.to_string_lossy().to_string();
+            match known.get(&path_str) {
+                Some(state) if crate::provider::source_state_matches(&path, state) => {
+                    unchanged_source_paths.push(path_str);
+                }
+                _ => to_parse.push((path, variant)),
+            }
+        }
+        let parsed: Vec<ParsedSession> = to_parse
+            .par_iter()
+            .filter_map(|(path, variant)| {
+                let mut parsed = parser::parse_session_file(path)?;
+                Self::apply_variant(&mut parsed, variant);
+                Some(parsed)
+            })
+            .collect();
+        Ok(ScanOutcome {
+            parsed,
+            unchanged_source_paths,
+        })
     }
 
     fn scan_source(&self, source_path: &str) -> Result<Vec<ParsedSession>, ProviderError> {

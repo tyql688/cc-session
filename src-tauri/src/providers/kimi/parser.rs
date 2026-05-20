@@ -606,6 +606,12 @@ impl KimiProvider {
             cache_write_tokens: 0,
         };
 
+        let source_mtime = metadata
+            .modified()
+            .ok()
+            .and_then(crate::provider::system_time_to_epoch_seconds)
+            .unwrap_or(0);
+
         Some(ParsedSession {
             meta,
             messages,
@@ -613,6 +619,7 @@ impl KimiProvider {
             parse_warning_count,
             child_session_ids: Vec::new(),
             usage_events: Vec::new(),
+            source_mtime,
         })
     }
 
@@ -1071,6 +1078,7 @@ impl KimiProvider {
             parse_warning_count: 0,
             child_session_ids: Vec::new(),
             usage_events: Vec::new(),
+            source_mtime: 0,
         })
     }
 }

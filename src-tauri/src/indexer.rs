@@ -79,6 +79,7 @@ impl Indexer {
         struct ProviderWork {
             provider_kind: Provider,
             sessions: Vec<ParsedSession>,
+            unchanged_source_paths: Vec<String>,
             stats_batch: Vec<(String, Vec<TokenStatRow>)>,
         }
 
@@ -95,9 +96,25 @@ impl Indexer {
             .par_iter()
             .map(|provider| -> Result<ProviderWork, String> {
                 let provider_kind = provider.provider();
-                let mut sessions = provider.scan_all().map_err(|e| {
+                // Pre-fetch the per-source `(size, mtime)` snapshot the
+                // provider uses to short-circuit unchanged files. Each
+                // provider walks its own data layout; this DB query is the
+                // single source of truth for "what we already indexed".
+                let known = self
+                    .db
+                    .source_states_for_provider(provider_kind.key())
+                    .map_err(|e| {
+                        format!(
+                            "failed to load {} source snapshot: {}",
+                            provider_kind.key(),
+                            e
+                        )
+                    })?;
+                let outcome = provider.scan_incremental(&known).map_err(|e| {
                     format!("failed to scan {} provider: {}", provider_kind.key(), e)
                 })?;
+                let mut sessions = outcome.parsed;
+                let unchanged_source_paths = outcome.unchanged_source_paths;
 
                 if !excluded.is_empty() {
                     sessions.retain(|s| !excluded.contains(&s.meta.id));
@@ -124,6 +141,7 @@ impl Indexer {
                 Ok(ProviderWork {
                     provider_kind,
                     sessions,
+                    unchanged_source_paths,
                     stats_batch,
                 })
             })
@@ -136,12 +154,13 @@ impl Indexer {
         for ProviderWork {
             provider_kind,
             sessions,
+            unchanged_source_paths,
             stats_batch,
         } in &works
         {
             let count = sessions.len();
             self.db
-                .sync_provider_snapshot(provider_kind, sessions, aggressive)
+                .sync_provider_snapshot(provider_kind, sessions, aggressive, unchanged_source_paths)
                 .map_err(|e| format!("failed to sync {} provider: {}", provider_kind.key(), e))?;
 
             let batch_refs: Vec<(&str, &[TokenStatRow])> = stats_batch
@@ -406,6 +425,7 @@ mod tests {
             parse_warning_count: 0,
             child_session_ids: Vec::new(),
             usage_events: Vec::new(),
+            source_mtime: 0,
         }
     }
 

@@ -416,6 +416,7 @@ impl SessionProvider for OpenCodeProvider {
                         parse_warning_count: 0,
                         child_session_ids: Vec::new(),
                         usage_events: Vec::new(),
+                        source_mtime: 0,
                     }
                 },
             )

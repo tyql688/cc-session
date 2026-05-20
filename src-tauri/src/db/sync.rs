@@ -37,6 +37,7 @@ impl Database {
         provider: &Provider,
         sessions: &[ParsedSession],
         aggressive: bool,
+        preserve_source_paths: &[String],
     ) -> Result<(), rusqlite::Error> {
         let provider_key = provider.key().to_string();
         let mut ids_by_source: HashMap<String, HashSet<String>> = HashMap::new();
@@ -55,39 +56,54 @@ impl Database {
             }
         }
 
+        // Treat unchanged source files as still-alive when computing the
+        // delete heuristic — otherwise an incremental scan that returned 0
+        // changed sessions but covers 800 unchanged paths would look like
+        // a near-empty result and trip the destructive-sync guard.
+        for path in preserve_source_paths {
+            if seen_sources.insert(path.clone()) {
+                source_paths.push(path.clone());
+            }
+        }
+
         let current_count = self.count_sessions_for_provider(&provider_key)?;
         let scan_count = sessions.len() as u64;
+        let alive_count = scan_count + preserve_source_paths.len() as u64;
         let should_delete = if aggressive {
-            if scan_count == 0 {
+            if alive_count == 0 {
                 log::info!(
                     "provider {:?} aggressive reindex: scan returned 0 sessions, clearing stale entries",
                     provider
                 );
             }
             true
-        } else if scan_count == 0 {
+        } else if alive_count == 0 {
             log::warn!(
                 "provider {:?} scan returned 0 sessions, skipping deletion to protect index",
                 provider
             );
             false
         } else {
-            current_count <= 10 || (scan_count as f64 / current_count as f64) > 0.5
+            current_count <= 10 || (alive_count as f64 / current_count as f64) > 0.5
         };
 
         if !should_delete {
             log::warn!(
-                "provider {:?} scan returned {} sessions but DB has {}, skipping destructive sync",
-                provider,
-                scan_count,
-                current_count
+                "provider {:?} scan returned {} sessions ({} unchanged) but DB has {}, skipping destructive sync",
+                provider, scan_count, preserve_source_paths.len(), current_count
             );
         }
 
         self.with_transaction(|conn| {
             for parsed in sessions {
                 let content = dialogue_content_text(&parsed.messages, &parsed.content_text);
-                upsert_session_on(conn, &parsed.meta, &content, &parsed.child_session_ids)?;
+                upsert_session_on(
+                    conn,
+                    &parsed.meta,
+                    &content,
+                    &parsed.child_session_ids,
+                    parsed.source_mtime,
+                )?;
             }
 
             if should_delete {
@@ -135,7 +151,13 @@ impl Database {
         self.with_transaction(|conn| {
             for parsed in sessions {
                 let content = dialogue_content_text(&parsed.messages, &parsed.content_text);
-                upsert_session_on(conn, &parsed.meta, &content, &parsed.child_session_ids)?;
+                upsert_session_on(
+                    conn,
+                    &parsed.meta,
+                    &content,
+                    &parsed.child_session_ids,
+                    parsed.source_mtime,
+                )?;
             }
 
             if should_delete {
@@ -276,14 +298,15 @@ fn upsert_session_on(
     meta: &SessionMeta,
     content_text: &str,
     child_session_ids: &[String],
+    source_mtime: i64,
 ) -> Result<(), rusqlite::Error> {
     let provider_str = meta.provider.key();
 
     conn.execute(
         "INSERT INTO sessions (id, provider, title, project_path, project_name,
             created_at, updated_at, message_count, file_size_bytes, source_path, content_text, is_sidechain,
-            variant_name, model, cc_version, git_branch, parent_id)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17)
+            variant_name, model, cc_version, git_branch, parent_id, source_mtime)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18)
          ON CONFLICT(id) DO UPDATE SET
             provider = excluded.provider,
             title = CASE WHEN sessions.title_custom = 1 THEN sessions.title ELSE excluded.title END,
@@ -300,7 +323,8 @@ fn upsert_session_on(
             model = excluded.model,
             cc_version = excluded.cc_version,
             git_branch = excluded.git_branch,
-            parent_id = COALESCE(excluded.parent_id, sessions.parent_id)",
+            parent_id = COALESCE(excluded.parent_id, sessions.parent_id),
+            source_mtime = excluded.source_mtime",
         params![
             meta.id,
             provider_str,
@@ -319,6 +343,7 @@ fn upsert_session_on(
             meta.cc_version,
             meta.git_branch,
             meta.parent_id,
+            source_mtime,
         ],
     )?;
 
@@ -447,8 +472,10 @@ mod tests {
                 parse_warning_count: 0,
                 child_session_ids: Vec::new(),
                 usage_events: Vec::new(),
+                source_mtime: 0,
             }],
             true,
+            &[],
         )
         .unwrap();
 
@@ -494,8 +521,10 @@ mod tests {
                 parse_warning_count: 0,
                 child_session_ids: Vec::new(),
                 usage_events: Vec::new(),
+                source_mtime: 0,
             }],
             true,
+            &[],
         )
         .unwrap();
         db.replace_token_stats(
@@ -556,9 +585,10 @@ mod tests {
             parse_warning_count: 0,
             child_session_ids: Vec::new(),
             usage_events: Vec::new(),
+            source_mtime: 0,
         })
         .collect::<Vec<_>>();
-        db.sync_provider_snapshot(&Provider::Claude, &parsed, true)
+        db.sync_provider_snapshot(&Provider::Claude, &parsed, true, &[])
             .unwrap();
 
         let counts = db
@@ -593,8 +623,10 @@ mod tests {
                 parse_warning_count: 0,
                 child_session_ids: Vec::new(),
                 usage_events: Vec::new(),
+                source_mtime: 0,
             }],
             true,
+            &[],
         )
         .unwrap();
 
@@ -619,8 +651,10 @@ mod tests {
                 parse_warning_count: 0,
                 child_session_ids: vec![child_id.to_string()],
                 usage_events: Vec::new(),
+                source_mtime: 0,
             }],
             true,
+            &[],
         )
         .unwrap();
 
@@ -641,8 +675,10 @@ mod tests {
                 parse_warning_count: 0,
                 child_session_ids: Vec::new(),
                 usage_events: Vec::new(),
+                source_mtime: 0,
             }],
             true,
+            &[],
         )
         .unwrap();
 
@@ -682,6 +718,7 @@ mod tests {
                     parse_warning_count: 0,
                     child_session_ids: Vec::new(),
                     usage_events: Vec::new(),
+                    source_mtime: 0,
                 },
                 ParsedSession {
                     meta: true_parent_meta,
@@ -690,9 +727,11 @@ mod tests {
                     parse_warning_count: 0,
                     child_session_ids: vec![child_id.into()],
                     usage_events: Vec::new(),
+                    source_mtime: 0,
                 },
             ],
             true,
+            &[],
         )
         .unwrap();
 
@@ -709,8 +748,10 @@ mod tests {
                 parse_warning_count: 0,
                 child_session_ids: vec![child_id.into()],
                 usage_events: Vec::new(),
+                source_mtime: 0,
             }],
             true,
+            &[],
         )
         .unwrap();
 

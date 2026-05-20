@@ -102,7 +102,7 @@ fn command_interface_uses_fixture_provider_data_without_manual_deletes() {
     let seed_db = Database::open(db_dir.path()).expect("open temp db");
     let parsed = parse_session_file(&source_path).expect("parse fixture session");
     seed_db
-        .sync_provider_snapshot(&Provider::Claude, &[parsed], true)
+        .sync_provider_snapshot(&Provider::Claude, &[parsed], true, &[])
         .expect("seed db with fixture snapshot");
     drop(seed_db);
 

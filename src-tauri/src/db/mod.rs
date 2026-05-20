@@ -234,6 +234,22 @@ impl Database {
         if !has_parent_id {
             write_conn.execute_batch("ALTER TABLE sessions ADD COLUMN parent_id TEXT;")?;
         }
+
+        // Migration: add source_mtime column for the incremental indexer.
+        // 0 = unknown / forces a reparse on next scan (acts as a sentinel
+        // for pre-migration rows). New rows get the real epoch seconds.
+        let has_source_mtime: bool = {
+            let mut stmt = write_conn.prepare(
+                "SELECT COUNT(*) FROM pragma_table_info('sessions') WHERE name = 'source_mtime'",
+            )?;
+            let count: i64 = stmt.query_row([], |row| row.get(0))?;
+            count > 0
+        };
+        if !has_source_mtime {
+            write_conn.execute_batch(
+                "ALTER TABLE sessions ADD COLUMN source_mtime INTEGER NOT NULL DEFAULT 0;",
+            )?;
+        }
         write_conn.execute_batch(
             "CREATE INDEX IF NOT EXISTS idx_sessions_parent_updated
                 ON sessions(parent_id, updated_at DESC);
