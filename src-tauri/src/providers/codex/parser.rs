@@ -1,6 +1,8 @@
 use std::fs::{self, File};
-use std::io::{BufRead, BufReader};
-use std::path::PathBuf;
+use std::io::{BufRead, BufReader, Seek, SeekFrom};
+use std::path::{Path, PathBuf};
+
+use crate::services::tail_reader::tail_byte_offset;
 
 use serde::Deserialize;
 use serde_json::{json, Map, Value};
@@ -431,6 +433,1227 @@ impl CodexScanAccum {
             parse_warning_count: 0,
         }
     }
+    /// Run the per-line dispatch over `reader`, mutating `self` with
+    /// the messages / tool-call pairings / first-occurrence trackers it
+    /// observes. Called by both `parse_session_file` (full-file) and
+    /// `parse_session_tail` (mmap-seeked) — they share the same loop body.
+    fn scan_lines<R: BufRead>(&mut self, reader: R, path: &Path) {
+        for line in reader.lines() {
+            let line = match line {
+                Ok(l) => l,
+                Err(error) => {
+                    log::warn!(
+                        "failed to read Codex session line from '{}': {}",
+                        path.display(),
+                        error
+                    );
+                    continue;
+                }
+            };
+            if line.trim().is_empty() {
+                continue;
+            }
+
+            let entry: CodexLine = match serde_json::from_str(&line) {
+                Ok(e) => e,
+                Err(error) => {
+                    log::warn!(
+                        "skipping malformed Codex JSONL in '{}': {}",
+                        path.display(),
+                        error
+                    );
+                    self.parse_warning_count = self.parse_warning_count.saturating_add(1);
+                    continue;
+                }
+            };
+
+            if let Some(ref ts) = entry.timestamp {
+                if self.first_timestamp.is_none() {
+                    self.first_timestamp = Some(ts.clone());
+                }
+                self.last_timestamp = Some(ts.clone());
+            }
+
+            let payload = match entry.payload {
+                Some(ref p) => p,
+                None => continue,
+            };
+
+            // Skip forked parent context in subagent files. Clear the flag on
+            // the first subagent-owned `task_started` event (its `started_at`
+            // matches the subagent session's creation time). Fall back to the
+            // legacy `newly spawned agent` marker for pre-0.120 rollouts.
+            if self.skipping_fork_context {
+                if entry.line_type == "event_msg"
+                    && payload.get("type").and_then(|v| v.as_str()) == Some("task_started")
+                {
+                    if let (Some(started_at), Some(sub_sec)) = (
+                        payload.get("started_at").and_then(|v| v.as_i64()),
+                        self.subagent_start_seconds,
+                    ) {
+                        if started_at >= sub_sec {
+                            self.skipping_fork_context = false;
+                            continue;
+                        }
+                    }
+                } else if entry.line_type == "response_item"
+                    && payload.get("type").and_then(|v| v.as_str()) == Some("function_call_output")
+                {
+                    let output = payload.get("output").and_then(|v| v.as_str()).unwrap_or("");
+                    if output.contains("newly spawned agent") {
+                        self.skipping_fork_context = false;
+                    }
+                }
+                continue;
+            }
+
+            match entry.line_type.as_str() {
+                "session_meta" => {
+                    // Only process the first session_meta; subagent JSONL files
+                    // contain a second session_meta for the parent context which
+                    // would overwrite the subagent's own id/self.cwd/source fields.
+                    if self.session_id.is_some() {
+                        // 2nd session_meta = start of forked parent context
+                        if self.is_sidechain {
+                            self.skipping_fork_context = true;
+                        }
+                        continue;
+                    }
+                    if let Some(id) = payload.get("id").and_then(|v| v.as_str()) {
+                        self.session_id = Some(id.to_string());
+                    }
+                    if let Some(c) = payload.get("cwd").and_then(|v| v.as_str()) {
+                        self.cwd = Some(c.to_string());
+                    }
+                    if let Some(v) = payload.get("cli_version").and_then(|v| v.as_str()) {
+                        if !v.is_empty() {
+                            self.cc_version = Some(v.to_string());
+                        }
+                    }
+                    if let Some(m) = payload.get("model_provider").and_then(|v| v.as_str()) {
+                        if !m.is_empty() {
+                            self.model_provider = Some(m.to_string());
+                        }
+                    }
+                    if let Some(b) = payload
+                        .get("git")
+                        .and_then(|g| g.get("branch"))
+                        .and_then(|v| v.as_str())
+                    {
+                        if !b.is_empty() && b != "HEAD" {
+                            self.git_branch = Some(b.to_string());
+                        }
+                    }
+                    // Detect subagent sessions: source.subagent.thread_spawn
+                    if let Some(spawn) = payload
+                        .get("source")
+                        .and_then(|s| s.get("subagent"))
+                        .and_then(|a| a.get("thread_spawn"))
+                    {
+                        self.is_sidechain = true;
+                        self.parent_id = spawn
+                            .get("parent_thread_id")
+                            .and_then(|v| v.as_str())
+                            .map(|s| s.to_string());
+                        self.agent_nickname = payload
+                            .get("agent_nickname")
+                            .and_then(|v| v.as_str())
+                            .map(|s| s.to_string());
+                        let sub_ts = parse_rfc3339_timestamp(
+                            payload
+                                .get("timestamp")
+                                .and_then(|v| v.as_str())
+                                .or(entry.timestamp.as_deref()),
+                        );
+                        if sub_ts > 0 {
+                            self.subagent_start_seconds = Some(sub_ts);
+                        }
+                    }
+                }
+                "response_item" => {
+                    // Skip developer role and reasoning type
+                    let role_str = payload.get("role").and_then(|v| v.as_str()).unwrap_or("");
+                    let item_type = payload.get("type").and_then(|v| v.as_str()).unwrap_or("");
+
+                    if role_str == "developer" || item_type == "reasoning" {
+                        continue;
+                    }
+
+                    if !(item_type == "message" && role_str == "user") {
+                        flush_pending_user_message(
+                            &mut self.pending_user_message,
+                            &mut self.messages,
+                            &mut self.content_parts,
+                            &mut self.first_user_message,
+                        );
+                    }
+
+                    match item_type {
+                        "message" => {
+                            let text = omit_base64_image_sources(&extract_codex_content(payload));
+                            let normalized_text = strip_inline_image_sources(&text);
+                            let role = match role_str {
+                                "user" => MessageRole::User,
+                                "assistant" => MessageRole::Assistant,
+                                _ => continue,
+                            };
+
+                            // Skip empty self.messages and system/environment XML content
+                            if text.is_empty() {
+                                continue;
+                            }
+                            let trimmed = normalized_text.trim_start();
+                            if is_system_content(trimmed) {
+                                continue;
+                            }
+
+                            if role == MessageRole::User {
+                                let image_segments = extract_image_source_segments(&text);
+                                flush_pending_user_message(
+                                    &mut self.pending_user_message,
+                                    &mut self.messages,
+                                    &mut self.content_parts,
+                                    &mut self.first_user_message,
+                                );
+                                self.pending_user_message = Some(PendingCodexUserMessage {
+                                    content: text,
+                                    timestamp: entry.timestamp.clone(),
+                                    image_segments,
+                                });
+                                continue;
+                            }
+
+                            let msg_model = if role == MessageRole::Assistant {
+                                self.current_model.clone()
+                            } else {
+                                None
+                            };
+                            if !normalized_text.is_empty() {
+                                self.content_parts.push(normalized_text);
+                            }
+                            self.messages.push(Message {
+                                role,
+                                content: text,
+                                timestamp: entry.timestamp.clone(),
+                                tool_name: None,
+                                tool_input: None,
+                                token_usage: None,
+                                model: msg_model,
+                                usage_hash: None,
+                                tool_metadata: None,
+                            });
+                        }
+                        "function_call" => {
+                            let raw_name = payload
+                                .get("name")
+                                .and_then(|v| v.as_str())
+                                .unwrap_or("unknown");
+                            let arguments_str = payload.get("arguments").and_then(|v| v.as_str());
+
+                            // For exec_command, remap arguments to match Bash tool format
+                            let tool_input = match raw_name {
+                                "exec_command" | "shell_command" => {
+                                    // Remap {"cmd": "..."} to {"command": "..."}; keep already-normalized command args.
+                                    arguments_str.and_then(|s| {
+                                        let v: Value = match serde_json::from_str(s) {
+                                            Ok(value) => value,
+                                            Err(error) => {
+                                                log::warn!(
+                                                "failed to parse Codex tool arguments in '{}': {}",
+                                                path.display(),
+                                                error
+                                            );
+                                                return None;
+                                            }
+                                        };
+                                        let cmd = v
+                                            .get("cmd")
+                                            .or_else(|| v.get("command"))
+                                            .and_then(|c| c.as_str())?;
+                                        Some(json!({"command": cmd}).to_string())
+                                    })
+                                }
+                                "view_image" => {
+                                    // Emit as image message instead of tool
+                                    if let Some(path) = arguments_str.and_then(|s| {
+                                    match serde_json::from_str::<Value>(s) {
+                                        Ok(value) => value
+                                            .get("path")
+                                            .and_then(|p| p.as_str())
+                                            .map(|s| s.to_string()),
+                                        Err(error) => {
+                                            log::warn!(
+                                                "failed to parse Codex view_image arguments in '{}': {}",
+                                                path.display(),
+                                                error
+                                            );
+                                            None
+                                        }
+                                    }
+                                })
+                                {
+                                    self.messages.push(Message {
+                                        role: MessageRole::Assistant,
+                                        content: format!("[Image: source: {path}]"),
+                                        timestamp: entry.timestamp.clone(),
+                                        tool_name: None,
+                                        tool_input: None,
+                                        token_usage: None,
+                                        model: None,
+                                        usage_hash: None,
+                                        tool_metadata: None,
+                                    });
+                                    continue;
+                                }
+                                    None
+                                }
+                                "write_stdin" => {
+                                    // Skip empty stdin writes (just polling)
+                                    let is_empty = arguments_str
+                                        .and_then(|s| serde_json::from_str::<Value>(s).ok())
+                                        .and_then(|v| {
+                                            v.get("chars")
+                                                .and_then(|c| c.as_str())
+                                                .map(|s| s.is_empty())
+                                        })
+                                        .unwrap_or(true);
+                                    if is_empty {
+                                        continue;
+                                    }
+                                    arguments_str.map(|s| s.to_string())
+                                }
+                                _ => arguments_str.map(|s| s.to_string()),
+                            };
+                            let input_value = codex_tool_input_value(
+                                raw_name,
+                                arguments_str,
+                                tool_input.as_deref(),
+                            );
+                            let metadata = build_tool_metadata(ToolCallFacts {
+                                provider: Provider::Codex,
+                                raw_name,
+                                input: input_value.as_ref(),
+                                call_id: payload.get("call_id").and_then(|v| v.as_str()),
+                                assistant_id: None,
+                            });
+                            let display_name = metadata.canonical_name.clone();
+
+                            let idx = self.messages.len();
+                            if let Some(cid) = payload.get("call_id").and_then(|v| v.as_str()) {
+                                self.call_id_map.insert(cid.to_string(), idx);
+                            }
+                            self.messages.push(Message {
+                                role: MessageRole::Tool,
+                                content: String::new(),
+                                timestamp: entry.timestamp.clone(),
+                                tool_name: Some(display_name.to_string()),
+                                tool_input,
+                                tool_metadata: Some(metadata),
+                                token_usage: None,
+                                model: None,
+                                usage_hash: None,
+                            });
+                        }
+                        "function_call_output" => {
+                            let raw_output = match payload.get("output") {
+                                Some(Value::String(s)) => s.clone(),
+                                Some(other) => serde_json::to_string(other).unwrap_or_default(),
+                                None => String::new(),
+                            };
+                            let output = extract_tool_output(&raw_output);
+
+                            if !output.is_empty() {
+                                self.content_parts.push(output.clone());
+                            }
+
+                            // Merge output into the matching function_call message
+                            let call_id = payload.get("call_id").and_then(|v| v.as_str());
+                            if let Some(idx) =
+                                call_id.and_then(|cid| self.call_id_map.get(cid)).copied()
+                            {
+                                if idx < self.messages.len() {
+                                    let result_value =
+                                        codex_tool_result_value(&raw_output, &output);
+                                    self.messages[idx].content = output;
+                                    let is_error = result_value.as_ref().and_then(|value| {
+                                        value
+                                            .get("exitCode")
+                                            .and_then(|code| code.as_i64())
+                                            .map(|code| code != 0)
+                                    });
+                                    if let Some(result_value) = result_value {
+                                        enrich_existing_tool_message(
+                                            &mut self.messages[idx],
+                                            result_value,
+                                            is_error,
+                                            None,
+                                        );
+                                    }
+                                    continue;
+                                }
+                            }
+                            // Fallback: standalone output message
+                            self.messages.push(Message {
+                                role: MessageRole::Tool,
+                                content: output,
+                                timestamp: entry.timestamp.clone(),
+                                tool_name: None,
+                                tool_input: None,
+                                token_usage: None,
+                                model: None,
+                                usage_hash: None,
+                                tool_metadata: None,
+                            });
+                        }
+                        "web_search_call" => {
+                            let action = payload.get("action");
+                            let call_id = payload.get("id").and_then(|v| v.as_str());
+                            let query = action
+                                .and_then(|a| a.get("query"))
+                                .and_then(|v| v.as_str())
+                                .unwrap_or("");
+                            let mut metadata = build_tool_metadata(ToolCallFacts {
+                                provider: Provider::Codex,
+                                raw_name: "web_search_call",
+                                input: action,
+                                call_id,
+                                assistant_id: None,
+                            });
+                            enrich_tool_metadata(
+                                &mut metadata,
+                                ToolResultFacts {
+                                    raw_result: Some(payload),
+                                    is_error: payload
+                                        .get("status")
+                                        .and_then(|v| v.as_str())
+                                        .map(|status| matches!(status, "failed" | "error")),
+                                    status: payload.get("status").and_then(|v| v.as_str()),
+                                    artifact_path: None,
+                                },
+                            );
+                            if !query.is_empty() {
+                                self.content_parts.push(query.to_string());
+                            }
+                            let idx = self.messages.len();
+                            if let Some(call_id) = call_id {
+                                self.call_id_map.insert(call_id.to_string(), idx);
+                            }
+                            self.messages.push(Message {
+                                role: MessageRole::Tool,
+                                content: query.to_string(),
+                                timestamp: entry.timestamp.clone(),
+                                tool_name: Some(metadata.canonical_name.clone()),
+                                tool_input: action.map(|value| value.to_string()),
+                                tool_metadata: Some(metadata),
+                                token_usage: None,
+                                model: None,
+                                usage_hash: None,
+                            });
+                        }
+                        "image_generation_call" => {
+                            let call_id = codex_call_id(payload);
+                            let input_value = codex_image_generation_input(payload);
+                            let metadata = build_tool_metadata(ToolCallFacts {
+                                provider: Provider::Codex,
+                                raw_name: "image_generation_call",
+                                input: Some(&input_value),
+                                call_id,
+                                assistant_id: None,
+                            });
+                            let idx = self.messages.len();
+                            if let Some(call_id) = call_id {
+                                self.call_id_map.insert(call_id.to_string(), idx);
+                            }
+                            self.messages.push(Message {
+                                role: MessageRole::Tool,
+                                content: String::new(),
+                                timestamp: entry.timestamp.clone(),
+                                tool_name: Some(metadata.canonical_name.clone()),
+                                tool_input: Some(input_value.to_string()),
+                                tool_metadata: Some(metadata),
+                                token_usage: None,
+                                model: None,
+                                usage_hash: None,
+                            });
+                        }
+                        "local_shell_call" | "LocalShellCall" => {
+                            let raw_name = "LocalShellCall";
+                            let input_value = payload.clone();
+                            let metadata = build_tool_metadata(ToolCallFacts {
+                                provider: Provider::Codex,
+                                raw_name,
+                                input: Some(&input_value),
+                                call_id: codex_call_id(payload),
+                                assistant_id: None,
+                            });
+                            let idx = self.messages.len();
+                            if let Some(call_id) = codex_call_id(payload) {
+                                self.call_id_map.insert(call_id.to_string(), idx);
+                            }
+                            self.messages.push(Message {
+                                role: MessageRole::Tool,
+                                content: String::new(),
+                                timestamp: entry.timestamp.clone(),
+                                tool_name: Some(metadata.canonical_name.clone()),
+                                tool_input: Some(input_value.to_string()),
+                                tool_metadata: Some(metadata),
+                                token_usage: None,
+                                model: None,
+                                usage_hash: None,
+                            });
+                        }
+                        "tool_search_call" | "ToolSearchCall" => {
+                            let input_value = payload.clone();
+                            let metadata = build_tool_metadata(ToolCallFacts {
+                                provider: Provider::Codex,
+                                raw_name: "ToolSearch",
+                                input: Some(&input_value),
+                                call_id: codex_call_id(payload),
+                                assistant_id: None,
+                            });
+                            let idx = self.messages.len();
+                            if let Some(call_id) = codex_call_id(payload) {
+                                self.call_id_map.insert(call_id.to_string(), idx);
+                            }
+                            self.messages.push(Message {
+                                role: MessageRole::Tool,
+                                content: String::new(),
+                                timestamp: entry.timestamp.clone(),
+                                tool_name: Some(metadata.canonical_name.clone()),
+                                tool_input: Some(input_value.to_string()),
+                                tool_metadata: Some(metadata),
+                                token_usage: None,
+                                model: None,
+                                usage_hash: None,
+                            });
+                        }
+                        "tool_search_output" | "ToolSearchOutput" => {
+                            let output = codex_content_items_text(payload);
+                            if !output.is_empty() {
+                                self.content_parts.push(output.clone());
+                            }
+                            if let Some(idx) = codex_call_id(payload)
+                                .and_then(|cid| self.call_id_map.get(cid))
+                                .copied()
+                            {
+                                self.messages[idx].content = output;
+                                enrich_existing_tool_message(
+                                    &mut self.messages[idx],
+                                    payload.clone(),
+                                    None,
+                                    payload.get("status").and_then(|v| v.as_str()),
+                                );
+                            }
+                        }
+                        "compaction" | "Compaction" => {
+                            push_system_event(
+                                &mut self.messages,
+                                entry.timestamp.clone(),
+                                "[context_compacted]".to_string(),
+                            );
+                        }
+                        "custom_tool_call" => {
+                            let raw_name = payload
+                                .get("name")
+                                .and_then(|v| v.as_str())
+                                .unwrap_or("tool");
+                            let input = payload.get("input").map(|v| {
+                                if let Some(s) = v.as_str() {
+                                    s.to_string()
+                                } else {
+                                    serde_json::to_string(v).unwrap_or_default()
+                                }
+                            });
+                            let input_value =
+                                codex_tool_input_value(raw_name, None, input.as_deref());
+                            let metadata = build_tool_metadata(ToolCallFacts {
+                                provider: Provider::Codex,
+                                raw_name,
+                                input: input_value.as_ref(),
+                                call_id: payload.get("call_id").and_then(|v| v.as_str()),
+                                assistant_id: None,
+                            });
+                            let display_name = metadata.canonical_name.clone();
+
+                            let idx = self.messages.len();
+                            if let Some(cid) = payload.get("call_id").and_then(|v| v.as_str()) {
+                                self.call_id_map.insert(cid.to_string(), idx);
+                            }
+                            self.messages.push(Message {
+                                role: MessageRole::Tool,
+                                content: String::new(),
+                                timestamp: entry.timestamp.clone(),
+                                tool_name: Some(display_name.to_string()),
+                                tool_input: input,
+                                tool_metadata: Some(metadata),
+                                token_usage: None,
+                                model: None,
+                                usage_hash: None,
+                            });
+                        }
+                        "custom_tool_call_output" => {
+                            let raw_output = payload
+                                .get("output")
+                                .and_then(|v| v.as_str())
+                                .unwrap_or("")
+                                .to_string();
+                            let output = extract_tool_output(&raw_output);
+
+                            let call_id = payload.get("call_id").and_then(|v| v.as_str());
+                            if let Some(idx) =
+                                call_id.and_then(|cid| self.call_id_map.get(cid)).copied()
+                            {
+                                if idx < self.messages.len() {
+                                    let result_value =
+                                        codex_tool_result_value(&raw_output, &output);
+                                    self.messages[idx].content = output;
+                                    let is_error = result_value.as_ref().and_then(|value| {
+                                        value
+                                            .get("exitCode")
+                                            .and_then(|code| code.as_i64())
+                                            .map(|code| code != 0)
+                                    });
+                                    if let Some(result_value) = result_value {
+                                        enrich_existing_tool_message(
+                                            &mut self.messages[idx],
+                                            result_value,
+                                            is_error,
+                                            None,
+                                        );
+                                    }
+                                    continue;
+                                }
+                            }
+                            if !output.is_empty() {
+                                self.messages.push(Message {
+                                    role: MessageRole::Tool,
+                                    content: output,
+                                    timestamp: entry.timestamp.clone(),
+                                    tool_name: None,
+                                    tool_input: None,
+                                    token_usage: None,
+                                    model: None,
+                                    usage_hash: None,
+                                    tool_metadata: None,
+                                });
+                            }
+                        }
+                        _ => continue,
+                    }
+                }
+                "turn_context" => {
+                    flush_pending_user_message(
+                        &mut self.pending_user_message,
+                        &mut self.messages,
+                        &mut self.content_parts,
+                        &mut self.first_user_message,
+                    );
+                    // Extract actual self.model name (e.g. "gpt-5.4") from turn_context
+                    if let Some(m) = payload.get("model").and_then(|v| v.as_str()) {
+                        if !m.is_empty() {
+                            self.current_model = Some(m.to_string());
+                            if self.model.is_none() {
+                                self.model = Some(m.to_string());
+                            }
+                        }
+                    }
+                }
+                "event_msg" => {
+                    let event_type = payload.get("type").and_then(|v| v.as_str()).unwrap_or("");
+                    // agent_message is a duplicate of response_item/message/assistant — skip
+                    match event_type {
+                        "user_message" => {
+                            let pending = self.pending_user_message.take();
+                            let fallback_content =
+                                pending.as_ref().map(|message| message.content.clone());
+                            let response_image_segments = pending
+                                .as_ref()
+                                .map(|message| message.image_segments.clone())
+                                .unwrap_or_default();
+                            let timestamp = entry
+                                .timestamp
+                                .clone()
+                                .or_else(|| pending.and_then(|message| message.timestamp));
+                            let built_content =
+                                build_codex_user_message(payload, &response_image_segments);
+                            let content = if built_content.is_empty() {
+                                fallback_content.unwrap_or_default()
+                            } else {
+                                built_content
+                            };
+                            append_user_message(
+                                &mut self.messages,
+                                &mut self.content_parts,
+                                &mut self.first_user_message,
+                                content,
+                                timestamp,
+                            );
+                        }
+                        "item_completed" => {
+                            flush_pending_user_message(
+                                &mut self.pending_user_message,
+                                &mut self.messages,
+                                &mut self.content_parts,
+                                &mut self.first_user_message,
+                            );
+                            let item = payload.get("item");
+                            if item.and_then(|v| v.get("type")).and_then(|v| v.as_str())
+                                == Some("Plan")
+                            {
+                                let text = item
+                                    .and_then(|v| v.get("text"))
+                                    .and_then(|v| v.as_str())
+                                    .unwrap_or("");
+                                if !text.trim().is_empty() {
+                                    self.content_parts.push(text.to_string());
+                                    self.messages.push(Message {
+                                        role: MessageRole::Assistant,
+                                        content: text.to_string(),
+                                        timestamp: entry.timestamp.clone(),
+                                        tool_name: None,
+                                        tool_input: None,
+                                        token_usage: None,
+                                        model: self.current_model.clone(),
+                                        usage_hash: None,
+                                        tool_metadata: None,
+                                    });
+                                }
+                            }
+                        }
+                        "thread_name_updated" => {
+                            if let Some(name) = payload
+                                .get("thread_name")
+                                .and_then(|v| v.as_str())
+                                .filter(|s| !s.trim().is_empty())
+                            {
+                                self.thread_name = Some(name.to_string());
+                            }
+                        }
+                        "error" => {
+                            let message = payload
+                                .get("message")
+                                .and_then(|v| v.as_str())
+                                .unwrap_or("unknown error");
+                            let info = payload
+                                .get("codex_error_info")
+                                .and_then(|v| v.as_str())
+                                .unwrap_or("");
+                            let detail = if info.is_empty() {
+                                message.to_string()
+                            } else {
+                                format!("{info}: {message}")
+                            };
+                            push_system_event(
+                                &mut self.messages,
+                                entry.timestamp.clone(),
+                                format!("[error] {detail}"),
+                            );
+                        }
+                        "turn_aborted" => {
+                            let reason = payload
+                                .get("reason")
+                                .and_then(|v| v.as_str())
+                                .unwrap_or("aborted");
+                            let duration = payload
+                                .get("duration_ms")
+                                .and_then(|v| v.as_u64())
+                                .map(|ms| format!(" ({:.1}s)", ms as f64 / 1000.0))
+                                .unwrap_or_default();
+                            push_system_event(
+                                &mut self.messages,
+                                entry.timestamp.clone(),
+                                format!("[turn_aborted] {reason}{duration}"),
+                            );
+                        }
+                        "context_compacted" => {
+                            push_system_event(
+                                &mut self.messages,
+                                entry.timestamp.clone(),
+                                "[context_compacted]".to_string(),
+                            );
+                        }
+                        "token_count" => {
+                            if let Some(info) = payload.get("info") {
+                                let Some((usage_model, usage_counts)) =
+                                    codex_usage_from_info(info, &mut self.previous_token_totals)
+                                else {
+                                    continue;
+                                };
+                                let (input, cached, output, reasoning, total) = usage_counts;
+                                let any_nonzero = input != 0
+                                    || cached != 0
+                                    || output != 0
+                                    || reasoning != 0
+                                    || total != 0;
+                                let resolved_model = extract_codex_model(info)
+                                    .or_else(|| extract_codex_model(payload))
+                                    .or_else(|| self.current_model.clone())
+                                    .or_else(|| usage_model.clone());
+                                // Capture the event for the indexer's per-date stats
+                                // in the same pass — replaces a second file read.
+                                if any_nonzero {
+                                    if let Some(ts) = entry.timestamp.as_ref() {
+                                        let model_for_event = resolved_model
+                                            .clone()
+                                            .unwrap_or_else(|| "gpt-5".to_string());
+                                        self.usage_events.push(UsageEvent {
+                                            timestamp: ts.clone(),
+                                            model: model_for_event,
+                                            input_tokens: input,
+                                            output_tokens: output,
+                                            cache_read_input_tokens: cached.min(input),
+                                        });
+                                    }
+                                }
+                                let Some(usage) = codex_token_usage_from_counts(usage_counts)
+                                else {
+                                    continue;
+                                };
+                                if let Some(model_name) = resolved_model.clone() {
+                                    self.current_model = Some(model_name);
+                                }
+                                add_usage_to_last_assistant(
+                                    &mut self.messages,
+                                    usage,
+                                    resolved_model,
+                                );
+                            }
+                        }
+                        "web_search_end" => {
+                            let call_id = payload.get("call_id").and_then(|v| v.as_str());
+                            let action = payload.get("action");
+                            let query = payload.get("query").and_then(|v| v.as_str()).unwrap_or("");
+                            let result = Some(payload.clone());
+
+                            if let Some(idx) =
+                                call_id.and_then(|cid| self.call_id_map.get(cid)).copied()
+                            {
+                                if idx < self.messages.len() {
+                                    self.messages[idx].content = query.to_string();
+                                    if self.messages[idx].tool_input.is_none() {
+                                        self.messages[idx].tool_input =
+                                            action.map(|value| value.to_string());
+                                    }
+                                    if let Some(metadata) =
+                                        self.messages[idx].tool_metadata.as_mut()
+                                    {
+                                        enrich_tool_metadata(
+                                            metadata,
+                                            ToolResultFacts {
+                                                raw_result: result.as_ref(),
+                                                is_error: None,
+                                                status: None,
+                                                artifact_path: None,
+                                            },
+                                        );
+                                    }
+                                    continue;
+                                }
+                            }
+
+                            let mut metadata = build_tool_metadata(ToolCallFacts {
+                                provider: Provider::Codex,
+                                raw_name: "web_search_call",
+                                input: action,
+                                call_id,
+                                assistant_id: None,
+                            });
+                            enrich_tool_metadata(
+                                &mut metadata,
+                                ToolResultFacts {
+                                    raw_result: result.as_ref(),
+                                    is_error: None,
+                                    status: None,
+                                    artifact_path: None,
+                                },
+                            );
+                            let idx = self.messages.len();
+                            if let Some(call_id) = call_id {
+                                self.call_id_map.insert(call_id.to_string(), idx);
+                            }
+                            if !query.is_empty() {
+                                self.content_parts.push(query.to_string());
+                            }
+                            self.messages.push(Message {
+                                role: MessageRole::Tool,
+                                content: query.to_string(),
+                                timestamp: entry.timestamp.clone(),
+                                tool_name: Some(metadata.canonical_name.clone()),
+                                tool_input: action.map(|value| value.to_string()),
+                                tool_metadata: Some(metadata),
+                                token_usage: None,
+                                model: None,
+                                usage_hash: None,
+                            });
+                        }
+                        "image_generation_end" => {
+                            let Some(call_id) = codex_call_id(payload) else {
+                                continue;
+                            };
+                            let Some(idx) = self.call_id_map.get(call_id).copied() else {
+                                log::warn!(
+                                "missing Codex image generation tool message for event call_id {} in '{}'",
+                                call_id,
+                                path.display()
+                            );
+                                continue;
+                            };
+                            if idx >= self.messages.len() {
+                                continue;
+                            }
+
+                            if let Some(saved_path) =
+                                payload.get("saved_path").and_then(|v| v.as_str())
+                            {
+                                self.messages[idx].content =
+                                    format!("[Image: source: {saved_path}]");
+                            }
+                            let result_value = codex_image_generation_result(payload);
+                            enrich_existing_tool_message(
+                                &mut self.messages[idx],
+                                result_value,
+                                None,
+                                payload.get("status").and_then(|v| v.as_str()),
+                            );
+                        }
+                        "dynamic_tool_call_request" => {
+                            let input_value = dynamic_tool_input(payload);
+                            let raw_name = input_value
+                                .get("tool")
+                                .and_then(|v| v.as_str())
+                                .unwrap_or("dynamic_tool_call");
+                            let metadata = build_tool_metadata(ToolCallFacts {
+                                provider: Provider::Codex,
+                                raw_name,
+                                input: Some(&input_value),
+                                call_id: codex_call_id(payload),
+                                assistant_id: None,
+                            });
+                            let idx = self.messages.len();
+                            if let Some(call_id) = codex_call_id(payload) {
+                                self.call_id_map.insert(call_id.to_string(), idx);
+                            }
+                            self.messages.push(Message {
+                                role: MessageRole::Tool,
+                                content: String::new(),
+                                timestamp: entry.timestamp.clone(),
+                                tool_name: Some(metadata.canonical_name.clone()),
+                                tool_input: Some(input_value.to_string()),
+                                tool_metadata: Some(metadata),
+                                token_usage: None,
+                                model: None,
+                                usage_hash: None,
+                            });
+                        }
+                        "dynamic_tool_call_response" => {
+                            let output = codex_content_items_text(payload);
+                            if !output.is_empty() {
+                                self.content_parts.push(output.clone());
+                            }
+                            let result_value = dynamic_tool_result(payload);
+                            let is_error = payload
+                                .get("success")
+                                .and_then(|v| v.as_bool())
+                                .map(|success| !success);
+                            let status = payload
+                                .get("success")
+                                .and_then(|v| v.as_bool())
+                                .map(|success| if success { "success" } else { "error" });
+
+                            if let Some(idx) = codex_call_id(payload)
+                                .and_then(|cid| self.call_id_map.get(cid))
+                                .copied()
+                            {
+                                if idx < self.messages.len() {
+                                    self.messages[idx].content = output;
+                                    enrich_existing_tool_message(
+                                        &mut self.messages[idx],
+                                        result_value,
+                                        is_error,
+                                        status,
+                                    );
+                                    continue;
+                                }
+                            }
+
+                            let input_value = dynamic_tool_input(payload);
+                            let raw_name = input_value
+                                .get("tool")
+                                .and_then(|v| v.as_str())
+                                .unwrap_or("dynamic_tool_call");
+                            let mut metadata = build_tool_metadata(ToolCallFacts {
+                                provider: Provider::Codex,
+                                raw_name,
+                                input: Some(&input_value),
+                                call_id: codex_call_id(payload),
+                                assistant_id: None,
+                            });
+                            enrich_tool_metadata(
+                                &mut metadata,
+                                ToolResultFacts {
+                                    raw_result: Some(&result_value),
+                                    is_error,
+                                    status,
+                                    artifact_path: None,
+                                },
+                            );
+                            self.messages.push(Message {
+                                role: MessageRole::Tool,
+                                content: output,
+                                timestamp: entry.timestamp.clone(),
+                                tool_name: Some(metadata.canonical_name.clone()),
+                                tool_input: Some(input_value.to_string()),
+                                tool_metadata: Some(metadata),
+                                token_usage: None,
+                                model: None,
+                                usage_hash: None,
+                            });
+                        }
+                        "exec_command_end" => {
+                            let Some(call_id) = payload.get("call_id").and_then(|v| v.as_str())
+                            else {
+                                continue;
+                            };
+                            let Some(idx) = self.call_id_map.get(call_id).copied() else {
+                                log::warn!(
+                                "missing Codex exec_command tool message for event call_id {} in '{}'",
+                                call_id,
+                                path.display()
+                            );
+                                continue;
+                            };
+                            if idx >= self.messages.len() {
+                                continue;
+                            }
+
+                            let result_value = codex_exec_command_event_result(
+                                payload,
+                                &self.messages[idx].content,
+                            );
+                            let status = payload.get("status").and_then(|v| v.as_str());
+                            let is_error =
+                                status.map(|status| matches!(status, "failed" | "declined"));
+                            if self.messages[idx].content.is_empty()
+                                || self.messages[idx].content.trim_start().starts_with('{')
+                            {
+                                if let Some(formatted_output) = result_value
+                                    .get("formattedOutput")
+                                    .and_then(|v| v.as_str())
+                                    .filter(|v| !v.is_empty())
+                                    .or_else(|| {
+                                        result_value
+                                            .get("aggregatedOutput")
+                                            .and_then(|v| v.as_str())
+                                            .filter(|v| !v.is_empty())
+                                    })
+                                    .or_else(|| {
+                                        result_value
+                                            .get("stdout")
+                                            .and_then(|v| v.as_str())
+                                            .filter(|v| !v.is_empty())
+                                    })
+                                {
+                                    self.messages[idx].content = formatted_output.to_string();
+                                }
+                            }
+                            enrich_existing_tool_message(
+                                &mut self.messages[idx],
+                                result_value,
+                                is_error,
+                                status,
+                            );
+                        }
+                        "mcp_tool_call_end" => {
+                            let Some(call_id) = payload.get("call_id").and_then(|v| v.as_str())
+                            else {
+                                continue;
+                            };
+                            let Some(idx) = self.call_id_map.get(call_id).copied() else {
+                                log::warn!(
+                                    "missing Codex MCP tool message for event call_id {} in '{}'",
+                                    call_id,
+                                    path.display()
+                                );
+                                continue;
+                            };
+                            if idx >= self.messages.len() {
+                                continue;
+                            }
+
+                            let result_value = codex_mcp_tool_call_event_result(payload);
+                            let is_error = result_value
+                                .get("success")
+                                .and_then(|v| v.as_bool())
+                                .map(|success| !success);
+                            enrich_existing_tool_message(
+                                &mut self.messages[idx],
+                                result_value,
+                                is_error,
+                                None,
+                            );
+                        }
+                        "patch_apply_end" => {
+                            let Some(call_id) = payload.get("call_id").and_then(|v| v.as_str())
+                            else {
+                                continue;
+                            };
+                            let Some(idx) = self.call_id_map.get(call_id).copied() else {
+                                log::warn!(
+                                "missing Codex apply_patch tool message for event call_id {} in '{}'",
+                                call_id,
+                                path.display()
+                            );
+                                continue;
+                            };
+                            if idx >= self.messages.len() {
+                                continue;
+                            }
+
+                            let result_value = codex_patch_event_result(payload);
+                            let status = payload.get("status").and_then(|v| v.as_str());
+                            let is_error =
+                                payload.get("success").and_then(|v| v.as_bool()).map(|v| !v);
+                            if self.messages[idx].content.is_empty()
+                                || self.messages[idx].content.trim_start().starts_with('{')
+                            {
+                                if let Some(stdout) = result_value
+                                    .get("stdout")
+                                    .and_then(|v| v.as_str())
+                                    .filter(|v| !v.is_empty())
+                                {
+                                    self.messages[idx].content = stdout.to_string();
+                                }
+                            }
+                            enrich_existing_tool_message(
+                                &mut self.messages[idx],
+                                result_value,
+                                is_error,
+                                status,
+                            );
+                        }
+                        "collab_agent_spawn_end" => {
+                            let Some(call_id) = payload.get("call_id").and_then(|v| v.as_str())
+                            else {
+                                continue;
+                            };
+                            let Some(idx) = self.call_id_map.get(call_id).copied() else {
+                                log::warn!(
+                                "missing Codex spawn_agent tool message for event call_id {} in '{}'",
+                                call_id,
+                                path.display()
+                            );
+                                continue;
+                            };
+                            if idx >= self.messages.len() {
+                                continue;
+                            }
+
+                            let status = payload.get("status").and_then(|v| v.as_str());
+                            enrich_existing_tool_message(
+                                &mut self.messages[idx],
+                                payload.clone(),
+                                None,
+                                status,
+                            );
+                        }
+                        "collab_waiting_end" => {
+                            let Some(call_id) = payload.get("call_id").and_then(|v| v.as_str())
+                            else {
+                                continue;
+                            };
+                            let Some(idx) = self.call_id_map.get(call_id).copied() else {
+                                log::warn!(
+                                "missing Codex wait_agent tool message for event call_id {} in '{}'",
+                                call_id,
+                                path.display()
+                            );
+                                continue;
+                            };
+                            if idx >= self.messages.len() {
+                                continue;
+                            }
+
+                            let status = self.messages[idx]
+                                .tool_metadata
+                                .as_ref()
+                                .and_then(|metadata| metadata.structured.as_ref())
+                                .and_then(|value| value.get("timed_out"))
+                                .and_then(|value| value.as_bool())
+                                .map(|timed_out| if timed_out { "timed_out" } else { "completed" });
+                            let is_error = status.map(|status| status == "timed_out");
+                            enrich_existing_tool_message(
+                                &mut self.messages[idx],
+                                payload.clone(),
+                                is_error,
+                                status,
+                            );
+                        }
+                        "collab_agent_interaction_end" => {
+                            let Some(call_id) = payload.get("call_id").and_then(|v| v.as_str())
+                            else {
+                                continue;
+                            };
+                            let Some(idx) = self.call_id_map.get(call_id).copied() else {
+                                log::warn!(
+                                "missing Codex send_input tool message for event call_id {} in '{}'",
+                                call_id,
+                                path.display()
+                            );
+                                continue;
+                            };
+                            if idx >= self.messages.len() {
+                                continue;
+                            }
+
+                            let status = payload
+                                .get("status")
+                                .and_then(|v| v.as_str())
+                                .or(Some("completed"));
+                            enrich_existing_tool_message(
+                                &mut self.messages[idx],
+                                payload.clone(),
+                                None,
+                                status,
+                            );
+                        }
+                        "collab_close_end" => {
+                            let Some(call_id) = payload.get("call_id").and_then(|v| v.as_str())
+                            else {
+                                continue;
+                            };
+                            let Some(idx) = self.call_id_map.get(call_id).copied() else {
+                                log::warn!(
+                                "missing Codex close_agent tool message for event call_id {} in '{}'",
+                                call_id,
+                                path.display()
+                            );
+                                continue;
+                            };
+                            if idx >= self.messages.len() {
+                                continue;
+                            }
+
+                            enrich_existing_tool_message(
+                                &mut self.messages[idx],
+                                payload.clone(),
+                                None,
+                                Some("completed"),
+                            );
+                        }
+                        _ => {
+                            flush_pending_user_message(
+                                &mut self.pending_user_message,
+                                &mut self.messages,
+                                &mut self.content_parts,
+                                &mut self.first_user_message,
+                            );
+                        }
+                    }
+                }
+                _ => continue,
+            }
+        }
+    }
 }
 
 impl CodexProvider {
@@ -470,1221 +1693,7 @@ impl CodexProvider {
         //     session_meta.timestamp.
         let mut accum = CodexScanAccum::new();
 
-        for line in reader.lines() {
-            let line = match line {
-                Ok(l) => l,
-                Err(error) => {
-                    log::warn!(
-                        "failed to read Codex session line from '{}': {}",
-                        path.display(),
-                        error
-                    );
-                    continue;
-                }
-            };
-            if line.trim().is_empty() {
-                continue;
-            }
-
-            let entry: CodexLine = match serde_json::from_str(&line) {
-                Ok(e) => e,
-                Err(error) => {
-                    log::warn!(
-                        "skipping malformed Codex JSONL in '{}': {}",
-                        path.display(),
-                        error
-                    );
-                    accum.parse_warning_count = accum.parse_warning_count.saturating_add(1);
-                    continue;
-                }
-            };
-
-            if let Some(ref ts) = entry.timestamp {
-                if accum.first_timestamp.is_none() {
-                    accum.first_timestamp = Some(ts.clone());
-                }
-                accum.last_timestamp = Some(ts.clone());
-            }
-
-            let payload = match entry.payload {
-                Some(ref p) => p,
-                None => continue,
-            };
-
-            // Skip forked parent context in subagent files. Clear the flag on
-            // the first subagent-owned `task_started` event (its `started_at`
-            // matches the subagent session's creation time). Fall back to the
-            // legacy `newly spawned agent` marker for pre-0.120 rollouts.
-            if accum.skipping_fork_context {
-                if entry.line_type == "event_msg"
-                    && payload.get("type").and_then(|v| v.as_str()) == Some("task_started")
-                {
-                    if let (Some(started_at), Some(sub_sec)) = (
-                        payload.get("started_at").and_then(|v| v.as_i64()),
-                        accum.subagent_start_seconds,
-                    ) {
-                        if started_at >= sub_sec {
-                            accum.skipping_fork_context = false;
-                            continue;
-                        }
-                    }
-                } else if entry.line_type == "response_item"
-                    && payload.get("type").and_then(|v| v.as_str()) == Some("function_call_output")
-                {
-                    let output = payload.get("output").and_then(|v| v.as_str()).unwrap_or("");
-                    if output.contains("newly spawned agent") {
-                        accum.skipping_fork_context = false;
-                    }
-                }
-                continue;
-            }
-
-            match entry.line_type.as_str() {
-                "session_meta" => {
-                    // Only process the first session_meta; subagent JSONL files
-                    // contain a second session_meta for the parent context which
-                    // would overwrite the subagent's own id/accum.cwd/source fields.
-                    if accum.session_id.is_some() {
-                        // 2nd session_meta = start of forked parent context
-                        if accum.is_sidechain {
-                            accum.skipping_fork_context = true;
-                        }
-                        continue;
-                    }
-                    if let Some(id) = payload.get("id").and_then(|v| v.as_str()) {
-                        accum.session_id = Some(id.to_string());
-                    }
-                    if let Some(c) = payload.get("cwd").and_then(|v| v.as_str()) {
-                        accum.cwd = Some(c.to_string());
-                    }
-                    if let Some(v) = payload.get("cli_version").and_then(|v| v.as_str()) {
-                        if !v.is_empty() {
-                            accum.cc_version = Some(v.to_string());
-                        }
-                    }
-                    if let Some(m) = payload.get("model_provider").and_then(|v| v.as_str()) {
-                        if !m.is_empty() {
-                            accum.model_provider = Some(m.to_string());
-                        }
-                    }
-                    if let Some(b) = payload
-                        .get("git")
-                        .and_then(|g| g.get("branch"))
-                        .and_then(|v| v.as_str())
-                    {
-                        if !b.is_empty() && b != "HEAD" {
-                            accum.git_branch = Some(b.to_string());
-                        }
-                    }
-                    // Detect subagent sessions: source.subagent.thread_spawn
-                    if let Some(spawn) = payload
-                        .get("source")
-                        .and_then(|s| s.get("subagent"))
-                        .and_then(|a| a.get("thread_spawn"))
-                    {
-                        accum.is_sidechain = true;
-                        accum.parent_id = spawn
-                            .get("parent_thread_id")
-                            .and_then(|v| v.as_str())
-                            .map(|s| s.to_string());
-                        accum.agent_nickname = payload
-                            .get("agent_nickname")
-                            .and_then(|v| v.as_str())
-                            .map(|s| s.to_string());
-                        let sub_ts = parse_rfc3339_timestamp(
-                            payload
-                                .get("timestamp")
-                                .and_then(|v| v.as_str())
-                                .or(entry.timestamp.as_deref()),
-                        );
-                        if sub_ts > 0 {
-                            accum.subagent_start_seconds = Some(sub_ts);
-                        }
-                    }
-                }
-                "response_item" => {
-                    // Skip developer role and reasoning type
-                    let role_str = payload.get("role").and_then(|v| v.as_str()).unwrap_or("");
-                    let item_type = payload.get("type").and_then(|v| v.as_str()).unwrap_or("");
-
-                    if role_str == "developer" || item_type == "reasoning" {
-                        continue;
-                    }
-
-                    if !(item_type == "message" && role_str == "user") {
-                        flush_pending_user_message(
-                            &mut accum.pending_user_message,
-                            &mut accum.messages,
-                            &mut accum.content_parts,
-                            &mut accum.first_user_message,
-                        );
-                    }
-
-                    match item_type {
-                        "message" => {
-                            let text = omit_base64_image_sources(&extract_codex_content(payload));
-                            let normalized_text = strip_inline_image_sources(&text);
-                            let role = match role_str {
-                                "user" => MessageRole::User,
-                                "assistant" => MessageRole::Assistant,
-                                _ => continue,
-                            };
-
-                            // Skip empty accum.messages and system/environment XML content
-                            if text.is_empty() {
-                                continue;
-                            }
-                            let trimmed = normalized_text.trim_start();
-                            if is_system_content(trimmed) {
-                                continue;
-                            }
-
-                            if role == MessageRole::User {
-                                let image_segments = extract_image_source_segments(&text);
-                                flush_pending_user_message(
-                                    &mut accum.pending_user_message,
-                                    &mut accum.messages,
-                                    &mut accum.content_parts,
-                                    &mut accum.first_user_message,
-                                );
-                                accum.pending_user_message = Some(PendingCodexUserMessage {
-                                    content: text,
-                                    timestamp: entry.timestamp.clone(),
-                                    image_segments,
-                                });
-                                continue;
-                            }
-
-                            let msg_model = if role == MessageRole::Assistant {
-                                accum.current_model.clone()
-                            } else {
-                                None
-                            };
-                            if !normalized_text.is_empty() {
-                                accum.content_parts.push(normalized_text);
-                            }
-                            accum.messages.push(Message {
-                                role,
-                                content: text,
-                                timestamp: entry.timestamp.clone(),
-                                tool_name: None,
-                                tool_input: None,
-                                token_usage: None,
-                                model: msg_model,
-                                usage_hash: None,
-                                tool_metadata: None,
-                            });
-                        }
-                        "function_call" => {
-                            let raw_name = payload
-                                .get("name")
-                                .and_then(|v| v.as_str())
-                                .unwrap_or("unknown");
-                            let arguments_str = payload.get("arguments").and_then(|v| v.as_str());
-
-                            // For exec_command, remap arguments to match Bash tool format
-                            let tool_input = match raw_name {
-                                "exec_command" | "shell_command" => {
-                                    // Remap {"cmd": "..."} to {"command": "..."}; keep already-normalized command args.
-                                    arguments_str.and_then(|s| {
-                                        let v: Value = match serde_json::from_str(s) {
-                                            Ok(value) => value,
-                                            Err(error) => {
-                                                log::warn!(
-                                                    "failed to parse Codex tool arguments in '{}': {}",
-                                                    path.display(),
-                                                    error
-                                                );
-                                                return None;
-                                            }
-                                        };
-                                        let cmd = v
-                                            .get("cmd")
-                                            .or_else(|| v.get("command"))
-                                            .and_then(|c| c.as_str())?;
-                                        Some(json!({"command": cmd}).to_string())
-                                    })
-                                }
-                                "view_image" => {
-                                    // Emit as image message instead of tool
-                                    if let Some(path) = arguments_str.and_then(|s| {
-                                        match serde_json::from_str::<Value>(s) {
-                                            Ok(value) => value
-                                                .get("path")
-                                                .and_then(|p| p.as_str())
-                                                .map(|s| s.to_string()),
-                                            Err(error) => {
-                                                log::warn!(
-                                                    "failed to parse Codex view_image arguments in '{}': {}",
-                                                    path.display(),
-                                                    error
-                                                );
-                                                None
-                                            }
-                                        }
-                                    })
-                                    {
-                                        accum.messages.push(Message {
-                                            role: MessageRole::Assistant,
-                                            content: format!("[Image: source: {path}]"),
-                                            timestamp: entry.timestamp.clone(),
-                                            tool_name: None,
-                                            tool_input: None,
-                                            token_usage: None,
-                                            model: None,
-                                            usage_hash: None,
-                                            tool_metadata: None,
-                                        });
-                                        continue;
-                                    }
-                                    None
-                                }
-                                "write_stdin" => {
-                                    // Skip empty stdin writes (just polling)
-                                    let is_empty = arguments_str
-                                        .and_then(|s| serde_json::from_str::<Value>(s).ok())
-                                        .and_then(|v| {
-                                            v.get("chars")
-                                                .and_then(|c| c.as_str())
-                                                .map(|s| s.is_empty())
-                                        })
-                                        .unwrap_or(true);
-                                    if is_empty {
-                                        continue;
-                                    }
-                                    arguments_str.map(|s| s.to_string())
-                                }
-                                _ => arguments_str.map(|s| s.to_string()),
-                            };
-                            let input_value = codex_tool_input_value(
-                                raw_name,
-                                arguments_str,
-                                tool_input.as_deref(),
-                            );
-                            let metadata = build_tool_metadata(ToolCallFacts {
-                                provider: Provider::Codex,
-                                raw_name,
-                                input: input_value.as_ref(),
-                                call_id: payload.get("call_id").and_then(|v| v.as_str()),
-                                assistant_id: None,
-                            });
-                            let display_name = metadata.canonical_name.clone();
-
-                            let idx = accum.messages.len();
-                            if let Some(cid) = payload.get("call_id").and_then(|v| v.as_str()) {
-                                accum.call_id_map.insert(cid.to_string(), idx);
-                            }
-                            accum.messages.push(Message {
-                                role: MessageRole::Tool,
-                                content: String::new(),
-                                timestamp: entry.timestamp.clone(),
-                                tool_name: Some(display_name.to_string()),
-                                tool_input,
-                                tool_metadata: Some(metadata),
-                                token_usage: None,
-                                model: None,
-                                usage_hash: None,
-                            });
-                        }
-                        "function_call_output" => {
-                            let raw_output = match payload.get("output") {
-                                Some(Value::String(s)) => s.clone(),
-                                Some(other) => serde_json::to_string(other).unwrap_or_default(),
-                                None => String::new(),
-                            };
-                            let output = extract_tool_output(&raw_output);
-
-                            if !output.is_empty() {
-                                accum.content_parts.push(output.clone());
-                            }
-
-                            // Merge output into the matching function_call message
-                            let call_id = payload.get("call_id").and_then(|v| v.as_str());
-                            if let Some(idx) =
-                                call_id.and_then(|cid| accum.call_id_map.get(cid)).copied()
-                            {
-                                if idx < accum.messages.len() {
-                                    let result_value =
-                                        codex_tool_result_value(&raw_output, &output);
-                                    accum.messages[idx].content = output;
-                                    let is_error = result_value.as_ref().and_then(|value| {
-                                        value
-                                            .get("exitCode")
-                                            .and_then(|code| code.as_i64())
-                                            .map(|code| code != 0)
-                                    });
-                                    if let Some(result_value) = result_value {
-                                        enrich_existing_tool_message(
-                                            &mut accum.messages[idx],
-                                            result_value,
-                                            is_error,
-                                            None,
-                                        );
-                                    }
-                                    continue;
-                                }
-                            }
-                            // Fallback: standalone output message
-                            accum.messages.push(Message {
-                                role: MessageRole::Tool,
-                                content: output,
-                                timestamp: entry.timestamp.clone(),
-                                tool_name: None,
-                                tool_input: None,
-                                token_usage: None,
-                                model: None,
-                                usage_hash: None,
-                                tool_metadata: None,
-                            });
-                        }
-                        "web_search_call" => {
-                            let action = payload.get("action");
-                            let call_id = payload.get("id").and_then(|v| v.as_str());
-                            let query = action
-                                .and_then(|a| a.get("query"))
-                                .and_then(|v| v.as_str())
-                                .unwrap_or("");
-                            let mut metadata = build_tool_metadata(ToolCallFacts {
-                                provider: Provider::Codex,
-                                raw_name: "web_search_call",
-                                input: action,
-                                call_id,
-                                assistant_id: None,
-                            });
-                            enrich_tool_metadata(
-                                &mut metadata,
-                                ToolResultFacts {
-                                    raw_result: Some(payload),
-                                    is_error: payload
-                                        .get("status")
-                                        .and_then(|v| v.as_str())
-                                        .map(|status| matches!(status, "failed" | "error")),
-                                    status: payload.get("status").and_then(|v| v.as_str()),
-                                    artifact_path: None,
-                                },
-                            );
-                            if !query.is_empty() {
-                                accum.content_parts.push(query.to_string());
-                            }
-                            let idx = accum.messages.len();
-                            if let Some(call_id) = call_id {
-                                accum.call_id_map.insert(call_id.to_string(), idx);
-                            }
-                            accum.messages.push(Message {
-                                role: MessageRole::Tool,
-                                content: query.to_string(),
-                                timestamp: entry.timestamp.clone(),
-                                tool_name: Some(metadata.canonical_name.clone()),
-                                tool_input: action.map(|value| value.to_string()),
-                                tool_metadata: Some(metadata),
-                                token_usage: None,
-                                model: None,
-                                usage_hash: None,
-                            });
-                        }
-                        "image_generation_call" => {
-                            let call_id = codex_call_id(payload);
-                            let input_value = codex_image_generation_input(payload);
-                            let metadata = build_tool_metadata(ToolCallFacts {
-                                provider: Provider::Codex,
-                                raw_name: "image_generation_call",
-                                input: Some(&input_value),
-                                call_id,
-                                assistant_id: None,
-                            });
-                            let idx = accum.messages.len();
-                            if let Some(call_id) = call_id {
-                                accum.call_id_map.insert(call_id.to_string(), idx);
-                            }
-                            accum.messages.push(Message {
-                                role: MessageRole::Tool,
-                                content: String::new(),
-                                timestamp: entry.timestamp.clone(),
-                                tool_name: Some(metadata.canonical_name.clone()),
-                                tool_input: Some(input_value.to_string()),
-                                tool_metadata: Some(metadata),
-                                token_usage: None,
-                                model: None,
-                                usage_hash: None,
-                            });
-                        }
-                        "local_shell_call" | "LocalShellCall" => {
-                            let raw_name = "LocalShellCall";
-                            let input_value = payload.clone();
-                            let metadata = build_tool_metadata(ToolCallFacts {
-                                provider: Provider::Codex,
-                                raw_name,
-                                input: Some(&input_value),
-                                call_id: codex_call_id(payload),
-                                assistant_id: None,
-                            });
-                            let idx = accum.messages.len();
-                            if let Some(call_id) = codex_call_id(payload) {
-                                accum.call_id_map.insert(call_id.to_string(), idx);
-                            }
-                            accum.messages.push(Message {
-                                role: MessageRole::Tool,
-                                content: String::new(),
-                                timestamp: entry.timestamp.clone(),
-                                tool_name: Some(metadata.canonical_name.clone()),
-                                tool_input: Some(input_value.to_string()),
-                                tool_metadata: Some(metadata),
-                                token_usage: None,
-                                model: None,
-                                usage_hash: None,
-                            });
-                        }
-                        "tool_search_call" | "ToolSearchCall" => {
-                            let input_value = payload.clone();
-                            let metadata = build_tool_metadata(ToolCallFacts {
-                                provider: Provider::Codex,
-                                raw_name: "ToolSearch",
-                                input: Some(&input_value),
-                                call_id: codex_call_id(payload),
-                                assistant_id: None,
-                            });
-                            let idx = accum.messages.len();
-                            if let Some(call_id) = codex_call_id(payload) {
-                                accum.call_id_map.insert(call_id.to_string(), idx);
-                            }
-                            accum.messages.push(Message {
-                                role: MessageRole::Tool,
-                                content: String::new(),
-                                timestamp: entry.timestamp.clone(),
-                                tool_name: Some(metadata.canonical_name.clone()),
-                                tool_input: Some(input_value.to_string()),
-                                tool_metadata: Some(metadata),
-                                token_usage: None,
-                                model: None,
-                                usage_hash: None,
-                            });
-                        }
-                        "tool_search_output" | "ToolSearchOutput" => {
-                            let output = codex_content_items_text(payload);
-                            if !output.is_empty() {
-                                accum.content_parts.push(output.clone());
-                            }
-                            if let Some(idx) = codex_call_id(payload)
-                                .and_then(|cid| accum.call_id_map.get(cid))
-                                .copied()
-                            {
-                                accum.messages[idx].content = output;
-                                enrich_existing_tool_message(
-                                    &mut accum.messages[idx],
-                                    payload.clone(),
-                                    None,
-                                    payload.get("status").and_then(|v| v.as_str()),
-                                );
-                            }
-                        }
-                        "compaction" | "Compaction" => {
-                            push_system_event(
-                                &mut accum.messages,
-                                entry.timestamp.clone(),
-                                "[context_compacted]".to_string(),
-                            );
-                        }
-                        "custom_tool_call" => {
-                            let raw_name = payload
-                                .get("name")
-                                .and_then(|v| v.as_str())
-                                .unwrap_or("tool");
-                            let input = payload.get("input").map(|v| {
-                                if let Some(s) = v.as_str() {
-                                    s.to_string()
-                                } else {
-                                    serde_json::to_string(v).unwrap_or_default()
-                                }
-                            });
-                            let input_value =
-                                codex_tool_input_value(raw_name, None, input.as_deref());
-                            let metadata = build_tool_metadata(ToolCallFacts {
-                                provider: Provider::Codex,
-                                raw_name,
-                                input: input_value.as_ref(),
-                                call_id: payload.get("call_id").and_then(|v| v.as_str()),
-                                assistant_id: None,
-                            });
-                            let display_name = metadata.canonical_name.clone();
-
-                            let idx = accum.messages.len();
-                            if let Some(cid) = payload.get("call_id").and_then(|v| v.as_str()) {
-                                accum.call_id_map.insert(cid.to_string(), idx);
-                            }
-                            accum.messages.push(Message {
-                                role: MessageRole::Tool,
-                                content: String::new(),
-                                timestamp: entry.timestamp.clone(),
-                                tool_name: Some(display_name.to_string()),
-                                tool_input: input,
-                                tool_metadata: Some(metadata),
-                                token_usage: None,
-                                model: None,
-                                usage_hash: None,
-                            });
-                        }
-                        "custom_tool_call_output" => {
-                            let raw_output = payload
-                                .get("output")
-                                .and_then(|v| v.as_str())
-                                .unwrap_or("")
-                                .to_string();
-                            let output = extract_tool_output(&raw_output);
-
-                            let call_id = payload.get("call_id").and_then(|v| v.as_str());
-                            if let Some(idx) =
-                                call_id.and_then(|cid| accum.call_id_map.get(cid)).copied()
-                            {
-                                if idx < accum.messages.len() {
-                                    let result_value =
-                                        codex_tool_result_value(&raw_output, &output);
-                                    accum.messages[idx].content = output;
-                                    let is_error = result_value.as_ref().and_then(|value| {
-                                        value
-                                            .get("exitCode")
-                                            .and_then(|code| code.as_i64())
-                                            .map(|code| code != 0)
-                                    });
-                                    if let Some(result_value) = result_value {
-                                        enrich_existing_tool_message(
-                                            &mut accum.messages[idx],
-                                            result_value,
-                                            is_error,
-                                            None,
-                                        );
-                                    }
-                                    continue;
-                                }
-                            }
-                            if !output.is_empty() {
-                                accum.messages.push(Message {
-                                    role: MessageRole::Tool,
-                                    content: output,
-                                    timestamp: entry.timestamp.clone(),
-                                    tool_name: None,
-                                    tool_input: None,
-                                    token_usage: None,
-                                    model: None,
-                                    usage_hash: None,
-                                    tool_metadata: None,
-                                });
-                            }
-                        }
-                        _ => continue,
-                    }
-                }
-                "turn_context" => {
-                    flush_pending_user_message(
-                        &mut accum.pending_user_message,
-                        &mut accum.messages,
-                        &mut accum.content_parts,
-                        &mut accum.first_user_message,
-                    );
-                    // Extract actual accum.model name (e.g. "gpt-5.4") from turn_context
-                    if let Some(m) = payload.get("model").and_then(|v| v.as_str()) {
-                        if !m.is_empty() {
-                            accum.current_model = Some(m.to_string());
-                            if accum.model.is_none() {
-                                accum.model = Some(m.to_string());
-                            }
-                        }
-                    }
-                }
-                "event_msg" => {
-                    let event_type = payload.get("type").and_then(|v| v.as_str()).unwrap_or("");
-                    // agent_message is a duplicate of response_item/message/assistant — skip
-                    match event_type {
-                        "user_message" => {
-                            let pending = accum.pending_user_message.take();
-                            let fallback_content =
-                                pending.as_ref().map(|message| message.content.clone());
-                            let response_image_segments = pending
-                                .as_ref()
-                                .map(|message| message.image_segments.clone())
-                                .unwrap_or_default();
-                            let timestamp = entry
-                                .timestamp
-                                .clone()
-                                .or_else(|| pending.and_then(|message| message.timestamp));
-                            let built_content =
-                                build_codex_user_message(payload, &response_image_segments);
-                            let content = if built_content.is_empty() {
-                                fallback_content.unwrap_or_default()
-                            } else {
-                                built_content
-                            };
-                            append_user_message(
-                                &mut accum.messages,
-                                &mut accum.content_parts,
-                                &mut accum.first_user_message,
-                                content,
-                                timestamp,
-                            );
-                        }
-                        "item_completed" => {
-                            flush_pending_user_message(
-                                &mut accum.pending_user_message,
-                                &mut accum.messages,
-                                &mut accum.content_parts,
-                                &mut accum.first_user_message,
-                            );
-                            let item = payload.get("item");
-                            if item.and_then(|v| v.get("type")).and_then(|v| v.as_str())
-                                == Some("Plan")
-                            {
-                                let text = item
-                                    .and_then(|v| v.get("text"))
-                                    .and_then(|v| v.as_str())
-                                    .unwrap_or("");
-                                if !text.trim().is_empty() {
-                                    accum.content_parts.push(text.to_string());
-                                    accum.messages.push(Message {
-                                        role: MessageRole::Assistant,
-                                        content: text.to_string(),
-                                        timestamp: entry.timestamp.clone(),
-                                        tool_name: None,
-                                        tool_input: None,
-                                        token_usage: None,
-                                        model: accum.current_model.clone(),
-                                        usage_hash: None,
-                                        tool_metadata: None,
-                                    });
-                                }
-                            }
-                        }
-                        "thread_name_updated" => {
-                            if let Some(name) = payload
-                                .get("thread_name")
-                                .and_then(|v| v.as_str())
-                                .filter(|s| !s.trim().is_empty())
-                            {
-                                accum.thread_name = Some(name.to_string());
-                            }
-                        }
-                        "error" => {
-                            let message = payload
-                                .get("message")
-                                .and_then(|v| v.as_str())
-                                .unwrap_or("unknown error");
-                            let info = payload
-                                .get("codex_error_info")
-                                .and_then(|v| v.as_str())
-                                .unwrap_or("");
-                            let detail = if info.is_empty() {
-                                message.to_string()
-                            } else {
-                                format!("{info}: {message}")
-                            };
-                            push_system_event(
-                                &mut accum.messages,
-                                entry.timestamp.clone(),
-                                format!("[error] {detail}"),
-                            );
-                        }
-                        "turn_aborted" => {
-                            let reason = payload
-                                .get("reason")
-                                .and_then(|v| v.as_str())
-                                .unwrap_or("aborted");
-                            let duration = payload
-                                .get("duration_ms")
-                                .and_then(|v| v.as_u64())
-                                .map(|ms| format!(" ({:.1}s)", ms as f64 / 1000.0))
-                                .unwrap_or_default();
-                            push_system_event(
-                                &mut accum.messages,
-                                entry.timestamp.clone(),
-                                format!("[turn_aborted] {reason}{duration}"),
-                            );
-                        }
-                        "context_compacted" => {
-                            push_system_event(
-                                &mut accum.messages,
-                                entry.timestamp.clone(),
-                                "[context_compacted]".to_string(),
-                            );
-                        }
-                        "token_count" => {
-                            if let Some(info) = payload.get("info") {
-                                let Some((usage_model, usage_counts)) =
-                                    codex_usage_from_info(info, &mut accum.previous_token_totals)
-                                else {
-                                    continue;
-                                };
-                                let (input, cached, output, reasoning, total) = usage_counts;
-                                let any_nonzero = input != 0
-                                    || cached != 0
-                                    || output != 0
-                                    || reasoning != 0
-                                    || total != 0;
-                                let resolved_model = extract_codex_model(info)
-                                    .or_else(|| extract_codex_model(payload))
-                                    .or_else(|| accum.current_model.clone())
-                                    .or_else(|| usage_model.clone());
-                                // Capture the event for the indexer's per-date stats
-                                // in the same pass — replaces a second file read.
-                                if any_nonzero {
-                                    if let Some(ts) = entry.timestamp.as_ref() {
-                                        let model_for_event = resolved_model
-                                            .clone()
-                                            .unwrap_or_else(|| "gpt-5".to_string());
-                                        accum.usage_events.push(UsageEvent {
-                                            timestamp: ts.clone(),
-                                            model: model_for_event,
-                                            input_tokens: input,
-                                            output_tokens: output,
-                                            cache_read_input_tokens: cached.min(input),
-                                        });
-                                    }
-                                }
-                                let Some(usage) = codex_token_usage_from_counts(usage_counts)
-                                else {
-                                    continue;
-                                };
-                                if let Some(model_name) = resolved_model.clone() {
-                                    accum.current_model = Some(model_name);
-                                }
-                                add_usage_to_last_assistant(
-                                    &mut accum.messages,
-                                    usage,
-                                    resolved_model,
-                                );
-                            }
-                        }
-                        "web_search_end" => {
-                            let call_id = payload.get("call_id").and_then(|v| v.as_str());
-                            let action = payload.get("action");
-                            let query = payload.get("query").and_then(|v| v.as_str()).unwrap_or("");
-                            let result = Some(payload.clone());
-
-                            if let Some(idx) =
-                                call_id.and_then(|cid| accum.call_id_map.get(cid)).copied()
-                            {
-                                if idx < accum.messages.len() {
-                                    accum.messages[idx].content = query.to_string();
-                                    if accum.messages[idx].tool_input.is_none() {
-                                        accum.messages[idx].tool_input =
-                                            action.map(|value| value.to_string());
-                                    }
-                                    if let Some(metadata) =
-                                        accum.messages[idx].tool_metadata.as_mut()
-                                    {
-                                        enrich_tool_metadata(
-                                            metadata,
-                                            ToolResultFacts {
-                                                raw_result: result.as_ref(),
-                                                is_error: None,
-                                                status: None,
-                                                artifact_path: None,
-                                            },
-                                        );
-                                    }
-                                    continue;
-                                }
-                            }
-
-                            let mut metadata = build_tool_metadata(ToolCallFacts {
-                                provider: Provider::Codex,
-                                raw_name: "web_search_call",
-                                input: action,
-                                call_id,
-                                assistant_id: None,
-                            });
-                            enrich_tool_metadata(
-                                &mut metadata,
-                                ToolResultFacts {
-                                    raw_result: result.as_ref(),
-                                    is_error: None,
-                                    status: None,
-                                    artifact_path: None,
-                                },
-                            );
-                            let idx = accum.messages.len();
-                            if let Some(call_id) = call_id {
-                                accum.call_id_map.insert(call_id.to_string(), idx);
-                            }
-                            if !query.is_empty() {
-                                accum.content_parts.push(query.to_string());
-                            }
-                            accum.messages.push(Message {
-                                role: MessageRole::Tool,
-                                content: query.to_string(),
-                                timestamp: entry.timestamp.clone(),
-                                tool_name: Some(metadata.canonical_name.clone()),
-                                tool_input: action.map(|value| value.to_string()),
-                                tool_metadata: Some(metadata),
-                                token_usage: None,
-                                model: None,
-                                usage_hash: None,
-                            });
-                        }
-                        "image_generation_end" => {
-                            let Some(call_id) = codex_call_id(payload) else {
-                                continue;
-                            };
-                            let Some(idx) = accum.call_id_map.get(call_id).copied() else {
-                                log::warn!(
-                                    "missing Codex image generation tool message for event call_id {} in '{}'",
-                                    call_id,
-                                    path.display()
-                                );
-                                continue;
-                            };
-                            if idx >= accum.messages.len() {
-                                continue;
-                            }
-
-                            if let Some(saved_path) =
-                                payload.get("saved_path").and_then(|v| v.as_str())
-                            {
-                                accum.messages[idx].content =
-                                    format!("[Image: source: {saved_path}]");
-                            }
-                            let result_value = codex_image_generation_result(payload);
-                            enrich_existing_tool_message(
-                                &mut accum.messages[idx],
-                                result_value,
-                                None,
-                                payload.get("status").and_then(|v| v.as_str()),
-                            );
-                        }
-                        "dynamic_tool_call_request" => {
-                            let input_value = dynamic_tool_input(payload);
-                            let raw_name = input_value
-                                .get("tool")
-                                .and_then(|v| v.as_str())
-                                .unwrap_or("dynamic_tool_call");
-                            let metadata = build_tool_metadata(ToolCallFacts {
-                                provider: Provider::Codex,
-                                raw_name,
-                                input: Some(&input_value),
-                                call_id: codex_call_id(payload),
-                                assistant_id: None,
-                            });
-                            let idx = accum.messages.len();
-                            if let Some(call_id) = codex_call_id(payload) {
-                                accum.call_id_map.insert(call_id.to_string(), idx);
-                            }
-                            accum.messages.push(Message {
-                                role: MessageRole::Tool,
-                                content: String::new(),
-                                timestamp: entry.timestamp.clone(),
-                                tool_name: Some(metadata.canonical_name.clone()),
-                                tool_input: Some(input_value.to_string()),
-                                tool_metadata: Some(metadata),
-                                token_usage: None,
-                                model: None,
-                                usage_hash: None,
-                            });
-                        }
-                        "dynamic_tool_call_response" => {
-                            let output = codex_content_items_text(payload);
-                            if !output.is_empty() {
-                                accum.content_parts.push(output.clone());
-                            }
-                            let result_value = dynamic_tool_result(payload);
-                            let is_error = payload
-                                .get("success")
-                                .and_then(|v| v.as_bool())
-                                .map(|success| !success);
-                            let status = payload
-                                .get("success")
-                                .and_then(|v| v.as_bool())
-                                .map(|success| if success { "success" } else { "error" });
-
-                            if let Some(idx) = codex_call_id(payload)
-                                .and_then(|cid| accum.call_id_map.get(cid))
-                                .copied()
-                            {
-                                if idx < accum.messages.len() {
-                                    accum.messages[idx].content = output;
-                                    enrich_existing_tool_message(
-                                        &mut accum.messages[idx],
-                                        result_value,
-                                        is_error,
-                                        status,
-                                    );
-                                    continue;
-                                }
-                            }
-
-                            let input_value = dynamic_tool_input(payload);
-                            let raw_name = input_value
-                                .get("tool")
-                                .and_then(|v| v.as_str())
-                                .unwrap_or("dynamic_tool_call");
-                            let mut metadata = build_tool_metadata(ToolCallFacts {
-                                provider: Provider::Codex,
-                                raw_name,
-                                input: Some(&input_value),
-                                call_id: codex_call_id(payload),
-                                assistant_id: None,
-                            });
-                            enrich_tool_metadata(
-                                &mut metadata,
-                                ToolResultFacts {
-                                    raw_result: Some(&result_value),
-                                    is_error,
-                                    status,
-                                    artifact_path: None,
-                                },
-                            );
-                            accum.messages.push(Message {
-                                role: MessageRole::Tool,
-                                content: output,
-                                timestamp: entry.timestamp.clone(),
-                                tool_name: Some(metadata.canonical_name.clone()),
-                                tool_input: Some(input_value.to_string()),
-                                tool_metadata: Some(metadata),
-                                token_usage: None,
-                                model: None,
-                                usage_hash: None,
-                            });
-                        }
-                        "exec_command_end" => {
-                            let Some(call_id) = payload.get("call_id").and_then(|v| v.as_str())
-                            else {
-                                continue;
-                            };
-                            let Some(idx) = accum.call_id_map.get(call_id).copied() else {
-                                log::warn!(
-                                    "missing Codex exec_command tool message for event call_id {} in '{}'",
-                                    call_id,
-                                    path.display()
-                                );
-                                continue;
-                            };
-                            if idx >= accum.messages.len() {
-                                continue;
-                            }
-
-                            let result_value = codex_exec_command_event_result(
-                                payload,
-                                &accum.messages[idx].content,
-                            );
-                            let status = payload.get("status").and_then(|v| v.as_str());
-                            let is_error =
-                                status.map(|status| matches!(status, "failed" | "declined"));
-                            if accum.messages[idx].content.is_empty()
-                                || accum.messages[idx].content.trim_start().starts_with('{')
-                            {
-                                if let Some(formatted_output) = result_value
-                                    .get("formattedOutput")
-                                    .and_then(|v| v.as_str())
-                                    .filter(|v| !v.is_empty())
-                                    .or_else(|| {
-                                        result_value
-                                            .get("aggregatedOutput")
-                                            .and_then(|v| v.as_str())
-                                            .filter(|v| !v.is_empty())
-                                    })
-                                    .or_else(|| {
-                                        result_value
-                                            .get("stdout")
-                                            .and_then(|v| v.as_str())
-                                            .filter(|v| !v.is_empty())
-                                    })
-                                {
-                                    accum.messages[idx].content = formatted_output.to_string();
-                                }
-                            }
-                            enrich_existing_tool_message(
-                                &mut accum.messages[idx],
-                                result_value,
-                                is_error,
-                                status,
-                            );
-                        }
-                        "mcp_tool_call_end" => {
-                            let Some(call_id) = payload.get("call_id").and_then(|v| v.as_str())
-                            else {
-                                continue;
-                            };
-                            let Some(idx) = accum.call_id_map.get(call_id).copied() else {
-                                log::warn!(
-                                    "missing Codex MCP tool message for event call_id {} in '{}'",
-                                    call_id,
-                                    path.display()
-                                );
-                                continue;
-                            };
-                            if idx >= accum.messages.len() {
-                                continue;
-                            }
-
-                            let result_value = codex_mcp_tool_call_event_result(payload);
-                            let is_error = result_value
-                                .get("success")
-                                .and_then(|v| v.as_bool())
-                                .map(|success| !success);
-                            enrich_existing_tool_message(
-                                &mut accum.messages[idx],
-                                result_value,
-                                is_error,
-                                None,
-                            );
-                        }
-                        "patch_apply_end" => {
-                            let Some(call_id) = payload.get("call_id").and_then(|v| v.as_str())
-                            else {
-                                continue;
-                            };
-                            let Some(idx) = accum.call_id_map.get(call_id).copied() else {
-                                log::warn!(
-                                    "missing Codex apply_patch tool message for event call_id {} in '{}'",
-                                    call_id,
-                                    path.display()
-                                );
-                                continue;
-                            };
-                            if idx >= accum.messages.len() {
-                                continue;
-                            }
-
-                            let result_value = codex_patch_event_result(payload);
-                            let status = payload.get("status").and_then(|v| v.as_str());
-                            let is_error =
-                                payload.get("success").and_then(|v| v.as_bool()).map(|v| !v);
-                            if accum.messages[idx].content.is_empty()
-                                || accum.messages[idx].content.trim_start().starts_with('{')
-                            {
-                                if let Some(stdout) = result_value
-                                    .get("stdout")
-                                    .and_then(|v| v.as_str())
-                                    .filter(|v| !v.is_empty())
-                                {
-                                    accum.messages[idx].content = stdout.to_string();
-                                }
-                            }
-                            enrich_existing_tool_message(
-                                &mut accum.messages[idx],
-                                result_value,
-                                is_error,
-                                status,
-                            );
-                        }
-                        "collab_agent_spawn_end" => {
-                            let Some(call_id) = payload.get("call_id").and_then(|v| v.as_str())
-                            else {
-                                continue;
-                            };
-                            let Some(idx) = accum.call_id_map.get(call_id).copied() else {
-                                log::warn!(
-                                    "missing Codex spawn_agent tool message for event call_id {} in '{}'",
-                                    call_id,
-                                    path.display()
-                                );
-                                continue;
-                            };
-                            if idx >= accum.messages.len() {
-                                continue;
-                            }
-
-                            let status = payload.get("status").and_then(|v| v.as_str());
-                            enrich_existing_tool_message(
-                                &mut accum.messages[idx],
-                                payload.clone(),
-                                None,
-                                status,
-                            );
-                        }
-                        "collab_waiting_end" => {
-                            let Some(call_id) = payload.get("call_id").and_then(|v| v.as_str())
-                            else {
-                                continue;
-                            };
-                            let Some(idx) = accum.call_id_map.get(call_id).copied() else {
-                                log::warn!(
-                                    "missing Codex wait_agent tool message for event call_id {} in '{}'",
-                                    call_id,
-                                    path.display()
-                                );
-                                continue;
-                            };
-                            if idx >= accum.messages.len() {
-                                continue;
-                            }
-
-                            let status = accum.messages[idx]
-                                .tool_metadata
-                                .as_ref()
-                                .and_then(|metadata| metadata.structured.as_ref())
-                                .and_then(|value| value.get("timed_out"))
-                                .and_then(|value| value.as_bool())
-                                .map(|timed_out| if timed_out { "timed_out" } else { "completed" });
-                            let is_error = status.map(|status| status == "timed_out");
-                            enrich_existing_tool_message(
-                                &mut accum.messages[idx],
-                                payload.clone(),
-                                is_error,
-                                status,
-                            );
-                        }
-                        "collab_agent_interaction_end" => {
-                            let Some(call_id) = payload.get("call_id").and_then(|v| v.as_str())
-                            else {
-                                continue;
-                            };
-                            let Some(idx) = accum.call_id_map.get(call_id).copied() else {
-                                log::warn!(
-                                    "missing Codex send_input tool message for event call_id {} in '{}'",
-                                    call_id,
-                                    path.display()
-                                );
-                                continue;
-                            };
-                            if idx >= accum.messages.len() {
-                                continue;
-                            }
-
-                            let status = payload
-                                .get("status")
-                                .and_then(|v| v.as_str())
-                                .or(Some("completed"));
-                            enrich_existing_tool_message(
-                                &mut accum.messages[idx],
-                                payload.clone(),
-                                None,
-                                status,
-                            );
-                        }
-                        "collab_close_end" => {
-                            let Some(call_id) = payload.get("call_id").and_then(|v| v.as_str())
-                            else {
-                                continue;
-                            };
-                            let Some(idx) = accum.call_id_map.get(call_id).copied() else {
-                                log::warn!(
-                                    "missing Codex close_agent tool message for event call_id {} in '{}'",
-                                    call_id,
-                                    path.display()
-                                );
-                                continue;
-                            };
-                            if idx >= accum.messages.len() {
-                                continue;
-                            }
-
-                            enrich_existing_tool_message(
-                                &mut accum.messages[idx],
-                                payload.clone(),
-                                None,
-                                Some("completed"),
-                            );
-                        }
-                        _ => {
-                            flush_pending_user_message(
-                                &mut accum.pending_user_message,
-                                &mut accum.messages,
-                                &mut accum.content_parts,
-                                &mut accum.first_user_message,
-                            );
-                        }
-                    }
-                }
-                _ => continue,
-            }
-        }
+        accum.scan_lines(reader, path);
 
         // Hoist accumulator fields back to locals so the existing post-loop
         // finalization (title, project_path, content_text, meta assembly)
@@ -1797,6 +1806,111 @@ fn source_mtime_epoch_seconds(metadata: &std::fs::Metadata) -> i64 {
         .ok()
         .and_then(crate::provider::system_time_to_epoch_seconds)
         .unwrap_or(0)
+}
+
+/// Tail-only Codex parse result. Carries the most recent N messages
+/// plus the warning count from the tail region so the caller can
+/// assemble a `SessionMessagesWindow` without paying for a full-file
+/// parse. The metadata bits (title / cwd / model) live on the DB-loaded
+/// `SessionMeta` and are not re-derived here.
+pub struct CodexTailResult {
+    pub messages: Vec<Message>,
+    pub parse_warning_count: u32,
+    pub last_timestamp: Option<String>,
+}
+
+/// Parse only the tail of a Codex session file — the last
+/// `target_messages` (or so) emitted messages — by mmap'ing the file
+/// and seeking the BufReader past the byte offset of the first line
+/// we want. Shares the per-line dispatch with `parse_session_file`
+/// through `CodexScanAccum::scan_lines`.
+///
+/// Same caveats as the Claude tail entry point:
+/// - Tool merging across lines is best-effort. A `function_call_output`
+///   whose matching `function_call` was earlier in the file surfaces
+///   as a standalone tool message; the background full-parse promote
+///   replaces the cache once it completes.
+/// - The Codex fork-context skip (used for subagent files whose JSONL
+///   starts with the parent's history) is a no-op here because the
+///   tail naturally starts past that region — `skipping_fork_context`
+///   stays at its default `false` and the loop dispatches normally.
+/// - No token-total computation: the caller pulls totals from the DB.
+pub fn parse_session_tail(path: &Path, target_messages: usize) -> Option<CodexTailResult> {
+    // Codex JSONL lines are noticeably bigger than Claude's (each turn
+    // is ~10-20 KB of `response_item.message` content + tool calls),
+    // and an event_msg.token_count plus its enclosing turn_context can
+    // span ~50 raw lines between consecutive emitted messages. Pad the
+    // tail window more generously than Claude's so we don't miss a
+    // recent message whose surrounding metadata lines pushed the
+    // actual message-emit further into the file than expected.
+    let safety_buffer = target_messages / 2 + 100;
+    let scan_lines = target_messages.saturating_add(safety_buffer);
+    let window = match tail_byte_offset(path, scan_lines) {
+        Ok(w) => w,
+        Err(error) => {
+            log::warn!(
+                "failed to locate Codex session tail in '{}': {}",
+                path.display(),
+                error
+            );
+            return None;
+        }
+    };
+
+    let file = match File::open(path) {
+        Ok(f) => f,
+        Err(error) => {
+            log::warn!(
+                "failed to open Codex session for tail parse '{}': {}",
+                path.display(),
+                error
+            );
+            return None;
+        }
+    };
+    let mut reader = BufReader::new(file);
+    if window.start_offset > 0 {
+        if let Err(error) = reader.seek(SeekFrom::Start(window.start_offset)) {
+            log::warn!(
+                "failed to seek Codex session for tail parse '{}': {}",
+                path.display(),
+                error
+            );
+            return None;
+        }
+    }
+
+    let mut accum = CodexScanAccum::new();
+    accum.scan_lines(reader, path);
+
+    flush_pending_user_message(
+        &mut accum.pending_user_message,
+        &mut accum.messages,
+        &mut accum.content_parts,
+        &mut accum.first_user_message,
+    );
+
+    if accum.messages.is_empty() {
+        log::debug!(
+            "Codex tail parse produced no messages for '{}'; falling back to full parse",
+            path.display()
+        );
+        return None;
+    }
+
+    // Trim to exactly `target_messages` — we deliberately over-scan so
+    // tool merging at the boundary works, but the caller asked for a
+    // specific window size.
+    let len = accum.messages.len();
+    if len > target_messages {
+        accum.messages.drain(0..(len - target_messages));
+    }
+
+    Some(CodexTailResult {
+        messages: accum.messages,
+        parse_warning_count: accum.parse_warning_count,
+        last_timestamp: accum.last_timestamp,
+    })
 }
 
 fn extract_codex_model(value: &Value) -> Option<String> {
@@ -2018,7 +2132,7 @@ fn flush_pending_user_message(
 
 #[cfg(test)]
 mod tests {
-    use super::CodexProvider;
+    use super::{parse_session_tail, CodexProvider};
     use std::fs;
     use std::path::PathBuf;
     use tempfile::TempDir;
@@ -2420,6 +2534,61 @@ mod tests {
                 .and_then(|value| value.get("receiver_thread_id"))
                 .and_then(|value| value.as_str()),
             Some("agent-1")
+        );
+    }
+
+    #[test]
+    fn parse_session_tail_returns_only_the_last_n_messages() {
+        let dir = TempDir::new().unwrap();
+        let file = dir.path().join("codex.jsonl");
+        let mut content = String::new();
+        // Leading turn_context so the model is non-None for the bulk
+        // of the file (matches real-world Codex JSONL layout).
+        content.push_str(
+            "{\"timestamp\":\"2026-04-10T10:00:00Z\",\"type\":\"turn_context\",\"payload\":{\"model\":\"gpt-5.4\"}}\n",
+        );
+        for i in 0..200 {
+            let ts = format!("2026-04-10T10:00:{:02}Z", i % 60);
+            content.push_str(&format!(
+                "{{\"timestamp\":\"{ts}\",\"type\":\"response_item\",\"payload\":{{\"type\":\"message\",\"role\":\"assistant\",\"content\":[{{\"type\":\"output_text\",\"text\":\"msg-{i}\"}}]}}}}\n"
+            ));
+        }
+        fs::write(&file, content).unwrap();
+
+        let tail = parse_session_tail(&file, 20).expect("tail parse");
+        assert_eq!(tail.messages.len(), 20);
+        let first = tail.messages.first().expect("first").content.clone();
+        let last = tail.messages.last().expect("last").content.clone();
+        assert!(
+            first.contains("msg-180"),
+            "first tail message should be msg-180, got {first:?}"
+        );
+        assert!(
+            last.contains("msg-199"),
+            "last tail message should be msg-199, got {last:?}"
+        );
+    }
+
+    #[test]
+    fn parse_session_tail_returns_full_file_when_smaller_than_window() {
+        let dir = TempDir::new().unwrap();
+        let file = dir.path().join("codex.jsonl");
+        let mut content = String::new();
+        content.push_str(
+            "{\"timestamp\":\"2026-04-10T10:00:00Z\",\"type\":\"turn_context\",\"payload\":{\"model\":\"gpt-5.4\"}}\n",
+        );
+        for i in 0..5 {
+            content.push_str(&format!(
+                "{{\"timestamp\":\"2026-04-10T10:00:0{i}Z\",\"type\":\"response_item\",\"payload\":{{\"type\":\"message\",\"role\":\"assistant\",\"content\":[{{\"type\":\"output_text\",\"text\":\"only-{i}\"}}]}}}}\n"
+            ));
+        }
+        fs::write(&file, content).unwrap();
+
+        let tail = parse_session_tail(&file, 100).expect("tail parse");
+        assert_eq!(
+            tail.messages.len(),
+            5,
+            "tail must return all messages when the file is smaller than the requested window"
         );
     }
 }

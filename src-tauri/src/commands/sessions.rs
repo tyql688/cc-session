@@ -282,12 +282,11 @@ pub async fn get_session_messages_window(
             // Fast path: when the frontend asks for a tail-of-file window
             // (negative offset) and the cache hasn't seen this session yet,
             // skip the full-file parse by reading only the trailing bytes.
-            // Currently wired up for Claude only — see
-            // `try_claude_tail_fast_path` for the eligibility rules and
-            // background-promote setup.
-            if let Some(window) =
-                try_claude_tail_fast_path(&state, &meta, offset, limit, &session_id)?
-            {
+            // See `try_tail_fast_path` for the eligibility rules and the
+            // background-promote setup. Today wired up for the JSONL-backed
+            // providers whose parsers expose a `parse_session_tail` entry
+            // point (Claude / CC-Mirror via Claude, and Codex).
+            if let Some(window) = try_tail_fast_path(&state, &meta, offset, limit, &session_id)? {
                 return Ok(window);
             }
 
@@ -330,14 +329,14 @@ pub async fn get_session_messages_window(
 /// Returns `Ok(Some(_))` when the fast path applied; the caller can
 /// return the window directly. Returns `Ok(None)` when the caller
 /// should fall through to the normal cached parse — either the request
-/// doesn't fit the fast-path criteria (positive offset, non-Claude
+/// doesn't fit the fast-path criteria (positive offset, unsupported
 /// provider, in-memory cache already has the full session) or the tail
 /// parse came up empty.
 ///
 /// When the fast path applies, this also kicks off a background full
 /// parse via `spawn_blocking` so the next "load older" request hits a
 /// fully populated cache without paying the parse cost again.
-fn try_claude_tail_fast_path(
+fn try_tail_fast_path(
     state: &AppState,
     meta: &SessionMeta,
     offset: i64,
@@ -347,11 +346,14 @@ fn try_claude_tail_fast_path(
     if offset >= 0 {
         return Ok(None);
     }
-    // CC-Mirror sessions are parsed by the Claude parser (cc_mirror.rs
-    // delegates to `claude::parser::parse_session_file`), so the tail
-    // entry point handles them identically — the `apply_variant` pass
-    // only rewrites meta, never messages.
-    if !matches!(meta.provider, Provider::Claude | Provider::CcMirror) {
+    // CC-Mirror sessions are parsed by the Claude parser; Codex has its
+    // own `parse_session_tail`. Kimi / OpenCode / Antigravity stay on
+    // the slow path because either the parser doesn't expose a tail
+    // entry yet or the underlying storage isn't per-session-file.
+    if !matches!(
+        meta.provider,
+        Provider::Claude | Provider::CcMirror | Provider::Codex
+    ) {
         return Ok(None);
     }
     if meta.source_path.is_empty() {
@@ -374,9 +376,24 @@ fn try_claude_tail_fast_path(
 
     let target_messages = limit.max(offset.unsigned_abs() as usize).max(1);
     let path = std::path::PathBuf::from(&meta.source_path);
-    let tail = match crate::providers::claude::parser::parse_session_tail(&path, target_messages) {
-        Some(t) => t,
-        None => return Ok(None),
+    // Dispatch to the right parser's tail entry. Both return the same
+    // shape we need — messages + parse warnings — but use distinct
+    // result types because the per-provider parsers may add fields
+    // later (e.g. usage events for Codex).
+    let (tail_messages, parse_warning_count) = match meta.provider {
+        Provider::Claude | Provider::CcMirror => {
+            match crate::providers::claude::parser::parse_session_tail(&path, target_messages) {
+                Some(t) => (t.messages, t.parse_warning_count),
+                None => return Ok(None),
+            }
+        }
+        Provider::Codex => {
+            match crate::providers::codex::parser::parse_session_tail(&path, target_messages) {
+                Some(t) => (t.messages, t.parse_warning_count),
+                None => return Ok(None),
+            }
+        }
+        _ => return Ok(None),
     };
     if load_cancel::is_canceled() {
         return Err(canceled_error());
@@ -387,14 +404,14 @@ fn try_claude_tail_fast_path(
     // tail-length so the window slicing math still works for sessions
     // that haven't been indexed yet.
     let stored_total = meta.message_count as usize;
-    let tail_len = tail.messages.len();
+    let tail_len = tail_messages.len();
     let total = stored_total.max(tail_len);
 
     let from_end = offset.unsigned_abs() as usize;
     let want = from_end.max(limit);
     let visible_in_tail = want.min(tail_len);
     let slice_start = tail_len.saturating_sub(visible_in_tail);
-    let slice = tail.messages[slice_start..tail_len].to_vec();
+    let slice = tail_messages[slice_start..tail_len].to_vec();
     let window_start = total.saturating_sub(visible_in_tail);
 
     // Token totals from the indexer are authoritative for the visible
@@ -409,7 +426,7 @@ fn try_claude_tail_fast_path(
         total,
         start: window_start,
         messages: slice,
-        parse_warning_count: tail.parse_warning_count,
+        parse_warning_count,
         token_totals,
     }))
 }
