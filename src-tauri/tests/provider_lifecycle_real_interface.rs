@@ -82,6 +82,7 @@ fn build_app() -> (TempDir, App<MockRuntime>, tauri::WebviewWindow<MockRuntime>)
         )),
         load_tokens: Arc::new(std::sync::Mutex::new(std::collections::HashMap::new())),
         loading_paths: Arc::new(std::sync::Mutex::new(std::collections::HashSet::new())),
+        promote_in_flight: Arc::new(std::sync::Mutex::new(std::collections::HashSet::new())),
     };
 
     let app = mock_builder()

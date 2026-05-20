@@ -32,6 +32,10 @@ pub struct AppState {
     /// Source paths currently being parsed. Watcher events for these paths
     /// are dropped to avoid feedback-loop reparses while a load is in flight.
     pub loading_paths: Arc<Mutex<HashSet<PathBuf>>>,
+    /// Cache keys whose background full-file parse is in flight. The tail
+    /// fast-path consults this set to avoid spawning a duplicate promote
+    /// when the user opens the same session twice in rapid succession.
+    pub promote_in_flight: Arc<Mutex<HashSet<String>>>,
 }
 
 pub use search::*;

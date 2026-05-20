@@ -347,7 +347,11 @@ fn try_claude_tail_fast_path(
     if offset >= 0 {
         return Ok(None);
     }
-    if !matches!(meta.provider, Provider::Claude) {
+    // CC-Mirror sessions are parsed by the Claude parser (cc_mirror.rs
+    // delegates to `claude::parser::parse_session_file`), so the tail
+    // entry point handles them identically — the `apply_variant` pass
+    // only rewrites meta, never messages.
+    if !matches!(meta.provider, Provider::Claude | Provider::CcMirror) {
         return Ok(None);
     }
     if meta.source_path.is_empty() {
@@ -356,7 +360,10 @@ fn try_claude_tail_fast_path(
 
     // Cache hit means the full file has already been parsed — let the
     // existing slow path serve from `Arc<Vec<Message>>` rather than
-    // re-running the tail mmap.
+    // re-running the tail mmap. Subagent `parent_id` / `project_path`
+    // derivation lives in the full parser only; the caller already has
+    // the correct values on `meta` (loaded from DB at line 279), so the
+    // fast path doesn't need to redrive them here.
     let mtime = std::fs::metadata(&meta.source_path)
         .ok()
         .and_then(|m| m.modified().ok());
@@ -412,6 +419,10 @@ fn try_claude_tail_fast_path(
 /// `load_messages_cached` call hits the promoted entry and the fast
 /// path is no longer needed for this session.
 ///
+/// Skipped when another promote for the same cache key is already in
+/// flight (e.g. the user clicked the same session twice in rapid
+/// succession) — `AppState.promote_in_flight` is the gating set.
+///
 /// Failures are logged at warn level. The user already has a usable
 /// tail window in hand, so a stale cache is the worst outcome.
 fn schedule_full_parse_promote(
@@ -420,12 +431,26 @@ fn schedule_full_parse_promote(
     cache_key: String,
     mtime: Option<std::time::SystemTime>,
 ) {
+    // Try to claim the promote slot before paying for `spawn_blocking`.
+    // A racing fast-path that already spawned a promote for this cache
+    // key wins; we silently no-op.
+    {
+        let mut guard = match state.promote_in_flight.lock() {
+            Ok(g) => g,
+            Err(poisoned) => poisoned.into_inner(),
+        };
+        if !guard.insert(cache_key.clone()) {
+            return;
+        }
+    }
+
     tokio::task::spawn_blocking(move || {
-        match load_messages_from_provider(&meta.provider, &meta.id, &meta.source_path) {
+        let result = load_messages_from_provider(&meta.provider, &meta.id, &meta.source_path);
+        match result {
             Ok(loaded) => {
                 let total_messages = loaded.messages.len();
                 state.session_cache.insert(
-                    cache_key,
+                    cache_key.clone(),
                     meta.source_path.clone(),
                     loaded.messages,
                     loaded.parse_warning_count,
@@ -441,6 +466,12 @@ fn schedule_full_parse_promote(
                     meta.id
                 );
             }
+        }
+        // Release the in-flight slot last so a subsequent fast-path that
+        // wants to re-promote (after a file change, for instance) can
+        // proceed cleanly.
+        if let Ok(mut guard) = state.promote_in_flight.lock() {
+            guard.remove(&cache_key);
         }
     });
 }

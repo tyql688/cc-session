@@ -596,6 +596,14 @@ pub fn parse_session_tail(path: &Path, target_messages: usize) -> Option<ClaudeT
     flush_pending_tool_results(&mut accum.state);
 
     if accum.state.messages.is_empty() {
+        // Returning None makes `try_claude_tail_fast_path` fall back to
+        // the full-file parse. Most often this happens for very small
+        // sessions where the tail window covered only metadata lines
+        // (summary / custom-title), so the full parse is cheap anyway.
+        log::debug!(
+            "Claude tail parse produced no messages for '{}'; falling back to full parse",
+            path.display()
+        );
         return None;
     }
 

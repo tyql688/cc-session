@@ -269,6 +269,7 @@ pub fn run() {
         )),
         load_tokens: Arc::new(std::sync::Mutex::new(std::collections::HashMap::new())),
         loading_paths: Arc::new(std::sync::Mutex::new(std::collections::HashSet::new())),
+        promote_in_flight: Arc::new(std::sync::Mutex::new(std::collections::HashSet::new())),
     };
 
     tauri::Builder::default()
