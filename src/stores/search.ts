@@ -64,13 +64,16 @@ function parseSearchQuery(raw: string): SearchFilters {
 function search(q: string) {
   setQuery(q);
   clearTimeout(debounceTimer);
-  // Clear stale results immediately so the UI can't commit to a hit from
-  // the previous query while the debounced request is in flight.
-  setResults([]);
   if (!q.trim()) {
+    // Empty query — clear results explicitly so the panel doesn't keep
+    // showing matches from an abandoned query.
+    setResults([]);
     setIsSearching(false);
     return;
   }
+  // Keep previous results visible during the debounce window so the panel
+  // doesn't flash empty between keystrokes; `searchVersion` already
+  // discards stale responses when they land out of order.
   setIsSearching(true);
   const version = ++searchVersion;
   debounceTimer = setTimeout(async () => {
