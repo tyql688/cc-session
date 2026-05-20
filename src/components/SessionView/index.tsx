@@ -309,6 +309,17 @@ export function SessionView(props: {
     olderFetchInFlight = true;
     const newStart = Math.max(0, windowStart() - TAIL_BATCH);
     const span = windowStart() - newStart;
+    // Capture the pre-prepend scroll geometry so we can re-anchor the
+    // user's view to the same content after the new (visually-above)
+    // entries are mounted. Without this the viewport "shakes": column-
+    // reverse keeps `scrollTop` fixed while `scrollHeight` grows from
+    // the top, so the row the user was reading slides downward by the
+    // height of the freshly-prepended chunk. Especially visible for
+    // Codex sessions where TAIL_BATCH=600 messages can add many
+    // thousand pixels of content in one round trip.
+    const refBefore = messagesRef;
+    const heightBefore = refBefore?.scrollHeight ?? 0;
+    const scrollBefore = refBefore?.scrollTop ?? 0;
     try {
       const older = await getSessionMessagesWindow(sessionId, newStart, span);
       if (sessionId !== props.session.id) return;
@@ -322,6 +333,22 @@ export function SessionView(props: {
       setWindowStart(newStart);
       setTotalMessages(older.total);
       setVisibleCount((count) => count + older.messages.length);
+      // After the DOM commits the new rows, restore the visible content.
+      // In column-reverse, "scrolled up by X" is encoded as `scrollTop =
+      // -(X - clientHeight)`. Adding `delta` pixels visually above the
+      // current top means we need to scroll further up by `delta` to
+      // keep the same row pinned — i.e. subtract `delta` from
+      // `scrollTop`. Two RAFs give the browser one paint cycle to
+      // measure the newly-mounted rows.
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          if (!refBefore || refBefore !== messagesRef) return;
+          const delta = refBefore.scrollHeight - heightBefore;
+          if (delta > 0) {
+            refBefore.scrollTop = scrollBefore - delta;
+          }
+        });
+      });
     } catch (e) {
       if (isLoadCanceledError(e)) return;
       console.warn("load older messages failed:", e);
