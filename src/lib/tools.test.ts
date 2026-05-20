@@ -151,6 +151,71 @@ describe("tool registry", () => {
     });
   });
 
+  it("formats antigravity replace_file_content input as single diff", () => {
+    const detail = formatToolInput({
+      ...baseMessage,
+      tool_name: "Edit",
+      tool_input: JSON.stringify({
+        TargetFile: "/tmp/project/main.rs",
+        TargetContent: "old line",
+        ReplacementContent: "new line",
+        StartLine: 5,
+        EndLine: 5,
+      }),
+    });
+
+    expect(detail?.lines).toContainEqual({
+      label: "file",
+      value: "/tmp/project/main.rs",
+    });
+    expect(detail?.diff).toEqual({ old: "old line", new: "new line" });
+  });
+
+  it("formats antigravity multi_replace_file_content input as patch diff", () => {
+    const detail = formatToolInput({
+      ...baseMessage,
+      tool_name: "Edit",
+      tool_input: JSON.stringify({
+        TargetFile: "/tmp/project/main.rs",
+        ReplacementChunks: [
+          {
+            StartLine: 1,
+            EndLine: 1,
+            TargetContent: "old A",
+            ReplacementContent: "new A",
+          },
+          {
+            StartLine: 10,
+            EndLine: 11,
+            TargetContent: "old B1\nold B2",
+            ReplacementContent: "new B1\nnew B2",
+          },
+        ],
+      }),
+    });
+
+    expect(detail?.lines).toEqual([
+      { label: "file", value: "/tmp/project/main.rs" },
+    ]);
+    const types = detail?.patchDiff?.map((line) => line.type);
+    // One skip for the *** Update File: header, then per-hunk:
+    //  skip (@@), remove(s), add(s). 1+1 then 2+2.
+    expect(types).toEqual([
+      "skip", // *** Update File: ...
+      "skip", // @@ -1,1 +1,1 @@
+      "remove",
+      "add",
+      "skip", // @@ -10,2 +10,2 @@
+      "remove",
+      "remove",
+      "add",
+      "add",
+    ]);
+    expect(detail?.patchDiff?.[0]?.text).toBe(
+      "*** Update File: /tmp/project/main.rs",
+    );
+  });
+
   it("formats Codex apply_patch input as patch diff rows", () => {
     const detail = formatToolInput({
       ...baseMessage,

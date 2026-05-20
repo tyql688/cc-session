@@ -51,7 +51,7 @@ const SUBAGENT_FILE_PROVIDERS = new Set([
   "codex",
   "kimi",
   "cc-mirror",
-  "gemini",
+  "antigravity",
 ]);
 
 function DiffRows(props: { lines: ToolDiffLine[] }) {
@@ -241,6 +241,50 @@ export function ToolMessage(props: { message: Message; provider?: string }) {
     }
     return undefined;
   });
+  /**
+   * Antigravity's `invoke_subagent` tool spawns one or many subagents in a
+   * single call; the conversationIds are written by the parser to
+   * `tool_metadata.structured.childConversationIds`. When this list is
+   * present we render one "Open" link per child instead of the single-button
+   * path used by Claude/Codex/Kimi.
+   */
+  const agentChildIds = createMemo<string[] | undefined>(() => {
+    if (name() !== "Agent") return undefined;
+    const structured = props.message.tool_metadata?.structured;
+    if (
+      !structured ||
+      typeof structured !== "object" ||
+      Array.isArray(structured)
+    ) {
+      return undefined;
+    }
+    const raw = (structured as Record<string, unknown>).childConversationIds;
+    if (!Array.isArray(raw)) return undefined;
+    const ids = raw.filter(
+      (v): v is string => typeof v === "string" && v.length > 0,
+    );
+    return ids.length > 0 ? ids : undefined;
+  });
+  /**
+   * Positional list of subagent prompts (one per `agentChildIds()` entry).
+   * The parser pulls these from the parent's `invoke_subagent` tool input so
+   * each "Open" button can display *what* the subagent was asked to do
+   * instead of an opaque "Open #2".
+   */
+  const agentChildPrompts = createMemo<string[]>(() => {
+    if (name() !== "Agent") return [];
+    const structured = props.message.tool_metadata?.structured;
+    if (
+      !structured ||
+      typeof structured !== "object" ||
+      Array.isArray(structured)
+    ) {
+      return [];
+    }
+    const raw = (structured as Record<string, unknown>).childPrompts;
+    if (!Array.isArray(raw)) return [];
+    return raw.map((v) => (typeof v === "string" ? v : ""));
+  });
 
   async function loadFullResult() {
     const path = persistedOutputPath();
@@ -279,24 +323,60 @@ export function ToolMessage(props: { message: Message; provider?: string }) {
         <Show
           when={
             name() === "Agent" &&
-            (agentNickname() || agentId()) &&
-            SUBAGENT_FILE_PROVIDERS.has(props.provider ?? "")
+            SUBAGENT_FILE_PROVIDERS.has(props.provider ?? "") &&
+            (agentChildIds() ?? (agentNickname() || agentId() ? [null] : []))
+              .length > 0
           }
         >
-          <button
-            class="msg-tool-subagent-link"
-            onClick={(e) => {
-              e.stopPropagation();
-              openSubagent(
-                agentDescription() ?? summary(),
-                agentNickname(),
-                agentId(),
-              );
-            }}
-            title="Open subagent session"
+          <Show
+            when={agentChildIds()}
+            fallback={
+              <button
+                class="msg-tool-subagent-link"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  openSubagent(
+                    agentDescription() ?? summary(),
+                    agentNickname(),
+                    agentId(),
+                  );
+                }}
+                title="Open subagent session"
+              >
+                ↗ Open
+              </button>
+            }
           >
-            ↗ Open
-          </button>
+            <For each={agentChildIds()!}>
+              {(childId, i) => {
+                const prompt = () => agentChildPrompts()[i()] ?? "";
+                const firstLine = () => prompt().split("\n")[0]?.trim() ?? "";
+                const label = () => {
+                  const text = firstLine();
+                  if (!text) return `↗ Open #${i() + 1}`;
+                  const truncated =
+                    text.length > 60 ? `${text.slice(0, 60).trim()}…` : text;
+                  return `↗ ${truncated}`;
+                };
+                return (
+                  <button
+                    class="msg-tool-subagent-link"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      openSubagent(
+                        prompt() || agentDescription() || summary(),
+                        undefined,
+                        childId,
+                      );
+                    }}
+                    title={prompt() ? prompt() : `Open subagent ${childId}`}
+                  >
+                    {label()}
+                  </button>
+                );
+              }}
+            </For>
+          </Show>
         </Show>
         <Show when={hasInput() || hasOutput() || resultMetadata()}>
           <span class="tool-expand-indicator">{expanded() ? "▾" : "▸"}</span>

@@ -28,11 +28,8 @@ describe("providerSnapshots store", () => {
     expect(getProviderLabel("claude")).toBe("Claude Code");
     expect(getProviderLabel("cc-mirror", "cczai")).toBe("cczai");
     expect(getProviderLabel("cc-mirror")).toBe("CC-Mirror");
-    expect(getProviderWatchStrategy("gemini")).toBe("poll");
-    expect(getProvidersForWatchStrategy("poll")).toEqual([
-      "gemini",
-      "opencode",
-    ]);
+    expect(getProviderWatchStrategy("antigravity")).toBe("fs");
+    expect(getProvidersForWatchStrategy("poll")).toEqual(["opencode"]);
     expect(getProviderSortOrder("claude")).toBeLessThan(
       getProviderSortOrder("codex"),
     );
@@ -69,27 +66,19 @@ describe("providerSnapshots store", () => {
       loadProviderSnapshots,
     } = await loadStore();
 
-    expect(getProvidersForWatchStrategy("poll")).toEqual([
-      "gemini",
-      "opencode",
-    ]);
+    expect(getProvidersForWatchStrategy("poll")).toEqual(["opencode"]);
 
     await loadProviderSnapshots();
 
     expect(getProviderSnapshotVersion()).toBe(1);
-    expect(getProvidersForWatchStrategy("poll")).toEqual([
-      "codex",
-      "gemini",
-      "opencode",
-    ]);
+    expect(getProvidersForWatchStrategy("poll")).toEqual(["codex", "opencode"]);
     expect(listProviderSnapshots().map((snapshot) => snapshot.key)).toEqual([
       "claude",
       "cc-mirror",
       "codex",
-      "gemini",
+      "antigravity",
       "opencode",
       "kimi",
-      "qwen",
     ]);
   });
 
@@ -106,10 +95,7 @@ describe("providerSnapshots store", () => {
     await loadProviderSnapshots();
 
     expect(getProviderSnapshotVersion()).toBe(0);
-    expect(getProvidersForWatchStrategy("poll")).toEqual([
-      "gemini",
-      "opencode",
-    ]);
+    expect(getProvidersForWatchStrategy("poll")).toEqual(["opencode"]);
     expect(warn).toHaveBeenCalledWith(
       "failed to load provider snapshots:",
       expect.any(Error),

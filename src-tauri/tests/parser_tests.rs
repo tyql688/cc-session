@@ -6,12 +6,11 @@ use tempfile::TempDir;
 
 use cc_session_lib::models::{Message, MessageRole, Provider};
 use cc_session_lib::provider::SessionProvider;
+use cc_session_lib::providers::antigravity::AntigravityProvider;
 use cc_session_lib::providers::claude::ClaudeProvider;
 use cc_session_lib::providers::codex::CodexProvider;
-use cc_session_lib::providers::gemini::GeminiProvider;
 use cc_session_lib::providers::kimi::KimiProvider;
 use cc_session_lib::providers::opencode::OpenCodeProvider;
-use cc_session_lib::providers::qwen::parser as qwen_parser;
 
 fn fixtures_dir() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
@@ -1033,304 +1032,273 @@ fn kimi_toolcallpart_appends_to_truncated_arguments() {
 }
 
 // ---------------------------------------------------------------------------
-// Gemini chat parser tests
+// Antigravity parser tests
 // ---------------------------------------------------------------------------
 
-fn gemini_fixture_path() -> PathBuf {
-    fixtures_dir().join("gemini").join("session-test.json")
-}
-
-fn gemini_jsonl_fixture_path() -> PathBuf {
-    fixtures_dir()
-        .join("gemini")
-        .join("session-jsonl-test.jsonl")
-}
-
-fn gemini_jsonl_rich_fixture_path() -> PathBuf {
-    fixtures_dir()
-        .join("gemini")
-        .join("session-jsonl-rich-test.jsonl")
-}
-
-fn gemini_jsonl_subagent_fixture_path() -> PathBuf {
-    fixtures_dir()
-        .join("gemini")
-        .join("chats")
-        .join("gemini-parent-001")
-        .join("gemini-child-001.jsonl")
-}
-
-fn gemini_parsed_session() -> cc_session_lib::provider::ParsedSession {
-    let provider = GeminiProvider::new().expect("home dir must be available");
-    let path = gemini_fixture_path();
-    let project_map = HashMap::new();
-    let sessions = provider.parse_chat_file_for_test(&path, &project_map);
-    assert!(
-        !sessions.is_empty(),
-        "gemini fixture must parse at least one session"
-    );
-    sessions.into_iter().next().unwrap()
-}
-
 #[test]
-fn gemini_parses_message_count() {
-    let session = gemini_parsed_session();
+fn test_antigravity_model_extraction() {
+    let tmp = TempDir::new().unwrap();
+    let conv_dir = tmp.path().join("conv-123");
+    let logs_dir = conv_dir.join(".system_generated").join("logs");
+    fs::create_dir_all(&logs_dir).unwrap();
+    let transcript_path = logs_dir.join("transcript.jsonl");
 
-    // Expected messages:
-    //  1. User: "List the files in the current directory"
-    //  2. Assistant: "I'll run a shell command to list the files for you."
-    //  3. Tool (Bash): Shell call with merged result (token_usage attached here)
-    //  4. User: "Thanks, that looks good!"
+    let lines = [
+        r#"{"step_index":0,"source":"USER_EXPLICIT","type":"USER_INPUT","status":"DONE","created_at":"2026-05-20T04:23:57Z","content":"<USER_REQUEST>\nhi\n</USER_REQUEST>\n<ADDITIONAL_METADATA>\nThe current local time is: 2026-05-20T12:23:57+08:00.\n</ADDITIONAL_METADATA>\n<USER_SETTINGS_CHANGE>\nThe user changed setting `Model Selection` from None to Gemini 3.5 Flash (High). No need to comment on this change if the user doesn't ask about it.\n</USER_SETTINGS_CHANGE>"}"#,
+        r#"{"step_index":1,"source":"MODEL","type":"PLANNER_RESPONSE","status":"DONE","created_at":"2026-05-20T04:24:00Z","content":"Hello! How can I help you?"}"#,
+    ];
+    fs::write(&transcript_path, lines.join("\n")).unwrap();
+
+    let parsed =
+        cc_session_lib::providers::antigravity::parser::parse_session_file(&transcript_path)
+            .expect("must parse");
+
+    assert_eq!(parsed.meta.model.as_deref(), Some("gemini-3.5-flash"));
+    assert_eq!(parsed.messages.len(), 2);
+    assert_eq!(parsed.messages[0].role, MessageRole::User);
     assert_eq!(
-        session.messages.len(),
-        4,
-        "expected 4 messages, got: {:#?}",
-        session.messages
+        parsed.messages[0].model.as_deref(),
+        Some("gemini-3.5-flash")
     );
-}
-
-#[test]
-fn gemini_first_user_message() {
-    let session = gemini_parsed_session();
-
-    let first = &session.messages[0];
-    assert_eq!(first.role, MessageRole::User);
-    assert!(
-        first.content.contains("List the files"),
-        "unexpected content: {}",
-        first.content
-    );
-}
-
-#[test]
-fn gemini_tool_call_parsed() {
-    let session = gemini_parsed_session();
-
-    let tool_msg = session
-        .messages
-        .iter()
-        .find(|m| m.role == MessageRole::Tool)
-        .expect("expected a Tool message");
-
-    // Shell displayName maps to canonical "Bash"
+    assert_eq!(parsed.messages[1].role, MessageRole::Assistant);
     assert_eq!(
-        tool_msg.tool_name.as_deref(),
-        Some("Bash"),
-        "Shell must map to Bash, got: {:?}",
-        tool_msg.tool_name
+        parsed.messages[1].model.as_deref(),
+        Some("gemini-3.5-flash")
     );
 
-    // tool_input must contain the command key (Bash remapping)
-    let input = tool_msg
-        .tool_input
-        .as_ref()
-        .expect("Bash tool must have tool_input");
-    assert!(
-        input.contains("\"command\""),
-        "tool_input must use 'command' key, got: {}",
-        input
-    );
-    assert!(
-        input.contains("ls -la"),
-        "tool_input must contain the shell command, got: {}",
-        input
-    );
-
-    // Tool result must be merged into content
-    assert!(
-        tool_msg.content.contains("main.rs"),
-        "tool result must be merged into content, got: {}",
-        tool_msg.content
-    );
-}
-
-#[test]
-fn gemini_tool_call_has_structured_tool_metadata() {
-    let session = gemini_parsed_session();
-    let tool_msg = session
-        .messages
-        .iter()
-        .find(|m| m.role == MessageRole::Tool)
-        .expect("expected a Tool message");
-    let metadata = tool_msg
-        .tool_metadata
-        .as_ref()
-        .expect("Gemini tool metadata must be present");
-
-    assert_eq!(metadata.raw_name, "run_shell_command");
-    assert_eq!(metadata.canonical_name, "Bash");
-    assert_eq!(metadata.category, "shell");
-    assert_eq!(metadata.summary.as_deref(), Some("ls -la"));
-    assert_eq!(metadata.status.as_deref(), Some("success"));
-    assert_eq!(metadata.result_kind.as_deref(), Some("terminal_output"));
-}
-
-#[test]
-fn gemini_token_usage() {
-    let session = gemini_parsed_session();
-
-    // Token usage is on the model message's last tool call (the Bash tool message)
-    let tool_msg = session
-        .messages
-        .iter()
-        .find(|m| m.role == MessageRole::Tool)
-        .expect("expected a Tool message");
-
-    let usage = tool_msg
+    let usage = parsed.messages[1]
         .token_usage
         .as_ref()
-        .expect("last tool message must carry token_usage from the model turn");
-    assert_eq!(usage.input_tokens, 150);
-    assert_eq!(usage.output_tokens, 45);
-    assert_eq!(usage.cache_read_input_tokens, 20);
+        .expect("should have token usage");
+    assert!(usage.input_tokens > 0);
+    assert!(usage.output_tokens > 0);
+    assert_eq!(parsed.meta.input_tokens, usage.input_tokens as u64);
+    assert_eq!(parsed.meta.output_tokens, usage.output_tokens as u64);
+}
+
+fn antigravity_transcript_fixture_path() -> PathBuf {
+    fixtures_dir()
+        .join("antigravity")
+        .join("conv-123")
+        .join(".system_generated")
+        .join("logs")
+        .join("transcript.jsonl")
 }
 
 #[test]
-fn gemini_jsonl_chat_parser_uses_latest_message_record() {
-    let provider = GeminiProvider::new().expect("home dir must be available");
-    let path = gemini_jsonl_fixture_path();
-    let sessions = provider.parse_chat_file_for_test(&path, &HashMap::new());
-    let session = sessions
-        .first()
-        .expect("Gemini JSONL fixture must parse one session");
+fn antigravity_tool_calls_map_to_canonical_names_and_decode_args() {
+    let path = antigravity_transcript_fixture_path();
+    let parsed = cc_session_lib::providers::antigravity::parser::parse_session_file(&path)
+        .expect("antigravity fixture must parse");
 
-    assert_eq!(session.meta.id, "gemini-jsonl-test-001");
-    assert_eq!(
-        session.meta.model.as_deref(),
-        Some("gemini-3-flash-preview")
-    );
-    assert_eq!(session.meta.updated_at, 1777461344);
-    assert_eq!(
-        session.messages.len(),
-        4,
-        "expected user, thinking, tool, assistant messages, got: {:#?}",
-        session.messages
-    );
-
-    let thinking_count = session
+    let tools: Vec<&Message> = parsed
         .messages
         .iter()
-        .filter(|message| message.content.starts_with("[thinking]"))
-        .count();
+        .filter(|m| m.role == MessageRole::Tool)
+        .collect();
+    assert_eq!(tools.len(), 2, "expected two tool messages, got {tools:#?}");
+
+    // run_command → Bash, with CommandLine decoded from its JSON-string wrapper.
+    let bash = tools[0];
+    assert_eq!(bash.tool_name.as_deref(), Some("Bash"));
+    let bash_meta = bash.tool_metadata.as_ref().unwrap();
+    assert_eq!(bash_meta.raw_name, "run_command");
+    assert_eq!(bash_meta.canonical_name, "Bash");
     assert_eq!(
-        thinking_count, 1,
-        "duplicate JSONL records with the same id must be replaced"
+        bash_meta.summary.as_deref(),
+        Some("ls -la"),
+        "Bash summary should be the decoded CommandLine, not the JSON-quoted blob"
+    );
+    let bash_input = bash.tool_input.as_ref().expect("tool_input populated");
+    assert!(
+        bash_input.contains("\"CommandLine\":\"ls -la\""),
+        "persisted tool_input should hold the decoded value, got: {bash_input}"
+    );
+    assert!(
+        !bash_input.contains(r#"\"ls -la\""#),
+        "double-encoded value should not survive into tool_input: {bash_input}"
+    );
+    assert!(
+        bash.content.contains("main.rs"),
+        "tool result must be merged into the tool message, got: {}",
+        bash.content
     );
 
-    let tool_msg = session
-        .messages
-        .iter()
-        .find(|message| message.role == MessageRole::Tool)
-        .expect("expected Gemini JSONL tool message");
-    assert_eq!(tool_msg.tool_name.as_deref(), Some("Read"));
+    // view_file → Read, with AbsolutePath used as the summary.
+    let read = tools[1];
+    assert_eq!(read.tool_name.as_deref(), Some("Read"));
+    let read_meta = read.tool_metadata.as_ref().unwrap();
+    assert_eq!(read_meta.raw_name, "view_file");
+    assert_eq!(read_meta.canonical_name, "Read");
     assert_eq!(
-        tool_msg
-            .tool_metadata
-            .as_ref()
-            .and_then(|metadata| metadata.status.as_deref()),
-        Some("success")
+        read_meta.summary.as_deref(),
+        Some("/tmp/project/main.rs"),
+        "Read summary should fall back to AbsolutePath for antigravity"
     );
-    assert!(
-        tool_msg.content.contains("ccsession"),
-        "tool result must be preserved"
-    );
-    assert!(
-        tool_msg.token_usage.is_some(),
-        "last tool call from the Gemini turn must carry token usage"
-    );
+
+    assert_eq!(parsed.meta.id, "conv-123");
+    assert_eq!(parsed.meta.provider, Provider::Antigravity);
 }
 
 #[test]
-fn gemini_jsonl_chat_parser_preserves_new_content_parts_and_warning() {
-    let provider = GeminiProvider::new().expect("home dir must be available");
-    let path = gemini_jsonl_rich_fixture_path();
-    let sessions = provider.parse_chat_file_for_test(&path, &HashMap::new());
-    let session = sessions
-        .first()
-        .expect("Gemini rich JSONL fixture must parse one session");
+#[ignore]
+fn antigravity_real_local_sessions_smoke() {
+    let home = std::env::var("HOME").expect("HOME must be set");
+    let brain = PathBuf::from(&home)
+        .join(".gemini")
+        .join("antigravity-cli")
+        .join("brain");
+    if !brain.is_dir() {
+        eprintln!("skip: {} does not exist", brain.display());
+        return;
+    }
 
-    let user = session
-        .messages
-        .iter()
-        .find(|message| message.role == MessageRole::User)
-        .expect("expected user message");
-    assert!(
-        user.content
-            .contains("[Image: source: /tmp/ccsession-gemini-probe/red32.png]"),
-        "fileData image must be preserved, got: {}",
-        user.content
-    );
-    assert!(
-        user.content
-            .contains("[Image: source: data:image/png;base64,"),
-        "inlineData image must be preserved, got: {}",
-        user.content
-    );
+    let provider = AntigravityProvider::new().expect("home dir must be available");
+    let sessions = provider.scan_all().expect("scan_all must succeed");
+    assert!(!sessions.is_empty(), "no antigravity sessions parsed");
 
-    let warning = session
-        .messages
-        .iter()
-        .find(|message| message.content.starts_with("[warning]"))
-        .expect("expected warning message");
-    assert!(
-        warning.content.contains("Tool output was truncated"),
-        "warning content must be preserved"
-    );
-}
+    // Print parent → children map so the smoke run is self-describing.
+    for s in &sessions {
+        if !s.child_session_ids.is_empty() {
+            eprintln!(
+                "parent {} ({}) → children {:?}",
+                s.meta.id, s.meta.project_name, s.child_session_ids
+            );
+        }
+    }
+    for s in &sessions {
+        eprintln!(
+            "  id={}  parent={:?}  is_sidechain={}  project={:?}",
+            s.meta.id, s.meta.parent_id, s.meta.is_sidechain, s.meta.project_name
+        );
+    }
 
-#[test]
-fn gemini_jsonl_agent_tool_keeps_child_agent_id() {
-    let provider = GeminiProvider::new().expect("home dir must be available");
-    let path = gemini_jsonl_rich_fixture_path();
-    let sessions = provider.parse_chat_file_for_test(&path, &HashMap::new());
-    let session = sessions
-        .first()
-        .expect("Gemini rich JSONL fixture must parse one session");
+    // Surface what canonical names each session's tools mapped to. Anything
+    // landing under the raw agy name (run_command / view_file / ...) means
+    // the canonical_tool_name table is missing an alias.
+    use std::collections::BTreeMap;
+    let mut canonical_counts: BTreeMap<String, BTreeMap<String, usize>> = BTreeMap::new();
+    for s in &sessions {
+        for msg in &s.messages {
+            if let Some(md) = &msg.tool_metadata {
+                *canonical_counts
+                    .entry(md.raw_name.clone())
+                    .or_default()
+                    .entry(md.canonical_name.clone())
+                    .or_default() += 1;
+            }
+        }
+    }
+    eprintln!("  tool name → canonical map:");
+    for (raw, canon) in &canonical_counts {
+        eprintln!("    {raw} → {canon:?}");
+    }
+    for (raw, canon_map) in &canonical_counts {
+        for canon in canon_map.keys() {
+            assert_ne!(
+                raw, canon,
+                "tool '{raw}' fell through to its raw name — needs a canonical alias",
+            );
+        }
+    }
 
-    let tool = session
-        .messages
-        .iter()
-        .find(|message| message.tool_name.as_deref() == Some("Agent"))
-        .expect("expected Gemini invoke_agent tool");
-    let metadata = tool
-        .tool_metadata
-        .as_ref()
-        .expect("Agent tool metadata must exist");
-    assert_eq!(metadata.result_kind.as_deref(), Some("agent_summary"));
-    assert_eq!(
-        metadata
-            .structured
-            .as_ref()
-            .and_then(|value| value.get("agentId"))
-            .and_then(|value| value.as_str()),
-        Some("gemini-child-001")
-    );
-}
-
-#[test]
-fn gemini_jsonl_subagent_file_parses_as_sidechain() {
-    let provider = GeminiProvider::new().expect("home dir must be available");
-    let path = gemini_jsonl_subagent_fixture_path();
-    let sessions = provider.parse_chat_file_for_test(&path, &HashMap::new());
-    let session = sessions
-        .first()
-        .expect("Gemini subagent JSONL fixture must parse one session");
-
-    assert_eq!(session.meta.id, "gemini-child-001");
-    assert!(session.meta.is_sidechain);
-    assert_eq!(session.meta.parent_id.as_deref(), Some("gemini-parent-001"));
-    assert!(
-        session.meta.title.contains("Child summary"),
-        "subagent title should use summary when no user prompt exists, got: {}",
-        session.meta.title
-    );
-    assert!(
-        session
+    // Every parent that declared subagents must also emit those conversationIds
+    // on the invoke_subagent tool message's structured metadata, otherwise the
+    // UI's "Open" button has nothing to navigate to.
+    for parent in &sessions {
+        if parent.child_session_ids.is_empty() {
+            continue;
+        }
+        let agent_tool = parent
             .messages
             .iter()
-            .any(|message| message.tool_name.as_deref() == Some("Read")),
-        "subagent tool messages must be parsed"
-    );
+            .find(|m| {
+                m.tool_metadata
+                    .as_ref()
+                    .is_some_and(|md| md.canonical_name == "Agent")
+            })
+            .unwrap_or_else(|| panic!("parent {} has no Agent tool message", parent.meta.id));
+        let structured = agent_tool
+            .tool_metadata
+            .as_ref()
+            .and_then(|md| md.structured.as_ref())
+            .unwrap_or_else(|| {
+                panic!(
+                    "parent {} Agent tool has no structured metadata",
+                    parent.meta.id
+                )
+            });
+        let ids = structured
+            .get("childConversationIds")
+            .and_then(|v| v.as_array())
+            .unwrap_or_else(|| {
+                panic!(
+                    "parent {} Agent tool structured.childConversationIds missing",
+                    parent.meta.id
+                )
+            });
+        eprintln!(
+            "  agent-tool childConversationIds for {} = {:?}",
+            parent.meta.id, ids
+        );
+        for child_id in &parent.child_session_ids {
+            assert!(
+                ids.iter().any(|v| v.as_str() == Some(child_id.as_str())),
+                "Agent tool metadata for {} missing child {child_id}",
+                parent.meta.id
+            );
+        }
+
+        // childPrompts must be a same-length parallel array so the UI can
+        // label each Open button. Empty strings are allowed (no Prompt
+        // declared) but the array length must match.
+        let prompts = structured
+            .get("childPrompts")
+            .and_then(|v| v.as_array())
+            .unwrap_or_else(|| {
+                panic!(
+                    "parent {} Agent tool structured.childPrompts missing",
+                    parent.meta.id
+                )
+            });
+        assert_eq!(
+            prompts.len(),
+            ids.len(),
+            "parent {} childPrompts length must match childConversationIds",
+            parent.meta.id
+        );
+    }
+
+    // Every declared child id must point at a session we actually parsed,
+    // and that session must end up flagged as a sidechain with parent_id set.
+    use std::collections::HashMap;
+    let by_id: HashMap<&str, &cc_session_lib::provider::ParsedSession> =
+        sessions.iter().map(|s| (s.meta.id.as_str(), s)).collect();
+
+    for parent in &sessions {
+        for child_id in &parent.child_session_ids {
+            let Some(child) = by_id.get(child_id.as_str()) else {
+                continue;
+            };
+            assert!(
+                child.meta.is_sidechain,
+                "child {} of {} not flagged as sidechain",
+                child_id, parent.meta.id
+            );
+            assert_eq!(
+                child.meta.parent_id.as_deref(),
+                Some(parent.meta.id.as_str()),
+                "child {} should point at parent {}",
+                child_id,
+                parent.meta.id
+            );
+            assert!(
+                !child.meta.project_path.is_empty(),
+                "child {} should inherit project_path from parent",
+                child_id
+            );
+        }
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -1726,236 +1694,6 @@ fn opencode_token_usage() {
 }
 
 // ---------------------------------------------------------------------------
-// Qwen parser tests
-// ---------------------------------------------------------------------------
-
-fn qwen_fixture() -> cc_session_lib::provider::ParsedSession {
-    let path = fixtures_dir().join("qwen_session.jsonl");
-    qwen_parser::parse_session_file(&path).expect("qwen fixture must parse")
-}
-
-#[test]
-fn qwen_parses_message_count() {
-    let session = qwen_fixture();
-    // 2 user + 3 assistant text + 1 thinking + 2 tool calls + 1 user-with-image = 9
-    // System records (slash_command, ui_telemetry) skipped; empty thought text skipped
-    assert_eq!(session.meta.message_count, 9);
-}
-
-#[test]
-fn qwen_session_metadata() {
-    let session = qwen_fixture();
-    assert_eq!(session.meta.id, "qwen_session");
-    assert_eq!(session.meta.provider, Provider::Qwen);
-    assert_eq!(session.meta.project_path, "/Users/test/myproject");
-    assert_eq!(session.meta.project_name, "myproject");
-    assert_eq!(session.meta.cc_version.as_deref(), Some("0.14.0"));
-    assert_eq!(session.meta.git_branch.as_deref(), Some("main"));
-    assert_eq!(session.meta.model.as_deref(), Some("qwen-coder"));
-    assert!(!session.meta.is_sidechain);
-}
-
-#[test]
-fn qwen_title_from_first_user_message() {
-    let session = qwen_fixture();
-    assert_eq!(session.meta.title, "Search for TODO comments");
-}
-
-#[test]
-fn qwen_thinking_emitted_as_system_role() {
-    let session = qwen_fixture();
-    let thinking_msgs: Vec<_> = session
-        .messages
-        .iter()
-        .filter(|m| m.role == MessageRole::System && m.content.starts_with("[thinking]"))
-        .collect();
-    assert!(
-        !thinking_msgs.is_empty(),
-        "expected at least one thinking message"
-    );
-    assert!(thinking_msgs[0].content.contains("Let me search"));
-}
-
-#[test]
-fn qwen_tool_call_mapped_to_canonical_name() {
-    let session = qwen_fixture();
-    let tool_names: Vec<_> = session
-        .messages
-        .iter()
-        .filter(|m| m.role == MessageRole::Tool)
-        .filter_map(|m| m.tool_name.as_deref())
-        .collect();
-    assert!(
-        tool_names.contains(&"Grep"),
-        "expected Grep tool, got {:?}",
-        tool_names
-    );
-    assert!(
-        tool_names.contains(&"Edit"),
-        "expected Edit tool, got {:?}",
-        tool_names
-    );
-}
-
-#[test]
-fn qwen_tool_result_merged_by_call_id() {
-    let session = qwen_fixture();
-    let grep_msg = session
-        .messages
-        .iter()
-        .find(|m| m.tool_name.as_deref() == Some("Grep"))
-        .expect("Grep tool message must exist");
-    assert!(
-        grep_msg.content.contains("TODO"),
-        "tool result should be merged into tool call message"
-    );
-}
-
-#[test]
-fn qwen_tool_call_has_structured_tool_metadata() {
-    let session = qwen_fixture();
-    let grep_msg = session
-        .messages
-        .iter()
-        .find(|m| m.tool_name.as_deref() == Some("Grep"))
-        .expect("Grep tool message must exist");
-    let metadata = grep_msg
-        .tool_metadata
-        .as_ref()
-        .expect("Qwen tool metadata must be present");
-
-    assert_eq!(metadata.raw_name, "grep_search");
-    assert_eq!(metadata.canonical_name, "Grep");
-    assert_eq!(metadata.category, "search");
-    assert_eq!(metadata.summary.as_deref(), Some("/TODO/ src/"));
-    assert_eq!(metadata.status.as_deref(), Some("success"));
-}
-
-#[test]
-fn qwen_tool_call_without_args_omits_null_tool_input() {
-    let dir = TempDir::new().unwrap();
-    let file = dir.path().join("qwen-no-args.jsonl");
-    fs::write(
-        &file,
-        concat!(
-            r#"{"uuid":"uuid-001","parentUuid":null,"sessionId":"test-qwen-no-args","timestamp":"2026-04-03T10:00:00.000Z","type":"user","message":{"role":"user","parts":[{"text":"List files"}]},"cwd":"/tmp/project","version":"0.14.0"}"#,
-            "\n",
-            r#"{"uuid":"uuid-002","parentUuid":"uuid-001","sessionId":"test-qwen-no-args","timestamp":"2026-04-03T10:00:01.000Z","type":"assistant","model":"qwen-coder","message":{"role":"model","parts":[{"functionCall":{"id":"call_no_args","name":"list_directory"}}]},"cwd":"/tmp/project","version":"0.14.0"}"#,
-            "\n"
-        ),
-    )
-    .unwrap();
-
-    let session = qwen_parser::parse_session_file(&file).expect("qwen no-args fixture must parse");
-    let tool_msg = session
-        .messages
-        .iter()
-        .find(|m| m.role == MessageRole::Tool)
-        .expect("expected a Tool message");
-
-    assert_eq!(tool_msg.tool_name.as_deref(), Some("Glob"));
-    assert!(
-        tool_msg.tool_input.is_none(),
-        "missing Qwen functionCall args must not display as JSON null"
-    );
-    assert!(
-        tool_msg
-            .tool_metadata
-            .as_ref()
-            .and_then(|metadata| metadata.summary.as_deref())
-            .is_none(),
-        "missing Qwen functionCall args must not produce a bogus metadata summary"
-    );
-}
-
-#[test]
-fn qwen_image_marker_in_user_message() {
-    let session = qwen_fixture();
-    let img_msg = session
-        .messages
-        .iter()
-        .find(|m| m.role == MessageRole::User && m.content.contains("[Image:"))
-        .expect("expected user message with image marker");
-    assert!(img_msg.content.contains("data:image/png;base64,"));
-}
-
-#[test]
-fn qwen_token_usage_on_assistant() {
-    let session = qwen_fixture();
-    let assistant_with_usage = session
-        .messages
-        .iter()
-        .find(|m| m.role == MessageRole::Assistant && m.token_usage.is_some())
-        .expect("expected assistant message with token usage");
-    let usage = assistant_with_usage.token_usage.as_ref().unwrap();
-    assert!(usage.input_tokens > 0);
-    assert!(usage.output_tokens > 0);
-}
-
-#[test]
-fn qwen_system_records_skipped() {
-    let session = qwen_fixture();
-    // No system message should contain slash_command or ui_telemetry content
-    for msg in &session.messages {
-        if msg.role == MessageRole::System {
-            assert!(
-                msg.content.starts_with("[thinking]"),
-                "system message should only be thinking, got: {}",
-                &msg.content[..msg.content.len().min(50)]
-            );
-        }
-    }
-}
-
-// ---------------------------------------------------------------------------
-// Qwen real data smoke test (ignored — requires local Qwen data)
-// ---------------------------------------------------------------------------
-
-#[test]
-#[ignore]
-fn qwen_real_data_smoke_test() {
-    let home = dirs::home_dir().expect("home dir");
-    let projects_dir = home.join(".qwen/projects");
-    if !projects_dir.exists() {
-        eprintln!("Skipping: no qwen data at {}", projects_dir.display());
-        return;
-    }
-    let mut parsed = 0;
-    // Walk all project directories to find chats
-    for project_entry in std::fs::read_dir(&projects_dir).unwrap().flatten() {
-        let chats_dir = project_entry.path().join("chats");
-        if !chats_dir.is_dir() {
-            continue;
-        }
-        for entry in std::fs::read_dir(&chats_dir).unwrap().flatten() {
-            let path = entry.path();
-            if path.extension().map(|e| e == "jsonl").unwrap_or(false) {
-                let Some(s) = qwen_parser::parse_session_file(&path) else {
-                    eprintln!(
-                        "  skipping {} — no user/assistant/tool messages",
-                        path.file_name().unwrap().to_string_lossy()
-                    );
-                    continue;
-                };
-                assert!(s.meta.message_count > 0, "empty session {}", path.display());
-                assert!(!s.meta.title.is_empty(), "no title for {}", path.display());
-                assert_eq!(s.meta.provider, Provider::Qwen);
-                eprintln!(
-                    "  {} — {} msgs, model={:?}, title='{}'",
-                    path.file_name().unwrap().to_string_lossy(),
-                    s.meta.message_count,
-                    s.meta.model,
-                    s.meta.title
-                );
-                parsed += 1;
-            }
-        }
-    }
-    assert!(parsed > 0, "no qwen session files found");
-    eprintln!("Parsed {} real Qwen session files successfully", parsed);
-}
-
-// ---------------------------------------------------------------------------
 // Real generated tool metadata smoke test
 // ---------------------------------------------------------------------------
 
@@ -2030,15 +1768,11 @@ fn real_generated_tool_metadata_smoke_test() {
         .expect("real Codex transcript must parse");
     assert_real_tool_metadata("Codex", &codex.messages, "Bash", true);
 
-    let gemini_provider = GeminiProvider::new().expect("home dir must be available");
-    let gemini_sessions = gemini_provider.parse_chat_file_for_test(
-        &required_env_path("CCSESSION_REAL_GEMINI_JSON"),
-        &HashMap::new(),
-    );
-    let gemini = gemini_sessions
-        .first()
-        .expect("real Gemini transcript must parse");
-    assert_real_tool_metadata("Gemini", &gemini.messages, "Read", true);
+    let antigravity = cc_session_lib::providers::antigravity::parser::parse_session_file(
+        &required_env_path("CCSESSION_REAL_ANTIGRAVITY_JSONL"),
+    )
+    .expect("real Antigravity transcript must parse");
+    assert_real_tool_metadata("Antigravity", &antigravity.messages, "Read", true);
 
     let kimi_provider = KimiProvider::new().expect("home dir must be available");
     let kimi = kimi_provider
@@ -2048,10 +1782,6 @@ fn real_generated_tool_metadata_smoke_test() {
         )
         .expect("real Kimi transcript must parse");
     assert_real_tool_metadata("Kimi", &kimi.messages, "Read", true);
-
-    let qwen = qwen_parser::parse_session_file(&required_env_path("CCSESSION_REAL_QWEN_JSONL"))
-        .expect("real Qwen transcript must parse");
-    assert_real_tool_metadata("Qwen", &qwen.messages, "Read", true);
 
     let opencode_db = std::env::var_os("CCSESSION_REAL_OPENCODE_DB")
         .map(PathBuf::from)
@@ -2078,34 +1808,11 @@ fn round2_generated_tool_metadata_smoke_test() {
         .expect("round2 Codex transcript must parse");
     assert_real_tool_metadata("Codex round2", &codex.messages, "Bash", true);
 
-    let gemini_provider = GeminiProvider::new().expect("home dir must be available");
-    let gemini_sessions = gemini_provider.parse_chat_file_for_test(
-        &required_env_path("CCSESSION_ROUND2_GEMINI_JSON"),
-        &HashMap::new(),
-    );
-    let gemini = gemini_sessions
-        .first()
-        .expect("round2 Gemini transcript must parse");
-    assert_has_tool_metadata("Gemini round2", &gemini.messages, "Glob");
-    assert_has_tool_metadata("Gemini round2", &gemini.messages, "Read");
-    assert_has_tool_metadata("Gemini round2", &gemini.messages, "Grep");
-    assert_eq!(
-        assert_has_tool_metadata("Gemini round2", &gemini.messages, "Edit")
-            .result_kind
-            .as_deref(),
-        Some("file_patch")
-    );
-
-    let qwen = qwen_parser::parse_session_file(&required_env_path("CCSESSION_ROUND2_QWEN_JSONL"))
-        .expect("round2 Qwen transcript must parse");
-    assert_has_tool_metadata("Qwen round2", &qwen.messages, "Read");
-    assert_has_tool_metadata("Qwen round2", &qwen.messages, "Grep");
-    assert_eq!(
-        assert_has_tool_metadata("Qwen round2", &qwen.messages, "Edit")
-            .result_kind
-            .as_deref(),
-        Some("file_patch")
-    );
+    let antigravity = cc_session_lib::providers::antigravity::parser::parse_session_file(
+        &required_env_path("CCSESSION_ROUND2_ANTIGRAVITY_JSONL"),
+    )
+    .expect("round2 Antigravity transcript must parse");
+    assert_has_tool_metadata("Antigravity round2", &antigravity.messages, "Read");
 
     let kimi_provider = KimiProvider::new().expect("home dir must be available");
     let kimi = kimi_provider

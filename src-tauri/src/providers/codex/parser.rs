@@ -1687,6 +1687,7 @@ impl CodexProvider {
             messages,
             content_text,
             parse_warning_count,
+            child_session_ids: Vec::new(),
         })
     }
 }

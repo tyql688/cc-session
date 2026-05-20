@@ -8,7 +8,6 @@ import type { Provider } from "./types";
 
 export interface ProviderWatchBehavior {
   debounceMs: number;
-  matchPrefix: boolean;
 }
 
 export interface ProviderWatchConfig extends ProviderWatchBehavior {
@@ -16,13 +15,12 @@ export interface ProviderWatchConfig extends ProviderWatchBehavior {
 }
 
 const WATCH_BEHAVIORS: Record<Provider, ProviderWatchBehavior> = {
-  claude: { debounceMs: 300, matchPrefix: false },
-  codex: { debounceMs: 300, matchPrefix: false },
-  gemini: { debounceMs: 2000, matchPrefix: true },
-  opencode: { debounceMs: 2000, matchPrefix: false },
-  kimi: { debounceMs: 300, matchPrefix: false },
-  "cc-mirror": { debounceMs: 300, matchPrefix: false },
-  qwen: { debounceMs: 300, matchPrefix: false },
+  claude: { debounceMs: 300 },
+  codex: { debounceMs: 300 },
+  antigravity: { debounceMs: 300 },
+  opencode: { debounceMs: 2000 },
+  kimi: { debounceMs: 300 },
+  "cc-mirror": { debounceMs: 300 },
 };
 
 export function getProviderWatchBehavior(

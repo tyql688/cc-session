@@ -137,15 +137,27 @@ export function toolSummary(message: Message): string {
       case "Edit":
       case "Write":
         return shortenHomePath(
-          firstString(obj, ["file_path", "filePath", "path"]),
+          firstString(obj, [
+            "file_path",
+            "filePath",
+            "path",
+            // Antigravity PascalCase aliases
+            "AbsolutePath",
+            "TargetFile",
+          ]),
         );
       case "Bash":
-        return firstString(obj, ["description", "command", "cmd"]).slice(0, 80);
+        return firstString(obj, [
+          "description",
+          "command",
+          "cmd",
+          "CommandLine",
+        ]).slice(0, 80);
       case "Glob":
-        return firstString(obj, ["pattern"]);
+        return firstString(obj, ["pattern", "DirectoryPath"]);
       case "Grep": {
-        const pattern = firstString(obj, ["pattern", "query"]);
-        const path = firstString(obj, ["path"]);
+        const pattern = firstString(obj, ["pattern", "query", "Query"]);
+        const path = firstString(obj, ["path", "SearchPath"]);
         return `/${pattern}/` + (path ? ` ${shortenHomePath(path)}` : "");
       }
       case "Agent":
@@ -154,9 +166,9 @@ export function toolSummary(message: Message): string {
         return firstString(obj, ["skill"]);
       case "ToolSearch":
       case "WebSearch":
-        return firstString(obj, ["query"]);
+        return firstString(obj, ["query", "Query"]);
       case "WebFetch":
-        return firstString(obj, ["url"]);
+        return firstString(obj, ["url", "Url"]);
       default: {
         const first = Object.values(obj).find(
           (v) => typeof v === "string" && (v as string).length > 0,
@@ -174,6 +186,38 @@ export function toolSummary(message: Message): string {
   }
 }
 
+/**
+ * Build an apply-patch-style block from antigravity's
+ * `multi_replace_file_content` ReplacementChunks. Each chunk becomes one
+ * `@@` hunk anchored at its `StartLine`. The shape matches what
+ * `buildPatchLineDiff` already handles (the codex apply_patch format), so
+ * we get the same numbered, syntax-highlighted rendering for free.
+ */
+function buildPatchFromAntigravityChunks(
+  file: string,
+  chunks: Array<Record<string, unknown>>,
+): string {
+  const safeFile = file || "file";
+  const header = `*** Begin Patch\n*** Update File: ${safeFile}\n`;
+  const hunks = chunks
+    .map((chunk) => {
+      const oldText = String(chunk.TargetContent ?? "");
+      const newText = String(chunk.ReplacementContent ?? "");
+      const oldLines = oldText.length === 0 ? [] : oldText.split("\n");
+      const newLines = newText.length === 0 ? [] : newText.split("\n");
+      const startLine = Number(chunk.StartLine ?? 1) || 1;
+      const oldCount = Math.max(oldLines.length, 1);
+      const newCount = Math.max(newLines.length, 1);
+      const body = [
+        ...oldLines.map((line) => `-${line}`),
+        ...newLines.map((line) => `+${line}`),
+      ].join("\n");
+      return `@@ -${startLine},${oldCount} +${startLine},${newCount} @@\n${body}`;
+    })
+    .join("\n");
+  return `${header}${hunks}\n*** End Patch\n`;
+}
+
 /** Format tool input for expanded view — structured, not raw JSON. */
 export function formatToolInput(message: Message): ToolDetail | null {
   const name = message.tool_name || "";
@@ -183,7 +227,7 @@ export function formatToolInput(message: Message): ToolDetail | null {
   try {
     const obj = JSON.parse(inputJson) as Record<string, unknown>;
     switch (name) {
-      case "Edit":
+      case "Edit": {
         if (typeof obj.patch === "string") {
           const files = extractPatchedFiles(obj.patch);
           return {
@@ -195,41 +239,96 @@ export function formatToolInput(message: Message): ToolDetail | null {
                       value: files.map(shortenHomePath).join("\n"),
                     },
                   ]
-                : [toolLine("file", obj.file_path || obj.filePath || "")]),
+                : [
+                    toolLine(
+                      "file",
+                      obj.file_path || obj.filePath || obj.TargetFile || "",
+                    ),
+                  ]),
             ],
             patchDiff: buildPatchLineDiff(obj.patch),
           };
         }
+        // Antigravity's `multi_replace_file_content` carries an array of
+        // {TargetContent, ReplacementContent, StartLine, EndLine} chunks.
+        // Concatenate them into a single unified-diff patch with one hunk
+        // per chunk so the existing `patchDiff` renderer can display them.
+        if (Array.isArray(obj.ReplacementChunks)) {
+          const file =
+            obj.TargetFile || obj.file_path || obj.filePath || "(unknown)";
+          const patch = buildPatchFromAntigravityChunks(
+            String(file),
+            obj.ReplacementChunks as Array<Record<string, unknown>>,
+          );
+          return {
+            lines: [toolLine("file", file)],
+            patchDiff: buildPatchLineDiff(patch),
+          };
+        }
         return {
-          lines: [toolLine("file", obj.file_path || obj.filePath || "")],
+          lines: [
+            toolLine(
+              "file",
+              obj.file_path || obj.filePath || obj.TargetFile || "",
+            ),
+          ],
           diff: {
-            old: String(obj.old_string || obj.oldString || ""),
-            new: String(obj.new_string || obj.newString || ""),
+            old: String(
+              obj.old_string || obj.oldString || obj.TargetContent || "",
+            ),
+            new: String(
+              obj.new_string || obj.newString || obj.ReplacementContent || "",
+            ),
           },
         };
+      }
       case "Write":
         return {
           lines: [
-            toolLine("file", obj.file_path || obj.filePath || ""),
-            { label: "content", value: String(obj.content || "") },
+            toolLine(
+              "file",
+              obj.file_path || obj.filePath || obj.TargetFile || "",
+            ),
+            {
+              label: "content",
+              value: String(
+                obj.content || obj.CodeContent || obj.code_content || "",
+              ),
+            },
           ],
         };
       case "Read":
         return {
           lines: [
-            toolLine("file", obj.file_path || obj.filePath || ""),
+            toolLine(
+              "file",
+              obj.file_path ||
+                obj.filePath ||
+                obj.AbsolutePath ||
+                obj.path ||
+                "",
+            ),
             ...(obj.offset
               ? [{ label: "offset", value: String(obj.offset) }]
               : []),
             ...(obj.limit
               ? [{ label: "limit", value: String(obj.limit) }]
               : []),
+            ...(obj.StartLine
+              ? [{ label: "start", value: String(obj.StartLine) }]
+              : []),
+            ...(obj.EndLine
+              ? [{ label: "end", value: String(obj.EndLine) }]
+              : []),
           ],
         };
       case "Bash":
         return {
           lines: [
-            { label: "command", value: String(obj.command || obj.cmd || "") },
+            {
+              label: "command",
+              value: String(obj.command || obj.cmd || obj.CommandLine || ""),
+            },
           ],
         };
       case "Plan": {

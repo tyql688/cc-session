@@ -84,9 +84,9 @@ describe("buildFavoritesTree", () => {
     const sessions = [
       makeSession({
         id: "s1",
-        provider: "qwen",
-        project_name: "proj-q",
-        project_path: "/q",
+        provider: "kimi",
+        project_name: "proj-k",
+        project_path: "/k",
       }),
       makeSession({
         id: "s2",
@@ -96,7 +96,7 @@ describe("buildFavoritesTree", () => {
       }),
       makeSession({
         id: "s3",
-        provider: "gemini",
+        provider: "antigravity",
         project_name: "proj-g",
         project_path: "/g",
       }),
@@ -105,8 +105,8 @@ describe("buildFavoritesTree", () => {
     const tree = buildFavoritesTree(sessions, "No Project");
     expect(tree.map((node) => node.provider)).toEqual([
       "claude",
-      "gemini",
-      "qwen",
+      "antigravity",
+      "kimi",
     ]);
   });
 
@@ -205,21 +205,6 @@ describe("buildTrashTree", () => {
 
     const tree = buildTrashTree(items, labels);
     expect(tree[0].children[0].label).toBe("Unknown");
-  });
-
-  it("uses qwen project directory instead of chats folder", () => {
-    const items = [
-      makeTrashItem({
-        id: "t1",
-        provider: "qwen",
-        project_name: "",
-        original_path:
-          "/Users/test/.qwen/projects/-private-tmp-ccsession-cli-qwen/chats/be2736ef-b5df-4e78-bd07-8fe138314aab.jsonl",
-      }),
-    ];
-
-    const tree = buildTrashTree(items, labels);
-    expect(tree[0].children[0].label).toBe("-private-tmp-ccsession-cli-qwen");
   });
 
   it("groups cc-mirror trash entries as top-level variant groups", () => {

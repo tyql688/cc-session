@@ -32,8 +32,7 @@
           "$HOME/.gemini/**",
           "$HOME/.local/share/opencode/**",
           "$HOME/.kimi/**",
-          "$HOME/.cc-mirror/**",
-          "$HOME/.qwen/**"
+          "$HOME/.cc-mirror/**"
         ]
       }
     }

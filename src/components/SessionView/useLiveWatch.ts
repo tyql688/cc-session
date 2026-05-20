@@ -75,17 +75,7 @@ export function useLiveWatch(opts: UseLiveWatchOptions): void {
         const unlisten = await listen<string[]>("sessions-changed", (event) => {
           const changedPaths = event.payload ?? [];
           if (!activeSourcePath) return;
-
-          let matched: boolean;
-          if (watchConfig.matchPrefix) {
-            // Gemini: match by project directory prefix
-            // (strip last 2 path segments: /chats/session-id.json → project dir)
-            const dir = activeSourcePath.replace(/\/[^/]+\/[^/]+$/, "");
-            matched = changedPaths.some((p) => p.startsWith(dir));
-          } else {
-            matched = changedPaths.includes(activeSourcePath);
-          }
-          if (!matched) return;
+          if (!changedPaths.includes(activeSourcePath)) return;
 
           clearTimeout(watchDebounce);
           watchDebounce = setTimeout(

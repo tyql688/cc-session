@@ -9,11 +9,10 @@ import type { Provider } from "./types";
 const ALL_PROVIDERS: Provider[] = [
   "claude",
   "codex",
-  "gemini",
+  "antigravity",
   "opencode",
   "kimi",
   "cc-mirror",
-  "qwen",
 ];
 
 describe("provider-watch", () => {
@@ -26,13 +25,12 @@ describe("provider-watch", () => {
   });
 
   it("combines provider strategy with frontend watch behavior", () => {
-    const config = getProviderWatchConfig("gemini");
-    expect(config.strategy).toBe("poll");
-    expect(config.matchPrefix).toBe(true);
+    const config = getProviderWatchConfig("antigravity");
+    expect(config.strategy).toBe("fs");
     expect(config.debounceMs).toBeGreaterThan(0);
   });
 
   it("returns poll providers from the active catalog", () => {
-    expect(getPollWatchProviders()).toEqual(["gemini", "opencode"]);
+    expect(getPollWatchProviders()).toEqual(["opencode"]);
   });
 });

@@ -21,11 +21,10 @@ export type TerminalApp =
 const VALID_PROVIDERS: Provider[] = [
   "claude",
   "codex",
-  "gemini",
+  "antigravity",
   "opencode",
   "kimi",
   "cc-mirror",
-  "qwen",
 ];
 
 function parseStoredStringArray<T extends string>(

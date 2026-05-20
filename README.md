@@ -21,7 +21,7 @@
 
 ## Why CC Session?
 
-AI coding tools like Claude Code, Codex, Gemini CLI, and Qwen Code store session data locally, but there's no easy way to browse, search, or revisit past conversations. CC Session brings all your sessions together in one unified interface — view full conversation histories, search across all providers with full-text search, export records, and resume any session directly in your terminal.
+AI coding tools like Claude Code, Codex, Antigravity, and Kimi CLI store session data locally, but there's no easy way to browse, search, or revisit past conversations. CC Session brings all your sessions together in one unified interface — view full conversation histories, search across all providers with full-text search, export records, and resume any session directly in your terminal.
 
 > **One app for all your local coding sessions**
 >
@@ -32,7 +32,7 @@ AI coding tools like Claude Code, Codex, Gemini CLI, and Qwen Code store session
 - **Unified view** — All your AI coding sessions from multiple providers in one place
 - **Full-text search** — Search across all session content with SQLite FTS5
 - **Resume sessions** — Jump back into any session in your terminal
-- **Live watch** — File-based providers auto-refresh via OS watchers; Gemini and OpenCode use provider-aware polling
+- **Live watch** — File-based providers auto-refresh via OS watchers; OpenCode uses provider-aware polling
 - **Rich rendering** — Markdown, syntax highlighting, Mermaid diagrams, KaTeX math, inline images, structured tool call diffs
 - **Token usage** — Per-message and session-level token counts with cache hit/write breakdown
 - **Export** — JSON, Markdown, or self-contained HTML (dark mode, collapsible tools & thinking blocks)
@@ -48,10 +48,9 @@ CC Session currently supports:
 
 - Claude Code
 - Codex CLI
-- Gemini CLI
+- Antigravity
 - Kimi CLI
 - OpenCode
-- Qwen Code
 - CC-Mirror
 
 Across providers, CC Session parses messages, tool calls, thinking/reasoning blocks, token usage, inline images, Markdown, Mermaid diagrams, and KaTeX math where the source format supports them.

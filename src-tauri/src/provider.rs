@@ -387,6 +387,14 @@ pub struct ParsedSession {
     /// are surfaced as `Err` instead. Zero when the parser hasn't been wired
     /// for per-record counting yet.
     pub parse_warning_count: u32,
+    /// Conversation IDs of subagents this session explicitly invoked.
+    ///
+    /// Populated only by providers that surface structured parent→child links
+    /// in the transcript itself (today: Antigravity's `INVOKE_SUBAGENT` step
+    /// type). `db/sync.rs::upsert_session_on` uses this to back-fill
+    /// `parent_id` / `is_sidechain` / inherited project metadata on already-
+    /// indexed child rows. Empty for every other provider.
+    pub child_session_ids: Vec<String>,
 }
 
 /// Materialized session payload returned by `SessionProvider::load_messages`
@@ -488,8 +496,9 @@ fn build_codex_runtime() -> Option<Box<dyn SessionProvider>> {
     crate::providers::codex::CodexProvider::new().map(|p| Box::new(p) as Box<dyn SessionProvider>)
 }
 
-fn build_gemini_runtime() -> Option<Box<dyn SessionProvider>> {
-    crate::providers::gemini::GeminiProvider::new().map(|p| Box::new(p) as Box<dyn SessionProvider>)
+fn build_antigravity_runtime() -> Option<Box<dyn SessionProvider>> {
+    crate::providers::antigravity::AntigravityProvider::new()
+        .map(|p| Box::new(p) as Box<dyn SessionProvider>)
 }
 
 fn build_opencode_runtime() -> Option<Box<dyn SessionProvider>> {
@@ -506,10 +515,6 @@ fn build_cc_mirror_runtime() -> Option<Box<dyn SessionProvider>> {
         .map(|p| Box::new(p) as Box<dyn SessionProvider>)
 }
 
-fn build_qwen_runtime() -> Option<Box<dyn SessionProvider>> {
-    crate::providers::qwen::QwenProvider::new().map(|p| Box::new(p) as Box<dyn SessionProvider>)
-}
-
 fn provider_catalog() -> &'static [ProviderCatalogEntry] {
     &PROVIDER_CATALOG
 }
@@ -522,11 +527,10 @@ fn provider_entry(provider: &Provider) -> &'static ProviderCatalogEntry {
     match provider {
         Provider::Claude => &PROVIDER_CATALOG[0],
         Provider::Codex => &PROVIDER_CATALOG[1],
-        Provider::Gemini => &PROVIDER_CATALOG[2],
+        Provider::Antigravity => &PROVIDER_CATALOG[2],
         Provider::OpenCode => &PROVIDER_CATALOG[3],
         Provider::Kimi => &PROVIDER_CATALOG[4],
         Provider::CcMirror => &PROVIDER_CATALOG[5],
-        Provider::Qwen => &PROVIDER_CATALOG[6],
     }
 }
 
@@ -534,17 +538,16 @@ fn provider_entry_for_key(key: &str) -> Option<&'static ProviderCatalogEntry> {
     provider_catalog().iter().find(|entry| entry.key == key)
 }
 
-static PROVIDER_KINDS: [Provider; 7] = [
+static PROVIDER_KINDS: [Provider; 6] = [
     Provider::Claude,
     Provider::Codex,
-    Provider::Gemini,
+    Provider::Antigravity,
     Provider::OpenCode,
     Provider::Kimi,
     Provider::CcMirror,
-    Provider::Qwen,
 ];
 
-static PROVIDER_CATALOG: [ProviderCatalogEntry; 7] = [
+static PROVIDER_CATALOG: [ProviderCatalogEntry; 6] = [
     ProviderCatalogEntry {
         kind: Provider::Claude,
         key: "claude",
@@ -560,11 +563,11 @@ static PROVIDER_CATALOG: [ProviderCatalogEntry; 7] = [
         build_runtime: build_codex_runtime,
     },
     ProviderCatalogEntry {
-        kind: Provider::Gemini,
-        key: "gemini",
-        label: "Gemini",
-        descriptor: &crate::providers::gemini::Descriptor,
-        build_runtime: build_gemini_runtime,
+        kind: Provider::Antigravity,
+        key: "antigravity",
+        label: "Antigravity",
+        descriptor: &crate::providers::antigravity::Descriptor,
+        build_runtime: build_antigravity_runtime,
     },
     ProviderCatalogEntry {
         kind: Provider::OpenCode,
@@ -586,13 +589,6 @@ static PROVIDER_CATALOG: [ProviderCatalogEntry; 7] = [
         label: "CC-Mirror",
         descriptor: &crate::providers::cc_mirror::Descriptor,
         build_runtime: build_cc_mirror_runtime,
-    },
-    ProviderCatalogEntry {
-        kind: Provider::Qwen,
-        key: "qwen",
-        label: "Qwen Code",
-        descriptor: &crate::providers::qwen::Descriptor,
-        build_runtime: build_qwen_runtime,
     },
 ];
 
@@ -818,8 +814,8 @@ mod tests {
                 Some(Provider::Codex),
             ),
             (
-                "/home/user/.gemini/tmp/proj/chats/session.json",
-                Some(Provider::Gemini),
+                "/home/user/.gemini/antigravity-cli/brain/abc/.system_generated/logs/transcript.jsonl",
+                Some(Provider::Antigravity),
             ),
             (
                 "/home/user/.local/share/opencode/opencode.db",
@@ -832,10 +828,6 @@ mod tests {
             (
                 "/home/user/.cc-mirror/variant/config/projects/foo/abc.jsonl",
                 Some(Provider::CcMirror),
-            ),
-            (
-                "/home/user/.qwen/projects/-Users-user-myproject/chats/abc-123.jsonl",
-                Some(Provider::Qwen),
             ),
             ("/home/user/random/file.txt", None),
             // cc-mirror path should NOT match claude

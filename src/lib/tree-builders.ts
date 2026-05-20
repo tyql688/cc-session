@@ -7,11 +7,10 @@ import {
 const KNOWN_PROVIDER_KEYS = new Set<string>([
   "claude",
   "codex",
-  "gemini",
+  "antigravity",
   "opencode",
   "kimi",
   "cc-mirror",
-  "qwen",
 ]);
 
 function parseProviderKey(provider: string): Provider | null {
@@ -36,10 +35,9 @@ function projectFromTrashPath(item: TrashMeta, unknownLabel: string): string {
     case "cc-mirror":
       return segments.at(-2) || unknownLabel;
     case "codex":
-    case "gemini":
+    case "antigravity":
     case "kimi":
     case "opencode":
-    case "qwen":
     default:
       return unknownLabel;
   }

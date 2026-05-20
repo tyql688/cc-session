@@ -32,19 +32,33 @@ pub fn parse_mcp_tool_name(name: &str) -> Option<McpToolMetadata> {
 }
 
 pub fn canonical_tool_name(provider: Provider, name: &str) -> String {
-    if provider == Provider::Gemini && (name.contains("Agent") || name.contains("agent")) {
+    if provider == Provider::Antigravity && (name.contains("Agent") || name.contains("agent")) {
         return "Agent".to_string();
     }
 
     match name {
         "Shell" | "shell" | "bash" | "exec_command" | "shell_command" | "run_shell_command"
-        | "run_in_terminal" | "write_stdin" | "Monitor" | "LocalShellCall" => "Bash",
-        "Read" | "read" | "ReadFile" | "read_file" | "view" => "Read",
+        | "run_in_terminal" | "write_stdin" | "Monitor" | "LocalShellCall" | "run_command" => {
+            "Bash"
+        }
+        "Read" | "read" | "ReadFile" | "read_file" | "view" | "view_file" => "Read",
         "read_mcp_resource" => "ListMcpResourcesTool",
-        "Write" | "write" | "WriteFile" | "write_file" | "create" => "Write",
-        "Edit" | "edit" | "edit_file" | "replace" | "StrReplace" | "str_replace"
-        | "StrReplaceFile" | "ApplyPatch" | "Apply_patch" | "MultiEdit" | "str_replace_editor"
-        | "apply_patch" | "EditNotebook" => "Edit",
+        "Write" | "write" | "WriteFile" | "write_file" | "create" | "write_to_file" => "Write",
+        "Edit"
+        | "edit"
+        | "edit_file"
+        | "replace"
+        | "StrReplace"
+        | "str_replace"
+        | "StrReplaceFile"
+        | "ApplyPatch"
+        | "Apply_patch"
+        | "MultiEdit"
+        | "str_replace_editor"
+        | "apply_patch"
+        | "EditNotebook"
+        | "replace_file_content"
+        | "multi_replace_file_content" => "Edit",
         "Delete" | "delete" => "Delete",
         "Grep"
         | "grep"
@@ -53,20 +67,23 @@ pub fn canonical_tool_name(provider: Provider, name: &str) -> String {
         | "SemanticSearch"
         | "grep_search"
         | "search_file_content" => "Grep",
-        "Glob" | "glob" | "file_search" | "ReadFolder" | "list_directory" | "list" => "Glob",
+        "Glob" | "glob" | "file_search" | "ReadFolder" | "list_directory" | "list" | "list_dir" => {
+            "Glob"
+        }
         "Task" | "task" | "Subagent" | "agent" | "read_agent" | "spawn_agent" | "wait_agent"
-        | "send_input" | "close_agent" => "Agent",
+        | "send_input" | "close_agent" | "invoke_subagent" | "define_subagent" => "Agent",
         "send_message" => "SendMessage",
         "followup_task" => "FollowupTask",
         "list_agents" => "ListAgents",
         "update_plan" | "TodoWrite" | "todo" | "todowrite" | "Enter Plan Mode"
-        | "EnterPlanMode" | "ExitPlanMode" | "enter_plan_mode" | "exit_plan_mode" => "Plan",
+        | "EnterPlanMode" | "ExitPlanMode" | "enter_plan_mode" | "exit_plan_mode"
+        | "manage_task" => "Plan",
         "request_user_input" | "ask_user" | "question" => "AskUserQuestion",
-        "request_permissions" => "RequestPermissions",
-        "ScheduleWakeup" => "ScheduleWakeup",
+        "request_permissions" | "ask_permission" | "list_permissions" => "RequestPermissions",
+        "ScheduleWakeup" | "schedule" => "ScheduleWakeup",
         "ReadLints" => "Lint",
-        "web_fetch" | "webfetch" => "WebFetch",
-        "web_search" | "web_search_call" | "websearch" => "WebSearch",
+        "web_fetch" | "webfetch" | "read_url_content" => "WebFetch",
+        "web_search" | "web_search_call" | "websearch" | "search_web" => "WebSearch",
         "image_generation_call" | "image_generation_end" => "ImageGeneration",
         "dynamic_tool_call"
         | "dynamic_tool_call_request"
@@ -162,12 +179,31 @@ fn string_field<'a>(value: &'a Value, keys: &[&str]) -> Option<&'a str> {
 fn input_summary(canonical_name: &str, raw_name: &str, input: Option<&Value>) -> Option<String> {
     let input = input?;
     let summary = match canonical_name {
-        "Read" | "Write" | "Edit" => string_field(input, &["file_path", "filePath", "path"])
-            .map(shorten_home_path)
-            .unwrap_or_default(),
-        "Bash" => string_field(input, &["description", "command", "cmd"])
-            .map(|s| compact_string(s, 80))
-            .unwrap_or_default(),
+        "Read" | "Write" | "Edit" => string_field(
+            input,
+            &[
+                "file_path",
+                "filePath",
+                "path",
+                // Antigravity uses PascalCase keys.
+                "AbsolutePath",
+                "TargetFile",
+            ],
+        )
+        .map(shorten_home_path)
+        .unwrap_or_default(),
+        "Bash" => string_field(
+            input,
+            &[
+                "description",
+                "command",
+                "cmd",
+                // Antigravity: run_command's `CommandLine` field.
+                "CommandLine",
+            ],
+        )
+        .map(|s| compact_string(s, 80))
+        .unwrap_or_default(),
         "ScheduleWakeup" => {
             let delay = input
                 .get("delaySeconds")
@@ -183,10 +219,10 @@ fn input_summary(canonical_name: &str, raw_name: &str, input: Option<&Value>) ->
                 .collect::<Vec<_>>()
                 .join(" · ")
         }
-        "Grep" => string_field(input, &["pattern", "query"])
+        "Grep" => string_field(input, &["pattern", "query", "Query"])
             .map(|pattern| {
                 let mut value = format!("/{}/", compact_string(pattern, 60));
-                if let Some(path) = string_field(input, &["path", "dir_path"]) {
+                if let Some(path) = string_field(input, &["path", "dir_path", "SearchPath"]) {
                     value.push(' ');
                     value.push_str(&shorten_home_path(path));
                 }
@@ -194,7 +230,7 @@ fn input_summary(canonical_name: &str, raw_name: &str, input: Option<&Value>) ->
             })
             .unwrap_or_default(),
         "Glob" => string_field(input, &["pattern"])
-            .or_else(|| string_field(input, &["dir_path", "path"]))
+            .or_else(|| string_field(input, &["dir_path", "path", "DirectoryPath"]))
             .unwrap_or_default()
             .to_string(),
         "Agent" => {
@@ -248,10 +284,10 @@ fn input_summary(canonical_name: &str, raw_name: &str, input: Option<&Value>) ->
         "ToolSearch" => string_field(input, &["query"])
             .unwrap_or_default()
             .to_string(),
-        "WebSearch" => string_field(input, &["query"])
+        "WebSearch" => string_field(input, &["query", "Query"])
             .unwrap_or_default()
             .to_string(),
-        "WebFetch" => string_field(input, &["url"])
+        "WebFetch" => string_field(input, &["url", "Url"])
             .unwrap_or_default()
             .to_string(),
         "ImageGeneration" => string_field(input, &["revised_prompt", "prompt"])

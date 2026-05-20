@@ -273,21 +273,39 @@ pub(crate) fn render_tool_input_detail(tool_name: &str, tool_input: &str) -> Str
     let mut html = String::new();
     match tool_name {
         "Edit" => {
-            if let Some(fp) = string_field(&obj, &["file_path", "filePath"]) {
+            if let Some(fp) = string_field(&obj, &["file_path", "filePath", "TargetFile"]) {
                 html.push_str(&render_field("file", fp));
             }
             if let Some(patch) = string_field(&obj, &["patch"]) {
                 html.push_str(&render_patch_diff(patch));
                 return html;
             }
-            let old = string_field(&obj, &["old_string", "oldString"]);
-            let new = string_field(&obj, &["new_string", "newString"]);
+            // Antigravity `multi_replace_file_content`: each chunk is its
+            // own old/new pair. Render them in order.
+            if let Some(chunks) = obj.get("ReplacementChunks").and_then(|v| v.as_array()) {
+                for chunk in chunks {
+                    let old = chunk
+                        .get("TargetContent")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("");
+                    let new_text = chunk
+                        .get("ReplacementContent")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("");
+                    if !old.is_empty() || !new_text.is_empty() {
+                        html.push_str(&render_line_diff(old, new_text));
+                    }
+                }
+                return html;
+            }
+            let old = string_field(&obj, &["old_string", "oldString", "TargetContent"]);
+            let new = string_field(&obj, &["new_string", "newString", "ReplacementContent"]);
             if old.is_some() || new.is_some() {
                 html.push_str(&render_line_diff(old.unwrap_or(""), new.unwrap_or("")));
             }
         }
         "Bash" => {
-            if let Some(cmd) = string_field(&obj, &["command", "cmd"]) {
+            if let Some(cmd) = string_field(&obj, &["command", "cmd", "CommandLine"]) {
                 html.push_str(&render_pre_field("$", cmd));
             }
         }
@@ -319,12 +337,21 @@ pub(crate) fn render_tool_input_detail(tool_name: &str, tool_input: &str) -> Str
             }
         }
         "Read" | "Write" => {
-            if let Some(fp) = string_field(&obj, &["file_path", "filePath", "path"]) {
+            if let Some(fp) = string_field(
+                &obj,
+                &[
+                    "file_path",
+                    "filePath",
+                    "path",
+                    "AbsolutePath",
+                    "TargetFile",
+                ],
+            ) {
                 html.push_str(&render_field("file", fp));
             }
         }
         "Grep" | "Glob" => {
-            if let Some(p) = string_field(&obj, &["pattern", "query"]) {
+            if let Some(p) = string_field(&obj, &["pattern", "query", "Query", "DirectoryPath"]) {
                 html.push_str(&render_field("pattern", p));
             }
             if let Some(path) = string_field(&obj, &["path"]) {

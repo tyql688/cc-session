@@ -510,6 +510,7 @@ mod tests {
             messages,
             content_text: String::new(),
             parse_warning_count: 0,
+            child_session_ids: Vec::new(),
         }
     }
 

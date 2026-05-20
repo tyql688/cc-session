@@ -97,7 +97,7 @@ impl Database {
         self.with_transaction(|conn| {
             for parsed in sessions {
                 let content = dialogue_content_text(&parsed.messages, &parsed.content_text);
-                upsert_session_on(conn, &parsed.meta, &content)?;
+                upsert_session_on(conn, &parsed.meta, &content, &parsed.child_session_ids)?;
             }
 
             if should_delete {
@@ -145,7 +145,7 @@ impl Database {
         self.with_transaction(|conn| {
             for parsed in sessions {
                 let content = dialogue_content_text(&parsed.messages, &parsed.content_text);
-                upsert_session_on(conn, &parsed.meta, &content)?;
+                upsert_session_on(conn, &parsed.meta, &content, &parsed.child_session_ids)?;
             }
 
             if should_delete {
@@ -285,6 +285,7 @@ fn upsert_session_on(
     conn: &Connection,
     meta: &SessionMeta,
     content_text: &str,
+    child_session_ids: &[String],
 ) -> Result<(), rusqlite::Error> {
     let provider_str = meta.provider.key();
 
@@ -296,20 +297,20 @@ fn upsert_session_on(
          ON CONFLICT(id) DO UPDATE SET
             provider = excluded.provider,
             title = CASE WHEN sessions.title_custom = 1 THEN sessions.title ELSE excluded.title END,
-            project_path = excluded.project_path,
-            project_name = excluded.project_name,
+            project_path = CASE WHEN excluded.project_path != '' THEN excluded.project_path ELSE sessions.project_path END,
+            project_name = CASE WHEN excluded.project_name != 'Unknown Project' AND excluded.project_name != '' THEN excluded.project_name ELSE sessions.project_name END,
             created_at = excluded.created_at,
             updated_at = excluded.updated_at,
             message_count = excluded.message_count,
             file_size_bytes = excluded.file_size_bytes,
             source_path = excluded.source_path,
             content_text = excluded.content_text,
-            is_sidechain = excluded.is_sidechain,
+            is_sidechain = CASE WHEN excluded.is_sidechain = 1 OR sessions.is_sidechain = 1 THEN 1 ELSE 0 END,
             variant_name = excluded.variant_name,
             model = excluded.model,
             cc_version = excluded.cc_version,
             git_branch = excluded.git_branch,
-            parent_id = excluded.parent_id",
+            parent_id = COALESCE(excluded.parent_id, sessions.parent_id)",
         params![
             meta.id,
             provider_str,
@@ -330,6 +331,27 @@ fn upsert_session_on(
             meta.parent_id,
         ],
     )?;
+
+    // Back-fill parent_id / is_sidechain / project metadata on already-indexed
+    // child rows. `child_session_ids` is populated by providers that surface
+    // structured parent→child links in the transcript itself (today only
+    // Antigravity via its `INVOKE_SUBAGENT` step type). For other providers
+    // the list is empty and this loop is a no-op.
+    for child_id in child_session_ids {
+        if child_id == &meta.id {
+            continue;
+        }
+        conn.execute(
+            "UPDATE sessions
+             SET parent_id = ?1,
+                 is_sidechain = 1,
+                 project_path = CASE WHEN project_path = '' OR project_path IS NULL THEN ?2 ELSE project_path END,
+                 project_name = CASE WHEN project_name = 'Unknown Project' OR project_name IS NULL THEN ?3 ELSE project_name END
+             WHERE id = ?4 AND (parent_id IS NULL OR parent_id = '')",
+            params![meta.id, meta.project_path, meta.project_name, child_id],
+        )?;
+    }
+
     Ok(())
 }
 
@@ -433,6 +455,7 @@ mod tests {
                 messages: Vec::new(),
                 content_text: String::new(),
                 parse_warning_count: 0,
+                child_session_ids: Vec::new(),
             }],
             true,
         )
@@ -478,6 +501,7 @@ mod tests {
                 messages: Vec::new(),
                 content_text: String::new(),
                 parse_warning_count: 0,
+                child_session_ids: Vec::new(),
             }],
             true,
         )
@@ -538,6 +562,7 @@ mod tests {
             messages: Vec::new(),
             content_text: String::new(),
             parse_warning_count: 0,
+            child_session_ids: Vec::new(),
         })
         .collect::<Vec<_>>();
         db.sync_provider_snapshot(&Provider::Claude, &parsed, true)
@@ -548,5 +573,149 @@ mod tests {
             .unwrap();
         assert_eq!(counts.get(&parent_a.id), Some(&2));
         assert_eq!(counts.get(&parent_b.id), Some(&1));
+    }
+
+    #[test]
+    fn parent_backfills_child_when_parser_declares_child_ids() {
+        let dir = TempDir::new().unwrap();
+        let db = Database::open(dir.path()).unwrap();
+
+        let child_id = "22222222-2222-4222-a222-222222222222";
+        let parent_id = "11111111-1111-4111-a111-111111111111";
+
+        // 1. Child indexed first with no parent / Unknown project (mirrors the
+        //    watcher firing on the child transcript before the parent's).
+        let mut child_meta = sample_meta(child_id);
+        child_meta.project_path = String::new();
+        child_meta.project_name = "Unknown Project".into();
+        child_meta.parent_id = None;
+        child_meta.is_sidechain = false;
+
+        db.sync_provider_snapshot(
+            &Provider::Antigravity,
+            &[ParsedSession {
+                meta: child_meta.clone(),
+                messages: Vec::new(),
+                content_text: String::new(),
+                parse_warning_count: 0,
+                child_session_ids: Vec::new(),
+            }],
+            true,
+        )
+        .unwrap();
+
+        let loaded_child = db.get_session(child_id).unwrap().unwrap();
+        assert_eq!(loaded_child.parent_id, None);
+        assert!(!loaded_child.is_sidechain);
+        assert_eq!(loaded_child.project_name, "Unknown Project");
+
+        // 2. Parent indexed with explicit child id list (the antigravity parser
+        //    populates this from INVOKE_SUBAGENT step content). The child row
+        //    must be back-filled with parent_id + inherited project metadata.
+        let mut parent_meta = sample_meta(parent_id);
+        parent_meta.project_path = "/tmp/ccsession".into();
+        parent_meta.project_name = "ccsession".into();
+
+        db.sync_provider_snapshot(
+            &Provider::Antigravity,
+            &[ParsedSession {
+                meta: parent_meta.clone(),
+                messages: Vec::new(),
+                content_text: String::new(),
+                parse_warning_count: 0,
+                child_session_ids: vec![child_id.to_string()],
+            }],
+            true,
+        )
+        .unwrap();
+
+        let loaded_child_after = db.get_session(child_id).unwrap().unwrap();
+        assert_eq!(loaded_child_after.parent_id, Some(parent_id.to_string()));
+        assert!(loaded_child_after.is_sidechain);
+        assert_eq!(loaded_child_after.project_path, "/tmp/ccsession");
+        assert_eq!(loaded_child_after.project_name, "ccsession");
+
+        // 3. A later incremental sync of the child (no parent info) must not
+        //    clobber parent_id / is_sidechain / project metadata.
+        db.sync_provider_snapshot(
+            &Provider::Antigravity,
+            &[ParsedSession {
+                meta: child_meta.clone(),
+                messages: Vec::new(),
+                content_text: "Child updated content".into(),
+                parse_warning_count: 0,
+                child_session_ids: Vec::new(),
+            }],
+            true,
+        )
+        .unwrap();
+
+        let loaded_child_final = db.get_session(child_id).unwrap().unwrap();
+        assert_eq!(loaded_child_final.parent_id, Some(parent_id.to_string()));
+        assert!(loaded_child_final.is_sidechain);
+        assert_eq!(loaded_child_final.project_path, "/tmp/ccsession");
+        assert_eq!(loaded_child_final.project_name, "ccsession");
+    }
+
+    #[test]
+    fn upsert_does_not_relink_when_child_already_has_parent() {
+        // Regression guard: random UUIDs that happen to match an existing
+        // session id must NOT steal it away from its real parent.
+        let dir = TempDir::new().unwrap();
+        let db = Database::open(dir.path()).unwrap();
+
+        let child_id = "22222222-2222-4222-a222-222222222222";
+        let true_parent = "11111111-1111-4111-a111-111111111111";
+        let other = "44444444-4444-4444-a444-444444444444";
+
+        // Real parent claims the child.
+        let mut child_meta = sample_meta(child_id);
+        child_meta.parent_id = Some(true_parent.into());
+        child_meta.is_sidechain = true;
+        let mut true_parent_meta = sample_meta(true_parent);
+        true_parent_meta.project_path = "/tmp/real".into();
+        true_parent_meta.project_name = "real".into();
+
+        db.sync_provider_snapshot(
+            &Provider::Antigravity,
+            &[
+                ParsedSession {
+                    meta: child_meta,
+                    messages: Vec::new(),
+                    content_text: String::new(),
+                    parse_warning_count: 0,
+                    child_session_ids: Vec::new(),
+                },
+                ParsedSession {
+                    meta: true_parent_meta,
+                    messages: Vec::new(),
+                    content_text: String::new(),
+                    parse_warning_count: 0,
+                    child_session_ids: vec![child_id.into()],
+                },
+            ],
+            true,
+        )
+        .unwrap();
+
+        // An unrelated session that happens to mention the child id (e.g. a
+        // long-running session whose transcript copy-pasted that uuid) must
+        // not be allowed to override the existing parent.
+        let other_meta = sample_meta(other);
+        db.sync_provider_snapshot(
+            &Provider::Antigravity,
+            &[ParsedSession {
+                meta: other_meta,
+                messages: Vec::new(),
+                content_text: String::new(),
+                parse_warning_count: 0,
+                child_session_ids: vec![child_id.into()],
+            }],
+            true,
+        )
+        .unwrap();
+
+        let loaded = db.get_session(child_id).unwrap().unwrap();
+        assert_eq!(loaded.parent_id, Some(true_parent.to_string()));
     }
 }

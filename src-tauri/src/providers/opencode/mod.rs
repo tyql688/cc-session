@@ -414,6 +414,7 @@ impl SessionProvider for OpenCodeProvider {
                             .collect(),
                         content_text: truncate_to_bytes(&content_text, FTS_CONTENT_LIMIT),
                         parse_warning_count: 0,
+                        child_session_ids: Vec::new(),
                     }
                 },
             )

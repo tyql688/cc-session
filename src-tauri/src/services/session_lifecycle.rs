@@ -482,7 +482,7 @@ fn remove_trash_entry(
 ///
 /// Safety: only `remove_dir_all` on directories that look session-specific
 /// (contain subagents/, state.json, wire.jsonl, or context.jsonl).
-/// Shared directories like Gemini's `chats/` are NOT removed.
+/// Shared directories like Gemini's/Antigravity's parent roots are NOT removed.
 fn cleanup_session_dir(original_path: &str) {
     let original = Path::new(original_path);
     for candidate in [

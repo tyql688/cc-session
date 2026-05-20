@@ -1,11 +1,10 @@
 export type Provider =
   | "claude"
   | "codex"
-  | "gemini"
+  | "antigravity"
   | "opencode"
   | "kimi"
-  | "cc-mirror"
-  | "qwen";
+  | "cc-mirror";
 
 export interface SessionMeta {
   id: string;

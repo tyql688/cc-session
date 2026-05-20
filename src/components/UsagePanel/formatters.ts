@@ -5,10 +5,9 @@ export const SHORT_PROVIDER_LABELS: Record<string, string> = {
   claude: "Claude",
   "cc-mirror": "CC-Mirror",
   codex: "Codex",
-  gemini: "Gemini",
+  antigravity: "Antigravity",
   opencode: "OpenCode",
   kimi: "Kimi",
-  qwen: "Qwen",
 } as const;
 
 export function fmtTokens(n: number): string {

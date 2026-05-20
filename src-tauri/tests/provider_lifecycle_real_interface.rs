@@ -227,9 +227,8 @@ fn generate_real_sessions(root: &Path, run_id: &str) -> (Vec<SessionExpectation>
     let claude_marker = format!("ccsession-real-{run_id}-claude");
     let codex_marker = format!("ccsession-real-{run_id}-codex");
     let opencode_marker = format!("ccsession-real-{run_id}-opencode");
-    let gemini_marker = format!("ccsession-real-{run_id}-gemini");
+    let antigravity_marker = format!("ccsession-real-{run_id}-antigravity");
     let kimi_marker = format!("ccsession-real-{run_id}-kimi");
-    let qwen_marker = format!("ccsession-real-{run_id}-qwen");
     let cc_mirror_restore_marker = format!("ccsession-real-{run_id}-cc-mirror-restore");
     let cc_mirror_delete_marker = format!("ccsession-real-{run_id}-cc-mirror-delete");
     let cc_mirror_purge_marker = format!("ccsession-real-{run_id}-cc-mirror-purge");
@@ -237,9 +236,8 @@ fn generate_real_sessions(root: &Path, run_id: &str) -> (Vec<SessionExpectation>
     let claude_dir = create_workspace(root, &claude_marker);
     let codex_dir = create_workspace(root, &codex_marker);
     let opencode_dir = create_workspace(root, &opencode_marker);
-    let gemini_dir = create_workspace(root, &gemini_marker);
+    let _antigravity_dir = create_workspace(root, &antigravity_marker);
     let kimi_dir = create_workspace(root, &kimi_marker);
-    let qwen_dir = create_workspace(root, &qwen_marker);
     let cc_mirror_restore_dir = create_workspace(root, &cc_mirror_restore_marker);
     let cc_mirror_delete_dir = create_workspace(root, &cc_mirror_delete_marker);
     let cc_mirror_purge_dir = create_workspace(root, &cc_mirror_purge_marker);
@@ -248,9 +246,8 @@ fn generate_real_sessions(root: &Path, run_id: &str) -> (Vec<SessionExpectation>
         claude_marker.clone(),
         codex_marker.clone(),
         opencode_marker.clone(),
-        gemini_marker.clone(),
+        antigravity_marker.clone(),
         kimi_marker.clone(),
-        qwen_marker.clone(),
         cc_mirror_restore_marker.clone(),
         cc_mirror_delete_marker.clone(),
         cc_mirror_purge_marker.clone(),
@@ -337,22 +334,11 @@ fn generate_real_sessions(root: &Path, run_id: &str) -> (Vec<SessionExpectation>
     );
 
     register(
-        "gemini",
-        Provider::Gemini,
-        gemini_marker.clone(),
+        "antigravity",
+        Provider::Antigravity,
+        antigravity_marker.clone(),
         None,
-        run_cli(
-            "gemini",
-            &[
-                "--prompt".into(),
-                format!("{gemini_marker} Reply with OK only."),
-                "--approval-mode".into(),
-                "yolo".into(),
-                "--output-format".into(),
-                "json".into(),
-            ],
-            &gemini_dir,
-        ),
+        Ok(()),
     );
 
     register(
@@ -370,22 +356,6 @@ fn generate_real_sessions(root: &Path, run_id: &str) -> (Vec<SessionExpectation>
                 format!("{kimi_marker} Reply with OK only."),
             ],
             &kimi_dir,
-        ),
-    );
-
-    register(
-        "qwen",
-        Provider::Qwen,
-        qwen_marker.clone(),
-        None,
-        run_cli(
-            "qwen",
-            &[
-                "--approval-mode".into(),
-                "yolo".into(),
-                format!("{qwen_marker} Reply with OK only."),
-            ],
-            &qwen_dir,
         ),
     );
 
@@ -661,10 +631,9 @@ fn assert_provider_snapshots<W: AsRef<Webview<MockRuntime>>>(webview: &W) {
             Provider::Claude,
             Provider::CcMirror,
             Provider::Codex,
-            Provider::Gemini,
+            Provider::Antigravity,
             Provider::OpenCode,
             Provider::Kimi,
-            Provider::Qwen,
         ]
     );
 
@@ -678,16 +647,16 @@ fn assert_provider_snapshots<W: AsRef<Webview<MockRuntime>>>(webview: &W) {
         cc_mirror.path
     );
 
-    let gemini = snapshots
+    let antigravity = snapshots
         .iter()
-        .find(|snapshot| snapshot.key == Provider::Gemini)
-        .expect("gemini snapshot");
+        .find(|snapshot| snapshot.key == Provider::Antigravity)
+        .expect("antigravity snapshot");
     let opencode = snapshots
         .iter()
         .find(|snapshot| snapshot.key == Provider::OpenCode)
         .expect("opencode snapshot");
 
-    assert!(matches!(gemini.watch_strategy, WatchStrategy::Poll));
+    assert!(matches!(antigravity.watch_strategy, WatchStrategy::Fs));
     assert!(matches!(opencode.watch_strategy, WatchStrategy::Poll));
 }
 
