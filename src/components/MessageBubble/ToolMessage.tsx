@@ -187,7 +187,8 @@ export function ToolMessage(props: { message: Message; provider?: string }) {
     try {
       const parsed = JSON.parse(props.message.content);
       return typeof parsed === "object" && parsed !== null ? parsed : undefined;
-    } catch {
+    } catch (error) {
+      console.warn("Failed to parse tool output JSON:", error);
       return undefined;
     }
   });

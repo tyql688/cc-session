@@ -329,6 +329,8 @@ function renderMathBlock(node: MathNode, _key: string): JSX.Element {
   const html = renderKatex(node.value, true);
 
   if (html) {
+    // KaTeX output is sanitized HTML produced from controlled LaTeX input;
+    // innerHTML is required because KaTeX's renderer emits a DOM string.
     // eslint-disable-next-line solid/no-innerhtml
     return <div class="katex-display-block" innerHTML={html} />;
   }
@@ -544,6 +546,8 @@ function renderInlineMathNode(node: InlineMathNode, _key: string): JSX.Element {
   const html = renderKatex(node.value, false);
 
   if (html) {
+    // KaTeX output is sanitized HTML produced from controlled LaTeX input;
+    // innerHTML is required because KaTeX's renderer emits a DOM string.
     // eslint-disable-next-line solid/no-innerhtml
     return <span class="katex-inline" innerHTML={html} />;
   }

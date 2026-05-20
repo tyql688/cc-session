@@ -61,8 +61,9 @@ impl PersistedOutputCache {
                     entry.last_access = access;
                     return Ok(entry.content.clone());
                 }
-                // Stale — drop it. We'll reinsert below.
-                let removed = inner.map.remove(canonical_path).unwrap();
+            }
+            // Stale entry — drop it; we'll reinsert below. Absent is a no-op.
+            if let Some(removed) = inner.map.remove(canonical_path) {
                 inner.total_bytes = inner.total_bytes.saturating_sub(removed.content.len());
             }
         }

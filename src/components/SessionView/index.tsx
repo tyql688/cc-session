@@ -176,7 +176,9 @@ export function SessionView(props: {
         // Best-effort cancel of the previously in-flight load so the
         // backend parser can bail out instead of running to completion.
         if (prevSessionId && prevSessionId !== sessionId) {
-          void cancelSessionLoad(prevSessionId).catch(() => {});
+          void cancelSessionLoad(prevSessionId).catch((err) => {
+            console.warn("cancelSessionLoad failed:", err);
+          });
         }
         prevSessionId = sessionId;
 
@@ -220,7 +222,9 @@ export function SessionView(props: {
   // Cancel server-side parse when this view goes away.
   onCleanup(() => {
     if (prevSessionId) {
-      void cancelSessionLoad(prevSessionId).catch(() => {});
+      void cancelSessionLoad(prevSessionId).catch((err) => {
+        console.warn("cancelSessionLoad failed:", err);
+      });
     }
   });
 
