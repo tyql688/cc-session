@@ -107,14 +107,13 @@ export function TimelineMinimap(props: MinimapProps) {
     const { scrollTop, scrollHeight, clientHeight } = el;
     if (scrollHeight <= clientHeight) return;
 
-    // Standard scroll: scrollTop=0 is top (oldest); scrollTop = max is
-    // bottom (newest). Convert to a [0, 1] top-fraction so the indicator
-    // tracks the top of the viewport on the minimap.
     const viewFraction = clientHeight / scrollHeight;
-    const topFraction = scrollTop / (scrollHeight - clientHeight);
+    const bottomFraction = -scrollTop / (scrollHeight - clientHeight);
 
     const indicatorH = Math.max(8, viewFraction * canvasHeight);
-    const indicatorY = topFraction * (canvasHeight - indicatorH);
+    const indicatorBottom =
+      canvasHeight - bottomFraction * (canvasHeight - indicatorH);
+    const indicatorY = indicatorBottom - indicatorH;
 
     ctx.fillStyle = "rgba(255, 255, 255, 0.08)";
     ctx.beginPath();
