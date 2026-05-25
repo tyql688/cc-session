@@ -842,7 +842,12 @@ fn kimi_deletion_plan_for_parent_skips_whole_session_dir_when_unknown_agent_pres
     // Build an isolated session tree in a TempDir so we can drop a
     // stray un-indexed agent next to the parent's `main` without
     // racing the shared fixture used by other tests. Mirrors the
-    // real on-disk layout exactly: <root>/sessions/<wd>/<session>/agents/<agent>/wire.jsonl.
+    // real on-disk layout: <root>/sessions/<wd>/<session>/agents/<agent>/wire.jsonl.
+    //
+    // `agent-stray` exists ONLY as an empty directory — no wire.jsonl
+    // — so scan_all doesn't pick it up as a (phantom) session, but
+    // deletion_plan's `read_dir(agents/)` still sees it and must
+    // refuse to nuke the whole session_dir.
     let tmp = TempDir::new().unwrap();
     let session_dir = tmp
         .path()
@@ -866,11 +871,6 @@ fn kimi_deletion_plan_for_parent_skips_whole_session_dir_when_unknown_agent_pres
     )
     .unwrap();
     std::fs::write(
-        session_dir.join("agents/agent-stray/wire.jsonl"),
-        format!("{metadata_line}\n{user_line}\n"),
-    )
-    .unwrap();
-    std::fs::write(
         session_dir.join("state.json"),
         r#"{
             "title": "toctou",
@@ -881,12 +881,9 @@ fn kimi_deletion_plan_for_parent_skips_whole_session_dir_when_unknown_agent_pres
         }"#,
     )
     .unwrap();
-    // NOTE: state.json deliberately omits `agent-stray` — that
-    // simulates the TOCTOU window (or an un-indexed agent dir).
 
     let provider = KimiProvider::with_root(tmp.path().to_path_buf());
-    let mut sessions = provider.scan_all().expect("scan");
-    sessions.retain(|s| !s.meta.is_sidechain || s.meta.id.ends_with(":agent-0"));
+    let sessions = provider.scan_all().expect("scan");
     let parent = sessions
         .iter()
         .find(|s| !s.meta.is_sidechain)
@@ -899,12 +896,18 @@ fn kimi_deletion_plan_for_parent_skips_whole_session_dir_when_unknown_agent_pres
 
     assert_eq!(plan.file_action, FileAction::Remove);
     // Cleanup must target only main + known children, never the
-    // session_dir wholesale (which would destroy agent-stray).
+    // session_dir wholesale (which would destroy agent-stray). Compare
+    // file_name() rather than path suffix to stay platform-agnostic
+    // (Windows uses `\`, not `/`).
     for dir in &plan.cleanup_dirs {
-        let s = dir.to_string_lossy();
+        let name = dir
+            .file_name()
+            .and_then(|n| n.to_str())
+            .expect("named cleanup dir");
         assert!(
-            s.ends_with("/main") || s.ends_with("/agent-0"),
-            "unexpected cleanup target {s}"
+            name == "main" || name == "agent-0",
+            "unexpected cleanup target {}",
+            dir.display()
         );
     }
     assert!(plan
