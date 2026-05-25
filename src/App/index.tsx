@@ -156,12 +156,20 @@ export default function App() {
       const parentIds = groups()
         .map((g) => g.activeTabId)
         .filter((id): id is string => id != null);
+      let anyParentResolved = false;
       for (const parentId of parentIds) {
         try {
           const children = await getChildSessions(parentId);
+          anyParentResolved = true;
           const match = children.find(
             (c) =>
-              (agentId && (c.id === agentId || c.id === `agent-${agentId}`)) ||
+              (agentId &&
+                (c.id === agentId ||
+                  c.id === `agent-${agentId}` ||
+                  // Kimi-code subagent id is `<parent>:<agent-name>`.
+                  // Anchor the parent prefix so an `agentId="0"` can't
+                  // accidentally hit an unrelated `:0` suffix elsewhere.
+                  c.id === `${parentId}:${agentId}`)) ||
               (nickname && c.title === nickname) ||
               (description &&
                 (c.title === description || c.title.startsWith(description))),
@@ -176,6 +184,15 @@ export default function App() {
             error,
           );
         }
+      }
+      // Distinguish "no match in any parent's children" from "every
+      // parent lookup errored". Both end up here but the right message
+      // differs — the latter is a transient IPC failure, not a missing
+      // subagent.
+      if (!anyParentResolved && parentIds.length > 0) {
+        toastError(t("toast.subagentLoadFailed"));
+      } else {
+        toastError(t("toast.subagentNotFound"));
       }
     };
     window.addEventListener("open-subagent", handleOpenSubagent);

@@ -1,0 +1,7 @@
+{"type":"metadata","protocol_version":"1.0","created_at":1779702000000}
+{"type":"config.update","modelAlias":"kimi-code/kimi-for-coding","time":1779702000100}
+{"type":"context.append_message","message":{"role":"user","content":[{"type":"text","text":"find toml files"}],"toolCalls":[],"origin":{"kind":"user"}}}
+{"type":"context.append_loop_event","event":{"type":"tool.call","toolCallId":"tc_agent_001","name":"Agent","args":{"prompt":"Search for *.toml files","description":"Find toml","subagent_type":"explore"},"description":"Launching explore agent"},"time":1779702002000}
+{"type":"context.append_loop_event","event":{"type":"tool.result","toolCallId":"tc_agent_001","result":{"output":"agent_id: agent-0\nstatus: completed\n\nNo .toml files found."}},"time":1779702009000}
+{"type":"context.append_loop_event","event":{"type":"content.part","part":{"type":"text","text":"The explore subagent found no .toml files."}},"time":1779702010000}
+{"type":"usage.record","model":"kimi-code/kimi-for-coding","usage":{"inputOther":200,"output":60,"inputCacheRead":4096,"inputCacheCreation":0},"usageScope":"turn","time":1779702010100}

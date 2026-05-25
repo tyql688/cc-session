@@ -1,4 +1,3 @@
-use std::collections::HashMap;
 use std::fs;
 use std::path::PathBuf;
 
@@ -671,428 +670,351 @@ fn codex_user_message_event_falls_back_to_windows_local_image_path() {
 
 // ---------------------------------------------------------------------------
 // Kimi parser tests
+//
+// kimi-code 0.1.1+ stores each session under
+// `~/.kimi-code/sessions/wd_*/<session_dir>/agents/<agent>/wire.jsonl`,
+// with two wire formats coexisting: the migrated legacy protocol (only
+// `context.append_message` lines) and the native event-stream protocol
+// (per-line `time`, `context.append_loop_event`, `usage.record`). The
+// tests below pin behaviour for both via the on-disk fixtures under
+// `tests/fixtures/kimi/`.
 // ---------------------------------------------------------------------------
 
-#[test]
-fn kimi_parses_message_count() {
-    let provider = KimiProvider::new().expect("home dir must be available");
-    let path = fixtures_dir()
-        .join("kimi")
-        .join("abc123def456")
-        .join("session-uuid-0001")
-        .join("wire.jsonl");
-    let project_map = HashMap::new();
-    let session = provider
-        .parse_session_file(&path, &project_map)
-        .expect("kimi fixture must parse");
+fn kimi_fixture_provider() -> KimiProvider {
+    KimiProvider::with_root(fixtures_dir().join("kimi"))
+}
 
-    // Expected messages:
-    //  1. User: "List files in the current directory"
-    //  2. System (thinking): "[thinking]\nThe user wants to list files..."
-    //  3. Tool (Bash): Shell call, content = merged output
-    //  4. Assistant: "Here are the files..." (token_usage attached)
+const NATIVE_BASIC_ID: &str = "session_11111111-1111-4111-a111-111111111111";
+const NATIVE_SUBAGENT_PARENT_ID: &str = "session_22222222-2222-4222-a222-222222222222";
+const LEGACY_MIGRATED_ID: &str = "ses_33333333-3333-4333-a333-333333333333";
+
+fn parse_fixture_session(session_id: &str) -> cc_session_lib::provider::ParsedSession {
+    let provider = kimi_fixture_provider();
+    let sessions = provider.scan_all().expect("kimi fixture scan must succeed");
+    sessions
+        .into_iter()
+        .find(|s| s.meta.id == session_id)
+        .unwrap_or_else(|| panic!("session {session_id} missing from fixture scan"))
+}
+
+#[test]
+fn kimi_scans_all_fixture_sessions() {
+    let provider = kimi_fixture_provider();
+    let sessions = provider.scan_all().expect("scan_all");
+    // 3 main agents + 1 subagent = 4 parsed sessions.
+    assert_eq!(sessions.len(), 4, "scan should find every wire.jsonl");
+    let mut ids: Vec<String> = sessions.iter().map(|s| s.meta.id.clone()).collect();
+    ids.sort();
     assert_eq!(
-        session.messages.len(),
-        4,
-        "expected 4 messages, got: {:#?}",
-        session.messages
+        ids,
+        vec![
+            LEGACY_MIGRATED_ID.to_string(),
+            NATIVE_BASIC_ID.to_string(),
+            NATIVE_SUBAGENT_PARENT_ID.to_string(),
+            format!("{NATIVE_SUBAGENT_PARENT_ID}:agent-0"),
+        ]
     );
+    for s in &sessions {
+        assert_eq!(s.meta.provider, Provider::Kimi);
+    }
 }
 
 #[test]
-fn kimi_user_message_role_and_content() {
-    let provider = KimiProvider::new().expect("home dir must be available");
-    let path = fixtures_dir()
-        .join("kimi")
-        .join("abc123def456")
-        .join("session-uuid-0001")
-        .join("wire.jsonl");
-    let project_map = HashMap::new();
-    let session = provider
-        .parse_session_file(&path, &project_map)
-        .expect("kimi fixture must parse");
-
-    let first = &session.messages[0];
-    assert_eq!(first.role, MessageRole::User);
-    assert!(
-        first.content.contains("List files"),
-        "unexpected content: {}",
-        first.content
-    );
+fn kimi_native_session_pulls_title_from_state_json() {
+    let s = parse_fixture_session(NATIVE_BASIC_ID);
+    assert_eq!(s.meta.title, "Format B basic with tool");
+    // state.json's `createdAt` and the first per-line `time` match,
+    // both encode the same epoch ms — make sure first_time wins.
+    assert_eq!(s.meta.created_at, 1779701829);
 }
 
 #[test]
-fn kimi_thinking_emitted_as_system_role() {
-    let provider = KimiProvider::new().expect("home dir must be available");
-    let path = fixtures_dir()
-        .join("kimi")
-        .join("abc123def456")
-        .join("session-uuid-0001")
-        .join("wire.jsonl");
-    let project_map = HashMap::new();
-    let session = provider
-        .parse_session_file(&path, &project_map)
-        .expect("kimi fixture must parse");
+fn kimi_native_session_uses_session_index_for_project() {
+    let s = parse_fixture_session(NATIVE_BASIC_ID);
+    assert_eq!(s.meta.project_path, "/work/demo-project");
+    assert_eq!(s.meta.project_name, "demo-project");
+}
 
-    let thinking = session
+#[test]
+fn kimi_native_session_emits_thinking_as_system_role() {
+    let s = parse_fixture_session(NATIVE_BASIC_ID);
+    let think = s
         .messages
         .iter()
         .find(|m| m.role == MessageRole::System)
-        .expect("expected a thinking (System) message");
-
-    assert!(
-        thinking.content.starts_with("[thinking]\n"),
-        "thinking message must start with [thinking]\\n, got: {}",
-        thinking.content
-    );
+        .expect("thinking message must be present");
+    assert!(think.content.starts_with("[thinking]"));
+    assert!(think.content.contains("README.md"));
 }
 
 #[test]
-fn kimi_shell_tool_mapped_to_bash() {
-    let provider = KimiProvider::new().expect("home dir must be available");
-    let path = fixtures_dir()
-        .join("kimi")
-        .join("abc123def456")
-        .join("session-uuid-0001")
-        .join("wire.jsonl");
-    let project_map = HashMap::new();
-    let session = provider
-        .parse_session_file(&path, &project_map)
-        .expect("kimi fixture must parse");
-
-    let tool_msg = session
+fn kimi_native_session_merges_tool_call_and_result() {
+    let s = parse_fixture_session(NATIVE_BASIC_ID);
+    let tool = s
         .messages
         .iter()
         .find(|m| m.role == MessageRole::Tool)
-        .expect("expected a Tool message");
-
+        .expect("tool message must be present");
+    assert_eq!(tool.tool_name.as_deref(), Some("Read"));
     assert_eq!(
-        tool_msg.tool_name.as_deref(),
-        Some("Bash"),
-        "Shell must map to Bash, got: {:?}",
-        tool_msg.tool_name
+        tool.content,
+        "# Demo
+
+This is a demo project."
     );
+    let input: serde_json::Value = serde_json::from_str(tool.tool_input.as_ref().unwrap()).unwrap();
+    assert_eq!(input["path"], "README.md");
 }
 
 #[test]
-fn kimi_tool_result_merged_into_tool_call() {
-    let provider = KimiProvider::new().expect("home dir must be available");
-    let path = fixtures_dir()
-        .join("kimi")
-        .join("abc123def456")
-        .join("session-uuid-0001")
-        .join("wire.jsonl");
-    let project_map = HashMap::new();
-    let session = provider
-        .parse_session_file(&path, &project_map)
-        .expect("kimi fixture must parse");
-
-    let tool_msg = session
-        .messages
-        .iter()
-        .find(|m| m.role == MessageRole::Tool)
-        .expect("expected a Tool message");
-
-    assert!(
-        tool_msg.content.contains("main.rs"),
-        "tool result must be merged, got: {}",
-        tool_msg.content
-    );
-}
-
-#[test]
-fn kimi_tool_call_has_structured_tool_metadata() {
-    let provider = KimiProvider::new().expect("home dir must be available");
-    let path = fixtures_dir()
-        .join("kimi")
-        .join("abc123def456")
-        .join("session-uuid-0001")
-        .join("wire.jsonl");
-    let project_map = HashMap::new();
-    let session = provider
-        .parse_session_file(&path, &project_map)
-        .expect("kimi fixture must parse");
-
-    let tool_msg = session
-        .messages
-        .iter()
-        .find(|m| m.role == MessageRole::Tool)
-        .expect("expected a Tool message");
-    let metadata = tool_msg
-        .tool_metadata
-        .as_ref()
-        .expect("Kimi tool metadata must be present");
-
-    assert_eq!(metadata.raw_name, "Shell");
-    assert_eq!(metadata.canonical_name, "Bash");
-    assert_eq!(metadata.category, "shell");
-    assert_eq!(metadata.summary.as_deref(), Some("ls -la"));
-    assert_eq!(metadata.status.as_deref(), Some("success"));
-    assert_eq!(metadata.result_kind.as_deref(), Some("terminal_output"));
-}
-
-#[test]
-fn kimi_token_usage_from_status_update() {
-    let provider = KimiProvider::new().expect("home dir must be available");
-    let path = fixtures_dir()
-        .join("kimi")
-        .join("abc123def456")
-        .join("session-uuid-0001")
-        .join("wire.jsonl");
-    let project_map = HashMap::new();
-    let session = provider
-        .parse_session_file(&path, &project_map)
-        .expect("kimi fixture must parse");
-
-    // StatusUpdate attaches to last assistant or tool message
-    let last_with_usage = session
+fn kimi_native_session_attaches_usage_to_assistant_text() {
+    let s = parse_fixture_session(NATIVE_BASIC_ID);
+    // The final assistant text comes after step.end; usage.record carries
+    // the canonical model alias and matches inputOther+output+cache_read.
+    let last_assistant = s
         .messages
         .iter()
         .rev()
-        .find(|m| m.token_usage.is_some())
-        .expect("expected at least one message with token_usage");
-
-    let usage = last_with_usage.token_usage.as_ref().unwrap();
-    // input_tokens = input_other(80) + input_cache_read(10) + input_cache_creation(5) = 95
-    assert_eq!(usage.input_tokens, 95);
-    assert_eq!(usage.output_tokens, 35);
-    assert_eq!(usage.cache_read_input_tokens, 10);
-    assert_eq!(usage.cache_creation_input_tokens, 5);
+        .find(|m| m.role == MessageRole::Assistant)
+        .expect("assistant text");
+    let usage = last_assistant
+        .token_usage
+        .as_ref()
+        .expect("usage must attach to last assistant message");
+    assert_eq!(usage.output_tokens, 40);
+    assert_eq!(usage.cache_read_input_tokens, 2048);
+    assert_eq!(usage.input_tokens, 120 + 2048);
+    assert_eq!(
+        last_assistant.model.as_deref(),
+        Some("kimi-code/kimi-for-coding")
+    );
 }
 
 #[test]
-fn kimi_session_id_from_parent_directory() {
-    let provider = KimiProvider::new().expect("home dir must be available");
-    let path = fixtures_dir()
-        .join("kimi")
-        .join("abc123def456")
-        .join("session-uuid-0001")
-        .join("wire.jsonl");
-    let project_map = HashMap::new();
-    let session = provider
-        .parse_session_file(&path, &project_map)
-        .expect("kimi fixture must parse");
+fn kimi_subagent_is_separate_session_with_parent_link() {
+    let parent = parse_fixture_session(NATIVE_SUBAGENT_PARENT_ID);
+    assert!(!parent.meta.is_sidechain);
+    assert!(parent.meta.parent_id.is_none());
 
-    // Session ID = parent directory name (the session UUID dir)
-    assert_eq!(session.meta.id, "session-uuid-0001");
+    let child_id = format!("{NATIVE_SUBAGENT_PARENT_ID}:agent-0");
+    let child = parse_fixture_session(&child_id);
+    assert!(child.meta.is_sidechain);
+    assert_eq!(
+        child.meta.parent_id.as_deref(),
+        Some(NATIVE_SUBAGENT_PARENT_ID)
+    );
+    // Subagents inherit the parent's workdir via session_index.jsonl since
+    // their dir doesn't appear there directly.
+    assert_eq!(child.meta.project_path, "/work/demo-project");
+    // Title must NOT inherit state.json's title (which is shared with the
+    // parent). The parser pulls the short `description` from the parent's
+    // Agent tool.call so the tree shows what the subtask is about rather
+    // than the full prompt or the `<git-context>` blob kimi-code injects.
+    assert_ne!(child.meta.title, parent.meta.title);
+    assert_eq!(child.meta.title, "Find toml");
+}
+
+#[test]
+fn kimi_deletion_plan_trashes_parent_and_subagents_individually() {
+    use cc_session_lib::provider::FileAction;
+    let provider = kimi_fixture_provider();
+    let parent = parse_fixture_session(NATIVE_SUBAGENT_PARENT_ID);
+    let child = parse_fixture_session(&format!("{NATIVE_SUBAGENT_PARENT_ID}:agent-0"));
+    let plan = provider.deletion_plan(&parent.meta, std::slice::from_ref(&child.meta));
+    // Parent file goes to trash as its own entry.
+    assert_eq!(plan.file_action, FileAction::Remove);
+    // Each child wire.jsonl gets a Remove plan so it lands in trash
+    // individually and can be restored.
+    assert_eq!(plan.child_plans.len(), 1);
+    assert_eq!(plan.child_plans[0].file_action, FileAction::Remove);
+    assert_eq!(plan.child_plans[0].id, child.meta.id);
+    // After moves, the session_dir (state.json + empty agents/) gets
+    // wiped so the source tree stays consistent.
+    assert_eq!(plan.cleanup_dirs.len(), 1);
+    assert!(plan.cleanup_dirs[0]
+        .to_string_lossy()
+        .ends_with(NATIVE_SUBAGENT_PARENT_ID));
+}
+
+#[test]
+fn kimi_deletion_plan_for_parent_skips_whole_session_dir_when_unknown_agent_present() {
+    use cc_session_lib::provider::FileAction;
+    // Build an isolated session tree in a TempDir so we can drop a
+    // stray un-indexed agent next to the parent's `main` without
+    // racing the shared fixture used by other tests. Mirrors the
+    // real on-disk layout exactly: <root>/sessions/<wd>/<session>/agents/<agent>/wire.jsonl.
+    let tmp = TempDir::new().unwrap();
+    let session_dir = tmp
+        .path()
+        .join("sessions")
+        .join("wd_demo")
+        .join("session_toctou");
+    std::fs::create_dir_all(session_dir.join("agents").join("main")).unwrap();
+    std::fs::create_dir_all(session_dir.join("agents").join("agent-0")).unwrap();
+    std::fs::create_dir_all(session_dir.join("agents").join("agent-stray")).unwrap();
+    let metadata_line =
+        r#"{"type":"metadata","protocol_version":"1.0","created_at":1779700000000}"#;
+    let user_line = r#"{"type":"context.append_message","message":{"role":"user","content":[{"type":"text","text":"hi"}],"toolCalls":[],"origin":{"kind":"user"}}}"#;
+    std::fs::write(
+        session_dir.join("agents/main/wire.jsonl"),
+        format!("{metadata_line}\n{user_line}\n"),
+    )
+    .unwrap();
+    std::fs::write(
+        session_dir.join("agents/agent-0/wire.jsonl"),
+        format!("{metadata_line}\n{user_line}\n"),
+    )
+    .unwrap();
+    std::fs::write(
+        session_dir.join("agents/agent-stray/wire.jsonl"),
+        format!("{metadata_line}\n{user_line}\n"),
+    )
+    .unwrap();
+    std::fs::write(
+        session_dir.join("state.json"),
+        r#"{
+            "title": "toctou",
+            "agents": {
+                "main": {"type":"main","parentAgentId":null},
+                "agent-0": {"type":"sub","parentAgentId":"main"}
+            }
+        }"#,
+    )
+    .unwrap();
+    // NOTE: state.json deliberately omits `agent-stray` — that
+    // simulates the TOCTOU window (or an un-indexed agent dir).
+
+    let provider = KimiProvider::with_root(tmp.path().to_path_buf());
+    let mut sessions = provider.scan_all().expect("scan");
+    sessions.retain(|s| !s.meta.is_sidechain || s.meta.id.ends_with(":agent-0"));
+    let parent = sessions
+        .iter()
+        .find(|s| !s.meta.is_sidechain)
+        .expect("parent");
+    let child = sessions
+        .iter()
+        .find(|s| s.meta.is_sidechain)
+        .expect("known child");
+    let plan = provider.deletion_plan(&parent.meta, std::slice::from_ref(&child.meta));
+
+    assert_eq!(plan.file_action, FileAction::Remove);
+    // Cleanup must target only main + known children, never the
+    // session_dir wholesale (which would destroy agent-stray).
+    for dir in &plan.cleanup_dirs {
+        let s = dir.to_string_lossy();
+        assert!(
+            s.ends_with("/main") || s.ends_with("/agent-0"),
+            "unexpected cleanup target {s}"
+        );
+    }
+    assert!(plan
+        .cleanup_dirs
+        .iter()
+        .all(|d| d.file_name().and_then(|n| n.to_str()) != Some("session_toctou")));
+}
+
+#[test]
+fn kimi_deletion_plan_for_subagent_only_removes_its_own_dir() {
+    use cc_session_lib::provider::FileAction;
+    let provider = kimi_fixture_provider();
+    let child = parse_fixture_session(&format!("{NATIVE_SUBAGENT_PARENT_ID}:agent-0"));
+    let plan = provider.deletion_plan(&child.meta, &[]);
+    assert_eq!(plan.file_action, FileAction::Remove);
+    assert!(plan.child_plans.is_empty());
+    // cleanup_dirs targets the agent's own folder only; the parent
+    // session dir must NOT be touched when a subagent is removed solo.
+    assert_eq!(plan.cleanup_dirs.len(), 1);
+    assert!(plan.cleanup_dirs[0].to_string_lossy().ends_with("agent-0"));
+}
+
+#[test]
+fn kimi_migrated_session_format_a_basic_parse() {
+    let s = parse_fixture_session(LEGACY_MIGRATED_ID);
+    assert_eq!(s.meta.title, "Migrated legacy");
+    // user + assistant thinking + tool merged + assistant final = 4
+    assert_eq!(s.messages.len(), 4);
+    assert_eq!(s.messages[0].role, MessageRole::User);
+    assert_eq!(s.messages[1].role, MessageRole::System);
+    assert!(s.messages[1].content.starts_with("[thinking]"));
+}
+
+#[test]
+fn kimi_migrated_session_shell_canonicalised_and_result_merged() {
+    let s = parse_fixture_session(LEGACY_MIGRATED_ID);
+    let tool = s
+        .messages
+        .iter()
+        .find(|m| m.role == MessageRole::Tool)
+        .expect("tool message");
+    // Shell → canonical Bash.
+    assert_eq!(tool.tool_name.as_deref(), Some("Bash"));
+    // The system wrapper is stripped because real content sits alongside it.
+    assert_eq!(
+        tool.content,
+        "README.md
+src"
+    );
+    let input: serde_json::Value = serde_json::from_str(tool.tool_input.as_ref().unwrap()).unwrap();
+    assert_eq!(input["command"], "ls -1");
+}
+
+#[test]
+fn kimi_migrated_session_inherits_metadata_created_at_when_lines_lack_time() {
+    let s = parse_fixture_session(LEGACY_MIGRATED_ID);
+    // Migrated wire lines have no `time` field, so every message must
+    // inherit the metadata.created_at timestamp (epoch ms 1777623844612
+    // → secs 1777623844 → ISO 2026-05-01T...).
+    assert_eq!(s.meta.created_at, 1_777_623_844);
+    for m in &s.messages {
+        let ts = m
+            .timestamp
+            .as_deref()
+            .expect("each message has a timestamp");
+        assert!(
+            ts.starts_with("2026-05-01"),
+            "expected 2026-05-01 timestamp, got {ts}"
+        );
+    }
+}
+
+#[test]
+fn kimi_load_messages_round_trips_through_source_path() {
+    let provider = kimi_fixture_provider();
+    let s = parse_fixture_session(NATIVE_BASIC_ID);
+    let loaded = provider
+        .load_messages(&s.meta.id, &s.meta.source_path)
+        .expect("load_messages");
+    assert_eq!(loaded.messages.len(), s.messages.len() as usize);
+}
+
+#[test]
+fn kimi_resume_command_strips_subagent_suffix() {
+    use cc_session_lib::provider::ProviderDescriptor;
+    let descriptor = &cc_session_lib::providers::kimi::Descriptor;
+    let parent_cmd = descriptor
+        .resume_command(NATIVE_BASIC_ID, None)
+        .expect("parent resume command");
+    assert_eq!(parent_cmd, format!("kimi --session {NATIVE_BASIC_ID}"));
+    let sub_cmd = descriptor
+        .resume_command(&format!("{NATIVE_SUBAGENT_PARENT_ID}:agent-0"), None)
+        .expect("subagent resume command");
+    // Kimi has no resume target for a subagent — resume the parent.
+    assert_eq!(
+        sub_cmd,
+        format!("kimi --session {NATIVE_SUBAGENT_PARENT_ID}")
+    );
 }
 
 #[test]
 fn kimi_parse_session_tail_returns_only_last_n_messages() {
-    let dir = TempDir::new().unwrap();
-    // Mimic the on-disk layout: <hash>/<session-uuid>/wire.jsonl
-    let session_dir = dir.path().join("abc123").join("session-tail");
-    fs::create_dir_all(&session_dir).unwrap();
-    let wire_path = session_dir.join("wire.jsonl");
-
-    let mut content = String::new();
-    for i in 0..200 {
-        // Each ContentPart→text line emits exactly one assistant message.
-        content.push_str(&format!(
-            r#"{{"timestamp":{},"message":{{"type":"ContentPart","payload":{{"type":"text","text":"msg-{i}"}}}}}}
-"#,
-            1_700_000_000 + i,
-        ));
-    }
-    fs::write(&wire_path, content).unwrap();
-
-    let tail = cc_session_lib::providers::kimi::parser::parse_session_tail(&wire_path, 20)
-        .expect("tail parse");
-    assert_eq!(tail.messages.len(), 20);
-    assert!(
-        tail.messages
-            .first()
-            .map(|m| m.content.contains("msg-180"))
-            .unwrap_or(false),
-        "first tail message should be msg-180"
-    );
-    assert!(
-        tail.messages
-            .last()
-            .map(|m| m.content.contains("msg-199"))
-            .unwrap_or(false),
-        "last tail message should be msg-199"
-    );
-}
-
-#[test]
-fn kimi_parse_session_tail_returns_full_file_when_smaller_than_window() {
-    let dir = TempDir::new().unwrap();
-    let session_dir = dir.path().join("abc123").join("session-small");
-    fs::create_dir_all(&session_dir).unwrap();
-    let wire_path = session_dir.join("wire.jsonl");
-
-    let mut content = String::new();
-    for i in 0..5 {
-        content.push_str(&format!(
-            r#"{{"timestamp":{},"message":{{"type":"ContentPart","payload":{{"type":"text","text":"only-{i}"}}}}}}
-"#,
-            1_700_000_000 + i,
-        ));
-    }
-    fs::write(&wire_path, content).unwrap();
-
-    let tail = cc_session_lib::providers::kimi::parser::parse_session_tail(&wire_path, 100)
-        .expect("tail parse");
-    assert_eq!(
-        tail.messages.len(),
-        5,
-        "tail must return all messages when file is smaller than requested window"
-    );
-}
-
-// ---------------------------------------------------------------------------
-// Kimi subagent tests (extracted from SubagentEvent in parent wire.jsonl)
-// ---------------------------------------------------------------------------
-
-fn kimi_parent_with_subagents() -> Vec<cc_session_lib::provider::ParsedSession> {
-    let provider = KimiProvider::new().expect("home dir must be available");
-    let path = fixtures_dir()
-        .join("kimi")
-        .join("abc123def456")
-        .join("session-uuid-0001")
-        .join("wire.jsonl");
-    let project_map = HashMap::new();
-    provider.parse_session_with_subagents(&path, &project_map)
-}
-
-#[test]
-fn kimi_subagent_extracted_from_parent() {
-    let sessions = kimi_parent_with_subagents();
-    assert_eq!(
-        sessions.len(),
-        2,
-        "expected 2 sessions (parent + 1 subagent), got {}",
-        sessions.len()
-    );
-}
-
-#[test]
-fn kimi_subagent_is_sidechain() {
-    let sessions = kimi_parent_with_subagents();
-    let sub = sessions
-        .iter()
-        .find(|s| s.meta.is_sidechain)
-        .expect("expected a sidechain session");
-
-    assert_eq!(sub.meta.id, "a1b2c3d4e");
-    assert_eq!(
-        sub.meta.parent_id.as_deref(),
-        Some("session-uuid-0001"),
-        "parent_id must be the parent session UUID"
-    );
-}
-
-#[test]
-fn kimi_subagent_title_from_meta() {
-    let sessions = kimi_parent_with_subagents();
-    let sub = sessions
-        .iter()
-        .find(|s| s.meta.is_sidechain)
-        .expect("expected a sidechain session");
-
-    // When meta.json exists, title comes from description.
-    // Without meta.json, falls back to first user message.
-    assert_eq!(
-        sub.meta.title, "Analyze the project structure of this repo",
-        "subagent title must fall back to first user message when meta.json is absent"
-    );
-}
-
-#[test]
-fn kimi_subagent_messages_parsed() {
-    let sessions = kimi_parent_with_subagents();
-    let sub = sessions
-        .iter()
-        .find(|s| s.meta.is_sidechain)
-        .expect("expected a sidechain session");
-
-    // Expected: User, System(thinking), Tool(Bash), Assistant
-    assert_eq!(
-        sub.messages.len(),
-        4,
-        "expected 4 messages in subagent, got: {:#?}",
-        sub.messages
-    );
-    assert_eq!(sub.messages[0].role, MessageRole::User);
-    assert_eq!(sub.messages[1].role, MessageRole::System); // thinking
-    assert_eq!(sub.messages[2].role, MessageRole::Tool);
-    assert_eq!(sub.messages[3].role, MessageRole::Assistant);
-}
-
-#[test]
-fn kimi_toolcallpart_appends_to_empty_arguments() {
-    let provider = KimiProvider::new().expect("home dir must be available");
-    let tmp = TempDir::new().unwrap();
-    let session_dir = tmp.path().join("session-001");
-    fs::create_dir(&session_dir).unwrap();
-    let wire = session_dir.join("wire.jsonl");
-
-    let lines = [
-        r#"{"timestamp":1735725600.0,"message":{"type":"TurnBegin","payload":{"user_input":[{"type":"text","text":"list files"}]}}}"#,
-        // ToolCall with empty arguments
-        r#"{"timestamp":1735725601.0,"message":{"type":"ToolCall","payload":{"id":"call_001","function":{"name":"Shell","arguments":""}}}}"#,
-        // ToolCallPart supplies the actual arguments
-        r#"{"timestamp":1735725602.0,"message":{"type":"ToolCallPart","payload":{"arguments_part":"{\"command\":\"ls -la\"}"}}}"#,
-        r#"{"timestamp":1735725603.0,"message":{"type":"ToolResult","payload":{"tool_call_id":"call_001","return_value":{"output":"total 16","message":"Command executed successfully."}}}}"#,
-        r#"{"timestamp":1735725604.0,"message":{"type":"ContentPart","payload":{"type":"text","text":"Here are the files"}}}"#,
-    ];
-    fs::write(&wire, lines.join("\n")).unwrap();
-
-    let session = provider
-        .parse_session_file(&wire, &HashMap::new())
-        .expect("must parse");
-
-    let tool_msg = session
-        .messages
-        .iter()
-        .find(|m| m.role == MessageRole::Tool)
-        .expect("expected a Tool message");
-
-    assert_eq!(
-        tool_msg.tool_input.as_deref(),
-        Some(r#"{"command":"ls -la"}"#),
-        "ToolCallPart must append to empty arguments"
-    );
-
-    // Shell tool should show raw output, not generic success message
-    assert_eq!(tool_msg.content, "total 16");
-}
-
-#[test]
-fn kimi_toolcallpart_appends_to_truncated_arguments() {
-    let provider = KimiProvider::new().expect("home dir must be available");
-    let tmp = TempDir::new().unwrap();
-    let session_dir = tmp.path().join("session-002");
-    fs::create_dir(&session_dir).unwrap();
-    let wire = session_dir.join("wire.jsonl");
-
-    let lines = [
-        r#"{"timestamp":1735725600.0,"message":{"type":"TurnBegin","payload":{"user_input":[{"type":"text","text":"read file"}]}}}"#,
-        // ToolCall with truncated JSON (missing closing quote and brace)
-        r#"{"timestamp":1735725601.0,"message":{"type":"ToolCall","payload":{"id":"call_002","function":{"name":"ReadFile","arguments":"{\"path\":\"/tmp/test"}}}}"#,
-        // ToolCallPart supplies the missing suffix
-        r#"{"timestamp":1735725602.0,"message":{"type":"ToolCallPart","payload":{"arguments_part":".txt\"}"}}}"#,
-        r#"{"timestamp":1735725603.0,"message":{"type":"ToolResult","payload":{"tool_call_id":"call_002","return_value":{"output":"hello","message":"1 line read"}}}}"#,
-        r#"{"timestamp":1735725604.0,"message":{"type":"ContentPart","payload":{"type":"text","text":"Done"}}}"#,
-    ];
-    fs::write(&wire, lines.join("\n")).unwrap();
-
-    let session = provider
-        .parse_session_file(&wire, &HashMap::new())
-        .expect("must parse");
-
-    let tool_msg = session
-        .messages
-        .iter()
-        .find(|m| m.role == MessageRole::Tool)
-        .expect("expected a Tool message");
-
-    assert_eq!(
-        tool_msg.tool_input.as_deref(),
-        Some(r#"{"path":"/tmp/test.txt"}"#),
-        "ToolCallPart must append to truncated arguments"
-    );
+    let s = parse_fixture_session(NATIVE_BASIC_ID);
+    let path = std::path::PathBuf::from(&s.meta.source_path);
+    let tail =
+        cc_session_lib::providers::kimi::parser::parse_session_tail(&path, 2).expect("tail parse");
+    assert!(tail.messages.len() <= 2);
+    // The tail must end with the assistant's final text (last emitted).
+    let last = tail.messages.last().expect("non-empty tail");
+    assert_eq!(last.role, MessageRole::Assistant);
 }
 
 // ---------------------------------------------------------------------------
@@ -1945,14 +1867,12 @@ fn real_generated_tool_metadata_smoke_test() {
     .expect("real Antigravity transcript must parse");
     assert_real_tool_metadata("Antigravity", &antigravity.messages, "Read", true);
 
+    let kimi_path = required_env_path("CCSESSION_REAL_KIMI_WIRE");
     let kimi_provider = KimiProvider::new().expect("home dir must be available");
-    let kimi = kimi_provider
-        .parse_session_file(
-            &required_env_path("CCSESSION_REAL_KIMI_WIRE"),
-            &HashMap::new(),
-        )
+    let kimi_loaded = kimi_provider
+        .load_messages("", &kimi_path.to_string_lossy())
         .expect("real Kimi transcript must parse");
-    assert_real_tool_metadata("Kimi", &kimi.messages, "Read", true);
+    assert_real_tool_metadata("Kimi", &kimi_loaded.messages, "Read", true);
 
     let opencode_db = std::env::var_os("CCSESSION_REAL_OPENCODE_DB")
         .map(PathBuf::from)
@@ -1985,17 +1905,15 @@ fn round2_generated_tool_metadata_smoke_test() {
     .expect("round2 Antigravity transcript must parse");
     assert_has_tool_metadata("Antigravity round2", &antigravity.messages, "Read");
 
+    let kimi_path = required_env_path("CCSESSION_ROUND2_KIMI_WIRE");
     let kimi_provider = KimiProvider::new().expect("home dir must be available");
-    let kimi = kimi_provider
-        .parse_session_file(
-            &required_env_path("CCSESSION_ROUND2_KIMI_WIRE"),
-            &HashMap::new(),
-        )
+    let kimi_loaded = kimi_provider
+        .load_messages("", &kimi_path.to_string_lossy())
         .expect("round2 Kimi transcript must parse");
-    assert_has_tool_metadata("Kimi round2", &kimi.messages, "Read");
-    assert_has_tool_metadata("Kimi round2", &kimi.messages, "Bash");
+    assert_has_tool_metadata("Kimi round2", &kimi_loaded.messages, "Read");
+    assert_has_tool_metadata("Kimi round2", &kimi_loaded.messages, "Bash");
     assert_eq!(
-        assert_has_tool_metadata("Kimi round2", &kimi.messages, "Edit")
+        assert_has_tool_metadata("Kimi round2", &kimi_loaded.messages, "Edit")
             .result_kind
             .as_deref(),
         Some("file_patch")

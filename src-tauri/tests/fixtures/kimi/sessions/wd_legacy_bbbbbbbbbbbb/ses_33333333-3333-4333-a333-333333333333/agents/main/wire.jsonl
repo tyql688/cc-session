@@ -1,0 +1,5 @@
+{"type":"metadata","protocol_version":"1.0","created_at":1777623844612}
+{"type":"context.append_message","message":{"role":"user","content":[{"type":"text","text":"list files"}],"toolCalls":[],"origin":{"kind":"user"}}}
+{"type":"context.append_message","message":{"role":"assistant","content":[{"type":"think","think":"I'll list the files using Shell."}],"toolCalls":[{"type":"function","id":"tc_shell_001","function":{"name":"Shell","arguments":"{\"command\":\"ls -1\"}"}}],"origin":{"kind":"assistant"}}}
+{"type":"context.append_message","message":{"role":"tool","content":[{"type":"text","text":"<system>Command executed successfully.</system>"},{"type":"text","text":"README.md\nsrc"}],"toolCalls":[],"toolCallId":"tc_shell_001"}}
+{"type":"context.append_message","message":{"role":"assistant","content":[{"type":"text","text":"Found 2 entries: README.md and src/."}],"toolCalls":[],"origin":{"kind":"assistant"}}}

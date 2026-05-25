@@ -1,164 +1,149 @@
+//! Render kimi-code tool results into the plain-text form the frontend
+//! shows under the tool bubble.
+//!
+//! Two shapes feed in:
+//!
+//! * **Format A** (migrated wire.jsonl): the tool message is a role=tool
+//!   `context.append_message` whose `content` is an array of
+//!   `{type:"text", text:"…"}` parts. The legacy kimi-cli decorated
+//!   results with `<system>Command executed successfully.</system>`
+//!   wrappers; we drop those so they don't clutter the bubble unless
+//!   they're the only content.
+//!
+//! * **Format B** (native kimi-code 0.1.1+): the result lives inside a
+//!   `context.append_loop_event` of type `tool.result`. The `result`
+//!   object is small — typically `{ "output": "..." }` — and may also
+//!   carry `is_error` / `message` / `display[]` depending on tool kind.
+
 use serde_json::Value;
 
-/// Extract readable output from a Kimi ToolResult payload.
-///
-/// For shell tools (`Bash`/`Shell`), the raw `output` is preferred over generic
-/// success messages like "Command executed successfully." so that the user sees
-/// the actual command output.
-pub fn extract_tool_output(payload: &Value, tool_name: Option<&str>) -> String {
-    if let Some(rv) = payload.get("return_value") {
-        // 1. Prefer structured display array (diffs, text blocks) when present.
-        //    This covers Edit/StrReplaceFile tools that emit diff displays.
-        if let Some(Value::Array(arr)) = rv.get("display") {
-            if !arr.is_empty() {
-                let texts: Vec<&str> = arr
-                    .iter()
-                    .filter(|item| item.get("type").and_then(|v| v.as_str()) != Some("diff"))
-                    .filter_map(|item| item.get("text").and_then(|t| t.as_str()))
-                    .collect();
-                if !texts.is_empty() {
-                    return texts.join("\n");
-                }
+/// Strip the `<system>…</system>` wrappers legacy kimi-cli used to inject
+/// around tool results. Returns the original string when nothing matches.
+fn strip_system_wrapper(text: &str) -> &str {
+    let trimmed = text.trim();
+    let stripped = trimmed
+        .strip_prefix("<system>")
+        .and_then(|s| s.strip_suffix("</system>"));
+    stripped.unwrap_or(text)
+}
 
-                let diffs: Vec<String> = arr
-                    .iter()
-                    .filter(|item| item.get("type").and_then(|v| v.as_str()) == Some("diff"))
-                    .filter_map(|item| {
-                        let path = item.get("path").and_then(|v| v.as_str()).unwrap_or("");
-                        let old_text = item.get("old_text").and_then(|v| v.as_str()).unwrap_or("");
-                        let new_text = item.get("new_text").and_then(|v| v.as_str()).unwrap_or("");
-                        if old_text.is_empty() && new_text.is_empty() {
-                            return None;
-                        }
-                        Some(format!(
-                            "--- {}\n{}\n+++ {}\n{}",
-                            path, old_text, path, new_text
-                        ))
-                    })
-                    .collect();
-                if !diffs.is_empty() {
-                    return diffs.join("\n\n");
-                }
-            }
+/// Render a Format A tool message's content into a single rendered
+/// string. Drops `<system>` decorations when there's also real content
+/// alongside them. Returns `(rendered, is_error)` — Format A doesn't
+/// carry an explicit error flag so the bool is always `None`.
+pub fn render_format_a_tool_output(parts: &[Value]) -> (String, Option<bool>) {
+    let mut texts: Vec<String> = Vec::new();
+    let mut system_only: Vec<String> = Vec::new();
+    for part in parts {
+        if part.get("type").and_then(|v| v.as_str()) != Some("text") {
+            continue;
         }
-
-        // 2. Shell tools: prefer raw output over generic success messages
-        let prefer_output = matches!(tool_name, Some("Bash") | Some("Shell"));
-
-        if !prefer_output {
-            if let Some(msg) = rv.get("message").and_then(|v| v.as_str()) {
-                if !msg.is_empty() {
-                    return msg.to_string();
-                }
-            }
+        let raw = part.get("text").and_then(|v| v.as_str()).unwrap_or("");
+        if raw.is_empty() {
+            continue;
         }
-
-        if let Some(out) = rv.get("output").and_then(|v| v.as_str()) {
-            if !out.is_empty() {
-                return out.to_string();
-            }
+        let trimmed = raw.trim();
+        if trimmed.starts_with("<system>") && trimmed.ends_with("</system>") {
+            system_only.push(strip_system_wrapper(raw).to_string());
+        } else {
+            texts.push(raw.to_string());
         }
-
-        if prefer_output {
-            if let Some(msg) = rv.get("message").and_then(|v| v.as_str()) {
-                if !msg.is_empty() {
-                    return msg.to_string();
-                }
-            }
-        }
-
-        // Fallback: serialize return_value
-        return serde_json::to_string(rv).unwrap_or_default();
     }
-    String::new()
+    let rendered = if texts.is_empty() {
+        system_only.join("\n")
+    } else {
+        texts.join("\n")
+    };
+    (rendered, None)
+}
+
+/// Render a Format B `tool.result.result` payload. Looks for `output`
+/// first (the common case in kimi-code 0.1.1), then falls back to
+/// `message`, then serialises the whole result if nothing readable was
+/// found. Returns `(rendered, is_error)` where `is_error` mirrors the
+/// `is_error`/`success` flags when the tool surfaces them.
+pub fn render_format_b_tool_output(result: Option<&Value>) -> (String, Option<bool>) {
+    let Some(result) = result else {
+        return (String::new(), None);
+    };
+    let is_error = result
+        .get("is_error")
+        .and_then(|v| v.as_bool())
+        .or_else(|| {
+            result
+                .get("success")
+                .and_then(|v| v.as_bool())
+                .map(|ok| !ok)
+        });
+
+    if let Some(output) = result.get("output").and_then(|v| v.as_str()) {
+        if !output.is_empty() {
+            return (output.to_string(), is_error);
+        }
+    }
+    if let Some(message) = result.get("message").and_then(|v| v.as_str()) {
+        if !message.is_empty() {
+            return (message.to_string(), is_error);
+        }
+    }
+    // Last resort: serialise the result so we don't drop information.
+    match serde_json::to_string(result) {
+        Ok(s) => (s, is_error),
+        Err(_) => (String::new(), is_error),
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use serde_json::json;
 
     #[test]
-    fn shell_prefers_output_over_generic_message() {
-        let payload = serde_json::json!({
-            "return_value": {
-                "is_error": false,
-                "output": "total 16\ndrwxr-xr-x 2 user user 4096 Jan  1 10:00 .",
-                "message": "Command executed successfully."
-            }
-        });
-        assert_eq!(
-            extract_tool_output(&payload, Some("Bash")),
-            "total 16\ndrwxr-xr-x 2 user user 4096 Jan  1 10:00 ."
-        );
+    fn format_a_drops_system_wrapper_when_real_text_exists() {
+        let parts = vec![
+            json!({"type": "text", "text": "<system>Command executed successfully.</system>"}),
+            json!({"type": "text", "text": "file1\nfile2"}),
+        ];
+        let (rendered, err) = render_format_a_tool_output(&parts);
+        assert_eq!(rendered, "file1\nfile2");
+        assert_eq!(err, None);
     }
 
     #[test]
-    fn non_shell_prefers_message_over_output() {
-        let payload = serde_json::json!({
-            "return_value": {
-                "is_error": false,
-                "output": "     1\tdefault_model =...",
-                "message": "11 lines read from file starting from line 1."
-            }
-        });
-        assert_eq!(
-            extract_tool_output(&payload, Some("Read")),
-            "11 lines read from file starting from line 1."
-        );
+    fn format_a_keeps_system_when_alone() {
+        let parts = vec![
+            json!({"type": "text", "text": "<system>Command executed successfully.</system>"}),
+        ];
+        let (rendered, _) = render_format_a_tool_output(&parts);
+        assert_eq!(rendered, "Command executed successfully.");
     }
 
     #[test]
-    fn shell_falls_back_to_message_when_output_empty() {
-        let payload = serde_json::json!({
-            "return_value": {
-                "is_error": false,
-                "output": "",
-                "message": "File successfully edited."
-            }
-        });
-        assert_eq!(
-            extract_tool_output(&payload, Some("Shell")),
-            "File successfully edited."
-        );
+    fn format_b_prefers_output_over_message() {
+        let result = json!({"output": "hello", "message": "ok"});
+        let (rendered, err) = render_format_b_tool_output(Some(&result));
+        assert_eq!(rendered, "hello");
+        assert_eq!(err, None);
     }
 
     #[test]
-    fn extracts_diff_display() {
-        let payload = serde_json::json!({
-            "return_value": {
-                "is_error": false,
-                "output": "",
-                "message": "File successfully edited.",
-                "display": [
-                    {
-                        "type": "diff",
-                        "path": "/tmp/config.toml",
-                        "old_text": "default_yolo = false",
-                        "new_text": "default_yolo = true",
-                        "old_start": 1,
-                        "new_start": 1,
-                        "is_summary": false
-                    }
-                ]
-            }
-        });
-        let out = extract_tool_output(&payload, Some("Edit"));
-        assert!(out.contains("--- /tmp/config.toml"));
-        assert!(out.contains("default_yolo = false"));
-        assert!(out.contains("+++ /tmp/config.toml"));
-        assert!(out.contains("default_yolo = true"));
+    fn format_b_falls_back_to_message_when_output_empty() {
+        let result = json!({"output": "", "message": "File written."});
+        let (rendered, _) = render_format_b_tool_output(Some(&result));
+        assert_eq!(rendered, "File written.");
     }
 
     #[test]
-    fn text_display_takes_precedence_over_diff() {
-        let payload = serde_json::json!({
-            "return_value": {
-                "display": [
-                    { "type": "text", "text": "Summary line" },
-                    { "type": "diff", "path": "/tmp/x", "old_text": "a", "new_text": "b" }
-                ]
-            }
-        });
-        assert_eq!(extract_tool_output(&payload, None), "Summary line");
+    fn format_b_surfaces_error_flag() {
+        let result = json!({"is_error": true, "output": "boom"});
+        let (_, err) = render_format_b_tool_output(Some(&result));
+        assert_eq!(err, Some(true));
+    }
+
+    #[test]
+    fn format_b_translates_success_false_to_error_true() {
+        let result = json!({"success": false, "output": "boom"});
+        let (_, err) = render_format_b_tool_output(Some(&result));
+        assert_eq!(err, Some(true));
     }
 }

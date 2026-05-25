@@ -1,0 +1,12 @@
+{"type":"metadata","protocol_version":"1.0","created_at":1779701829389}
+{"type":"config.update","cwd":"/work/demo-project","time":1779701829389}
+{"type":"config.update","modelAlias":"kimi-code/kimi-for-coding","thinkingLevel":"high","time":1779701829400}
+{"type":"permission.set_mode","mode":"auto","time":1779701829450}
+{"type":"context.append_message","message":{"role":"user","content":[{"type":"text","text":"read README.md"}],"toolCalls":[],"origin":{"kind":"user"}}}
+{"type":"context.append_loop_event","event":{"type":"step.begin","turnId":"0","step":1},"time":1779701830000}
+{"type":"context.append_loop_event","event":{"type":"content.part","part":{"type":"think","think":"User wants me to read README.md. I'll call the Read tool."}},"time":1779701830500}
+{"type":"context.append_loop_event","event":{"type":"tool.call","toolCallId":"tc_read_001","name":"Read","args":{"path":"README.md"},"description":"Reading README.md"},"time":1779701831000}
+{"type":"context.append_loop_event","event":{"type":"tool.result","toolCallId":"tc_read_001","result":{"output":"# Demo\n\nThis is a demo project."}},"time":1779701831500}
+{"type":"context.append_loop_event","event":{"type":"content.part","part":{"type":"text","text":"The README describes a demo project."}},"time":1779701832000}
+{"type":"context.append_loop_event","event":{"type":"step.end","turnId":"0","step":1,"usage":{"inputOther":120,"output":40,"inputCacheRead":2048,"inputCacheCreation":0},"finishReason":"end_turn"},"time":1779701832100}
+{"type":"usage.record","model":"kimi-code/kimi-for-coding","usage":{"inputOther":120,"output":40,"inputCacheRead":2048,"inputCacheCreation":0},"usageScope":"turn","time":1779701832200}

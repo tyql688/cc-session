@@ -1,0 +1,15 @@
+{
+  "createdAt": "2026-05-25T09:57:09.389Z",
+  "updatedAt": "2026-05-25T09:57:15.000Z",
+  "title": "Format B basic with tool",
+  "isCustomTitle": false,
+  "agents": {
+    "main": {
+      "homedir": "agents/main",
+      "type": "main",
+      "parentAgentId": null
+    }
+  },
+  "custom": {},
+  "lastPrompt": "read README.md"
+}

@@ -92,13 +92,19 @@ export function SessionToolbar(props: {
                 ? "\u2605"
                 : "\u2606"}
           </button>
-          <button
-            class="session-action-btn primary"
-            onClick={props.onResume}
-            title={t("session.resume")}
+          <Show
+            when={
+              !(props.meta().is_sidechain && props.meta().provider === "kimi")
+            }
           >
-            {t("session.resume")}
-          </button>
+            <button
+              class="session-action-btn primary"
+              onClick={props.onResume}
+              title={t("session.resume")}
+            >
+              {t("session.resume")}
+            </button>
+          </Show>
           <button
             class="session-action-btn"
             onClick={props.onExport}

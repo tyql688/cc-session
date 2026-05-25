@@ -1,0 +1,20 @@
+{
+  "createdAt": "2026-05-25T10:00:00.000Z",
+  "updatedAt": "2026-05-25T10:00:10.000Z",
+  "title": "With subagent",
+  "isCustomTitle": false,
+  "agents": {
+    "main": {
+      "homedir": "agents/main",
+      "type": "main",
+      "parentAgentId": null
+    },
+    "agent-0": {
+      "homedir": "agents/agent-0",
+      "type": "sub",
+      "parentAgentId": "main"
+    }
+  },
+  "custom": {},
+  "lastPrompt": "find toml files"
+}

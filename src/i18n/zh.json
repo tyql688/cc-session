@@ -94,7 +94,9 @@
     "refreshUsageStarted": "用量已在后台开始刷新",
     "clearUsageOk": "用量统计已清除",
     "refreshUsageOk": "用量已刷新",
-    "reloadFailed": "会话重新加载失败"
+    "reloadFailed": "会话重新加载失败",
+    "subagentNotFound": "找不到对应的子代理会话",
+    "subagentLoadFailed": "加载子会话失败"
   },
   "favorites": {
     "title": "收藏",

@@ -1,0 +1,17 @@
+{
+  "createdAt": "2026-05-01T08:24:04.612Z",
+  "updatedAt": "2026-05-01T08:24:04.612Z",
+  "title": "Migrated legacy",
+  "isCustomTitle": false,
+  "agents": {
+    "main": {
+      "homedir": "agents/main",
+      "type": "main",
+      "parentAgentId": null
+    }
+  },
+  "custom": {
+    "imported_from_kimi_cli": true,
+    "kimi_cli_wire_protocol": "1.9"
+  }
+}

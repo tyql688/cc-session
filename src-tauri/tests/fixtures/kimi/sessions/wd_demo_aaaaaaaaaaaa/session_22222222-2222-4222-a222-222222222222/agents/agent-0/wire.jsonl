@@ -1,0 +1,7 @@
+{"type":"metadata","protocol_version":"1.0","created_at":1779702003000}
+{"type":"config.update","modelAlias":"kimi-code/kimi-for-coding","time":1779702003100}
+{"type":"context.append_message","message":{"role":"user","content":[{"type":"text","text":"<git-context>\nWorking directory: /work/demo-project\n</git-context>\n<environment>\n- Project type: rust\n</environment>\n\nSearch for *.toml files in this project. Use Glob with a literal anchor and report each path you find."}],"toolCalls":[],"origin":{"kind":"user"}}}
+{"type":"context.append_loop_event","event":{"type":"tool.call","toolCallId":"tc_glob_001","name":"Glob","args":{"pattern":"**/*.toml"},"description":"Globbing toml"},"time":1779702004000}
+{"type":"context.append_loop_event","event":{"type":"tool.result","toolCallId":"tc_glob_001","result":{"output":"(no matches)"}},"time":1779702005000}
+{"type":"context.append_loop_event","event":{"type":"content.part","part":{"type":"text","text":"No .toml files found."}},"time":1779702006000}
+{"type":"usage.record","model":"kimi-code/kimi-for-coding","usage":{"inputOther":80,"output":15,"inputCacheRead":1024,"inputCacheCreation":0},"usageScope":"turn","time":1779702006100}

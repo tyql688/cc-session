@@ -118,7 +118,7 @@ Metadata via Bridge pattern: `Provider` enum → `ProviderDescriptor` (zero-size
 | Claude Code | `~/.claude/projects/**/*.jsonl`        | JSONL  | FS    |
 | Codex       | `~/.codex/sessions/**/*.jsonl`         | JSONL  | FS    |
 | Antigravity | `~/.gemini/antigravity-cli/brain/*/.system_generated/logs/transcript.jsonl` | JSONL | FS |
-| Kimi CLI    | `~/.kimi/sessions/**/wire.jsonl`       | JSONL  | FS    |
+| Kimi Code   | `~/.kimi-code/sessions/wd_*/<session_dir>/agents/*/wire.jsonl` | JSONL | FS |
 | OpenCode    | `~/.local/share/opencode/opencode.db`  | SQLite | Poll  |
 | CC-Mirror   | `~/.cc-mirror/{variant}/config/projects/**/*.jsonl` | JSONL | FS |
 
@@ -149,7 +149,7 @@ Resume: Claude `--resume`, Codex `resume`, Antigravity `agy --conversation <id>`
 - **OpenCode**: Must use `SQLITE_OPEN_READ_WRITE` (not READ_ONLY) for WAL. Uses XDG path, not macOS `~/Library/`.
 - **macOS watchers**: File-backed providers use `notify` with `macos_kqueue` for more reliable file-level follow behavior; do not assume `FSEvents`.
 - **Codex**: `call_id` pairing, output can be nested JSON.
-- **Kimi**: MD5 project path, event stream format, float-second timestamps, truncated parallel agent args.
+- **Kimi**: kimi-code 0.1.1+ uses two coexisting wire formats — **migrated** (only `metadata` + `context.append_message` lines, role=user/assistant/tool with `content[]`+`toolCalls[]`, NO per-line `time`) and **native** (`context.append_loop_event` carrying `content.part`/`tool.call`/`tool.result`/`step.*` plus `usage.record`, per-line `time` in epoch ms). Project path comes from `~/.kimi-code/session_index.jsonl` (`sessionId`/`sessionDir` → `workDir`). Subagents are SEPARATE files (`agents/agent-N/wire.jsonl`) linked via `state.json.agents[].parentAgentId`; subagent session id = `<parent-dir>:<agent-name>`. Resume command requires the full prefixed dir name (`session_<uuid>` or `ses_<uuid>`) — bare UUIDs return "Session not found"; resume for subagents falls back to the parent. Image parts use `imageUrl` (camelCase) in native format and `image_url` (snake_case) in migrated.
 - **CC-Mirror**: Multi-variant under `~/.cc-mirror/`, sanitized variant names.
 - **Antigravity**: Steps stream (`USER_INPUT`, `PLANNER_RESPONSE`, tool result). Workspace path comes from `~/.gemini/antigravity-cli/history.jsonl` (`conversationId → workspace`). Subagent linkage isn't in the file — derived from UUID scan during DB upsert, so child sessions inherit `project_path` / `parent_id` only after the parent has been indexed.
 - **compact_string**: Rust `compact_string(s, limit)` truncates with `…` suffix. Do NOT use truncated summaries for matching/comparison — always extract full values from source JSON.

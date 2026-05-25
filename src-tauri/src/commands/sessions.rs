@@ -359,14 +359,6 @@ fn try_tail_fast_path(
     ) {
         return Ok(None);
     }
-    // Kimi subagents are embedded as `SubagentEvent` lines inside the
-    // parent's wire.jsonl — `source_path` points at the parent, and a
-    // tail of the parent does not contain the subagent's reconstructed
-    // messages in any usable form. Fall through to the full parse for
-    // sidechains; only parent sessions can tail.
-    if meta.provider == Provider::Kimi && meta.is_sidechain {
-        return Ok(None);
-    }
     if meta.source_path.is_empty() {
         return Ok(None);
     }

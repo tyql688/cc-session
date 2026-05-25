@@ -1074,7 +1074,7 @@ mod tests {
                 Some(Provider::OpenCode),
             ),
             (
-                "/home/user/.kimi/sessions/hash/uuid/wire.jsonl",
+                "/home/user/.kimi-code/sessions/wd_proj_abc/session_uuid/agents/main/wire.jsonl",
                 Some(Provider::Kimi),
             ),
             (
