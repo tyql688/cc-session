@@ -142,7 +142,7 @@ pub(crate) fn read_store_db(store_db: &Path, session_id: &str) -> StoreDbInfo {
 // Blob fetch helpers
 // ---------------------------------------------------------------------------
 
-fn read_meta_value(conn: &Connection, store_db: &Path) -> Option<Value> {
+pub(super) fn read_meta_value(conn: &Connection, store_db: &Path) -> Option<Value> {
     let mut stmt = match conn.prepare("SELECT value FROM meta LIMIT 1") {
         Ok(s) => s,
         Err(error) => {
@@ -311,7 +311,7 @@ fn collect_images_from_blob(
     }
 }
 
-fn decode_hex(s: &str) -> Option<Vec<u8>> {
+pub(super) fn decode_hex(s: &str) -> Option<Vec<u8>> {
     if !s.len().is_multiple_of(2) {
         return None;
     }

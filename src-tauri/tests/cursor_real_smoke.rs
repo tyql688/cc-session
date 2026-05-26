@@ -63,10 +63,12 @@ fn scan_real_cursor_directory() {
             "message_count mismatch for {:?}",
             s.meta.id,
         );
+        let is_acp = s.meta.source_path.contains("/.cursor/acp-sessions/");
+        let is_cli_jsonl = s.meta.source_path.contains("/.cursor/projects/")
+            && s.meta.source_path.contains("/agent-transcripts/");
         assert!(
-            s.meta.source_path.contains("/.cursor/projects/")
-                && s.meta.source_path.contains("/agent-transcripts/"),
-            "source_path should live under cursor projects: {}",
+            is_acp || is_cli_jsonl,
+            "source_path should live under cursor projects or acp-sessions: {}",
             s.meta.source_path,
         );
         if s.meta.is_sidechain {

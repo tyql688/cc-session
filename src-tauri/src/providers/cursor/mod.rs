@@ -16,6 +16,7 @@
 //! their parent by directory structure (`parent_id = <sessionId>`) and
 //! pick up the parent's workspace path through `store.db`.
 
+mod acp;
 mod parser;
 mod store_db;
 mod tools;
@@ -36,7 +37,10 @@ pub struct Descriptor;
 impl crate::provider::ProviderDescriptor for Descriptor {
     fn owns_source_path(&self, source_path: &str) -> bool {
         let p = source_path.replace('\\', "/");
-        p.contains("/.cursor/projects/") && p.contains("/agent-transcripts/")
+        // Standalone CLI transcripts under projects/.../agent-transcripts/
+        // AND ACP-mode sessions under acp-sessions/.../store.db.
+        (p.contains("/.cursor/projects/") && p.contains("/agent-transcripts/"))
+            || p.contains("/.cursor/acp-sessions/")
     }
     fn resume_command(&self, session_id: &str, _variant_name: Option<&str>) -> Option<String> {
         // Subagent ids are file stems too — `agent --resume=<id>`
@@ -153,6 +157,107 @@ impl CursorProvider {
         (mains, subs)
     }
 
+    /// Parse one ACP session given the path to its `store.db`. Returns
+    /// None when the store can't be opened or yields no messages.
+    fn parse_acp_session(&self, store_db: &PathBuf) -> Option<ParsedSession> {
+        let session_dir = store_db.parent()?;
+        let session_id = session_dir.file_name()?.to_string_lossy().to_string();
+        let acp_meta = acp::load_meta_json(session_dir);
+        let (mut messages, parse_warning_count) = acp::parse_acp_transcript(store_db);
+        if messages.is_empty() {
+            return None;
+        }
+
+        // Reuse the existing store.db extractor for model + inline
+        // images. The workspace path is more reliable from meta.json
+        // (.cwd), so we let acp_meta win when both are present.
+        let info = store_db::read_store_db(store_db, &session_id);
+        if !info.image_paths.is_empty() {
+            substitute_image_placeholders(&mut messages, &info.image_paths);
+        }
+        let project_path = acp_meta
+            .cwd
+            .clone()
+            .or(info.workspace_path)
+            .unwrap_or_default();
+        let project_name = project_name_from_path(&project_path);
+
+        let title = acp_meta
+            .title
+            .clone()
+            .unwrap_or_else(|| crate::provider_utils::session_title(None));
+
+        let file_meta = std::fs::metadata(store_db).ok()?;
+        let file_size = file_meta.len();
+        let created_at = file_meta
+            .created()
+            .ok()
+            .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+            .map(|d| d.as_secs() as i64)
+            .or_else(|| {
+                file_meta
+                    .modified()
+                    .ok()
+                    .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+                    .map(|d| d.as_secs() as i64)
+            })?;
+        let updated_at = file_meta
+            .modified()
+            .ok()
+            .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+            .map(|d| d.as_secs() as i64)
+            .unwrap_or(created_at);
+        let source_mtime = updated_at;
+
+        use crate::provider_utils::{truncate_to_bytes, FTS_CONTENT_LIMIT};
+        let content_text = truncate_to_bytes(
+            &messages
+                .iter()
+                .filter(|m| {
+                    matches!(
+                        m.role,
+                        crate::models::MessageRole::User | crate::models::MessageRole::Assistant
+                    ) && !m.content.is_empty()
+                })
+                .map(|m| m.content.clone())
+                .collect::<Vec<_>>()
+                .join("\n"),
+            FTS_CONTENT_LIMIT,
+        );
+        let message_count = messages.len() as u32;
+
+        Some(ParsedSession {
+            meta: SessionMeta {
+                id: session_id,
+                provider: Provider::Cursor,
+                title,
+                project_path,
+                project_name,
+                created_at,
+                updated_at,
+                message_count,
+                file_size_bytes: file_size,
+                source_path: store_db.to_string_lossy().to_string(),
+                is_sidechain: false,
+                variant_name: None,
+                model: info.model,
+                cc_version: None,
+                git_branch: None,
+                parent_id: None,
+                input_tokens: 0,
+                output_tokens: 0,
+                cache_read_tokens: 0,
+                cache_write_tokens: 0,
+            },
+            messages,
+            content_text,
+            parse_warning_count,
+            child_session_ids: Vec::new(),
+            usage_events: Vec::new(),
+            source_mtime,
+        })
+    }
+
     /// Enrich `session` with everything we can pull from the
     /// matching `store.db`: workspace path (more reliable than the
     /// sanitised dir name), last-used model alias, and inline images
@@ -185,6 +290,14 @@ impl CursorProvider {
 /// For a subagent transcript path of the shape
 /// `…/agent-transcripts/<parentId>/subagents/<subId>.jsonl`,
 /// return `<parentId>` so callers can look the parent's
+/// True when `source_path` points at an ACP-mode session's
+/// `~/.cursor/acp-sessions/<id>/store.db`. Used to route load_messages
+/// and scan_source through the dedicated reconstructor.
+fn is_acp_store_path(source_path: &str) -> bool {
+    let normalised = source_path.replace('\\', "/");
+    normalised.contains("/.cursor/acp-sessions/") && normalised.ends_with("/store.db")
+}
+
 /// `store.db` up. Returns None for any other path layout (main
 /// transcripts, malformed inputs, etc.).
 fn subagent_parent_id_from_path(source_path: &str) -> Option<String> {
@@ -248,21 +361,25 @@ impl SessionProvider for CursorProvider {
     }
 
     fn watch_paths(&self) -> Vec<PathBuf> {
-        let projects = self.projects_dir();
-        if !projects.exists() {
-            return Vec::new();
-        }
-        // Watch each project's agent-transcripts subtree so brand-new
-        // transcript dirs trigger reindex without scanning the whole
-        // ~/.cursor/projects/ tree (which also holds terminals/).
         let mut watched = Vec::new();
-        if let Ok(entries) = std::fs::read_dir(&projects) {
-            for entry in entries.flatten() {
-                let transcripts = entry.path().join("agent-transcripts");
-                if transcripts.is_dir() {
-                    watched.push(transcripts);
+        let projects = self.projects_dir();
+        if projects.exists() {
+            // Watch each project's agent-transcripts subtree so brand-
+            // new transcript dirs trigger reindex without scanning the
+            // whole ~/.cursor/projects/ tree (which also holds
+            // terminals/, worker.log, etc).
+            if let Ok(entries) = std::fs::read_dir(&projects) {
+                for entry in entries.flatten() {
+                    let transcripts = entry.path().join("agent-transcripts");
+                    if transcripts.is_dir() {
+                        watched.push(transcripts);
+                    }
                 }
             }
+        }
+        let acp_root = self.home_dir.join(".cursor").join("acp-sessions");
+        if acp_root.is_dir() {
+            watched.push(acp_root);
         }
         watched
     }
@@ -303,6 +420,15 @@ impl SessionProvider for CursorProvider {
             })
             .collect();
         sessions.extend(sub_sessions);
+
+        // ACP sessions (cursor-agent invoked via Agent Client Protocol,
+        // e.g. by an IDE or Zed). These have no JSONL transcript on
+        // disk — everything lives in `acp-sessions/<id>/store.db`.
+        let acp_sessions: Vec<ParsedSession> = acp::collect_acp_sessions(&self.home_dir)
+            .par_iter()
+            .filter_map(|store| self.parse_acp_session(store))
+            .collect();
+        sessions.extend(acp_sessions);
         Ok(sessions)
     }
 
@@ -311,6 +437,14 @@ impl SessionProvider for CursorProvider {
         if !path.is_file() {
             return Ok(Vec::new());
         }
+        // ACP store.db paths route through the dedicated ACP parser.
+        if is_acp_store_path(source_path) {
+            if let Some(session) = self.parse_acp_session(&path.to_path_buf()) {
+                return Ok(vec![session]);
+            }
+            return Ok(Vec::new());
+        }
+
         let stores = self.collect_cli_store_paths();
         let Some(mut session) = parser::parse_session(path, None) else {
             return Ok(Vec::new());
@@ -332,6 +466,12 @@ impl SessionProvider for CursorProvider {
         session_id: &str,
         source_path: &str,
     ) -> Result<LoadedSession, ProviderError> {
+        // ACP sessions store everything in `store.db` — no JSONL on
+        // disk. Route them through the dedicated reconstructor.
+        if is_acp_store_path(source_path) {
+            let (messages, warnings) = acp::parse_acp_transcript(Path::new(source_path));
+            return Ok(LoadedSession::from_messages(messages, warnings));
+        }
         let content = std::fs::read_to_string(source_path)
             .map_err(|e| ProviderError::Parse(format!("failed to read transcript: {e}")))?;
         let (mut messages, warnings) = parser::parse_messages(&content, source_path);
