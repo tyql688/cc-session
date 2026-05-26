@@ -62,7 +62,7 @@ const FALLBACK_PROVIDER_SNAPSHOTS: Record<Provider, ProviderSnapshot> = {
   },
   kimi: {
     key: "kimi",
-    label: "Kimi CLI",
+    label: "Kimi Code",
     color: "var(--kimi)",
     sort_order: 6,
     watch_strategy: "fs",

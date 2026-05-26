@@ -697,7 +697,7 @@ static PROVIDER_CATALOG: [ProviderCatalogEntry; 6] = [
     ProviderCatalogEntry {
         kind: Provider::Kimi,
         key: "kimi",
-        label: "Kimi CLI",
+        label: "Kimi Code",
         descriptor: &crate::providers::kimi::Descriptor,
         build_runtime: build_kimi_runtime,
     },

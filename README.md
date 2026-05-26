@@ -21,7 +21,7 @@
 
 ## Why CC Session?
 
-AI coding tools like Claude Code, Codex, Antigravity, and Kimi CLI store session data locally, but there's no easy way to browse, search, or revisit past conversations. CC Session brings all your sessions together in one unified interface — view full conversation histories, search across all providers with full-text search, export records, and resume any session directly in your terminal.
+AI coding tools like Claude Code, Codex, Antigravity, and Kimi Code store session data locally, but there's no easy way to browse, search, or revisit past conversations. CC Session brings all your sessions together in one unified interface — view full conversation histories, search across all providers with full-text search, export records, and resume any session directly in your terminal.
 
 > **One app for all your local coding sessions**
 >
@@ -49,7 +49,7 @@ CC Session currently supports:
 - Claude Code
 - Codex CLI
 - Antigravity
-- Kimi CLI
+- Kimi Code
 - OpenCode
 - CC-Mirror
 
