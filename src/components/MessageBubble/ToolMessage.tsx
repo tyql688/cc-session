@@ -326,8 +326,10 @@ export function ToolMessage(props: { message: Message; provider?: string }) {
           when={
             name() === "Agent" &&
             SUBAGENT_FILE_PROVIDERS.has(props.provider ?? "") &&
-            (agentChildIds() ?? (agentNickname() || agentId() ? [null] : []))
-              .length > 0
+            (
+              agentChildIds() ??
+              (agentNickname() || agentId() || agentDescription() ? [null] : [])
+            ).length > 0
           }
         >
           <Show
