@@ -4,6 +4,7 @@ export type Provider =
   | "antigravity"
   | "opencode"
   | "kimi"
+  | "cursor"
   | "cc-mirror";
 
 export interface SessionMeta {

@@ -79,6 +79,7 @@ describe("providerSnapshots store", () => {
       "antigravity",
       "opencode",
       "kimi",
+      "cursor",
     ]);
   });
 

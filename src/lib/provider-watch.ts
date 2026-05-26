@@ -20,6 +20,7 @@ const WATCH_BEHAVIORS: Record<Provider, ProviderWatchBehavior> = {
   antigravity: { debounceMs: 300 },
   opencode: { debounceMs: 2000 },
   kimi: { debounceMs: 300 },
+  cursor: { debounceMs: 300 },
   "cc-mirror": { debounceMs: 300 },
 };
 

@@ -12,6 +12,7 @@ const ALL_PROVIDERS: Provider[] = [
   "antigravity",
   "opencode",
   "kimi",
+  "cursor",
   "cc-mirror",
 ];
 

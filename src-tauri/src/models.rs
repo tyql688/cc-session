@@ -11,6 +11,7 @@ pub enum Provider {
     #[serde(rename = "opencode")]
     OpenCode,
     Kimi,
+    Cursor,
     #[serde(rename = "cc-mirror")]
     CcMirror,
 }

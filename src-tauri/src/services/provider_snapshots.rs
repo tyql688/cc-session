@@ -120,6 +120,7 @@ mod tests {
                 Provider::Antigravity,
                 Provider::OpenCode,
                 Provider::Kimi,
+                Provider::Cursor,
             ]
         );
         assert_eq!(snapshots.len(), Provider::all().len());

@@ -32,6 +32,7 @@
           "$HOME/.gemini/**",
           "$HOME/.local/share/opencode/**",
           "$HOME/.kimi-code/**",
+          "$HOME/.cursor/**",
           "$HOME/.cc-mirror/**"
         ]
       }

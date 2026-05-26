@@ -21,7 +21,7 @@
 
 ## 为什么需要 CC Session？
 
-Claude Code、Codex、Antigravity、Kimi Code 等 AI 编程工具会在本地存储会话数据，但没有方便的方式来浏览、搜索和回顾历史对话。CC Session 将所有工具的会话集中到一个统一界面 — 查看完整对话历史、跨工具全文搜索、导出记录、或直接在终端中恢复任意会话。
+Claude Code、Codex、Antigravity、Kimi Code、Cursor CLI 等 AI 编程工具会在本地存储会话数据，但没有方便的方式来浏览、搜索和回顾历史对话。CC Session 将所有工具的会话集中到一个统一界面 — 查看完整对话历史、跨工具全文搜索、导出记录、或直接在终端中恢复任意会话。
 
 > **把所有本地 AI 编程会话集中到一个应用里**
 >
@@ -50,6 +50,7 @@ Claude Code、Codex、Antigravity、Kimi Code 等 AI 编程工具会在本地存
 - Codex CLI
 - Antigravity
 - Kimi Code
+- Cursor CLI
 - OpenCode
 - CC-Mirror
 

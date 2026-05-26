@@ -628,6 +628,10 @@ fn build_kimi_runtime() -> Option<Box<dyn SessionProvider>> {
     crate::providers::kimi::KimiProvider::new().map(|p| Box::new(p) as Box<dyn SessionProvider>)
 }
 
+fn build_cursor_runtime() -> Option<Box<dyn SessionProvider>> {
+    crate::providers::cursor::CursorProvider::new().map(|p| Box::new(p) as Box<dyn SessionProvider>)
+}
+
 fn build_cc_mirror_runtime() -> Option<Box<dyn SessionProvider>> {
     crate::providers::cc_mirror::CcMirrorProvider::new()
         .map(|p| Box::new(p) as Box<dyn SessionProvider>)
@@ -648,7 +652,8 @@ fn provider_entry(provider: &Provider) -> &'static ProviderCatalogEntry {
         Provider::Antigravity => &PROVIDER_CATALOG[2],
         Provider::OpenCode => &PROVIDER_CATALOG[3],
         Provider::Kimi => &PROVIDER_CATALOG[4],
-        Provider::CcMirror => &PROVIDER_CATALOG[5],
+        Provider::Cursor => &PROVIDER_CATALOG[5],
+        Provider::CcMirror => &PROVIDER_CATALOG[6],
     }
 }
 
@@ -656,16 +661,17 @@ fn provider_entry_for_key(key: &str) -> Option<&'static ProviderCatalogEntry> {
     provider_catalog().iter().find(|entry| entry.key == key)
 }
 
-static PROVIDER_KINDS: [Provider; 6] = [
+static PROVIDER_KINDS: [Provider; 7] = [
     Provider::Claude,
     Provider::Codex,
     Provider::Antigravity,
     Provider::OpenCode,
     Provider::Kimi,
+    Provider::Cursor,
     Provider::CcMirror,
 ];
 
-static PROVIDER_CATALOG: [ProviderCatalogEntry; 6] = [
+static PROVIDER_CATALOG: [ProviderCatalogEntry; 7] = [
     ProviderCatalogEntry {
         kind: Provider::Claude,
         key: "claude",
@@ -700,6 +706,13 @@ static PROVIDER_CATALOG: [ProviderCatalogEntry; 6] = [
         label: "Kimi Code",
         descriptor: &crate::providers::kimi::Descriptor,
         build_runtime: build_kimi_runtime,
+    },
+    ProviderCatalogEntry {
+        kind: Provider::Cursor,
+        key: "cursor",
+        label: "Cursor CLI",
+        descriptor: &crate::providers::cursor::Descriptor,
+        build_runtime: build_cursor_runtime,
     },
     ProviderCatalogEntry {
         kind: Provider::CcMirror,

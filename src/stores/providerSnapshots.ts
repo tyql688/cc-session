@@ -70,6 +70,16 @@ const FALLBACK_PROVIDER_SNAPSHOTS: Record<Provider, ProviderSnapshot> = {
     exists: false,
     session_count: 0,
   },
+  cursor: {
+    key: "cursor",
+    label: "Cursor CLI",
+    color: "var(--cursor)",
+    sort_order: 7,
+    watch_strategy: "fs",
+    path: "",
+    exists: false,
+    session_count: 0,
+  },
 };
 
 let loadPromise: Promise<void> | null = null;

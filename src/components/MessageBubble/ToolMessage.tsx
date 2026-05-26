@@ -50,6 +50,7 @@ const SUBAGENT_FILE_PROVIDERS = new Set([
   "claude",
   "codex",
   "kimi",
+  "cursor",
   "cc-mirror",
   "antigravity",
 ]);

@@ -10,6 +10,7 @@ const KNOWN_PROVIDER_KEYS = new Set<string>([
   "antigravity",
   "opencode",
   "kimi",
+  "cursor",
   "cc-mirror",
 ]);
 
@@ -38,6 +39,7 @@ function projectFromTrashPath(item: TrashMeta, unknownLabel: string): string {
     case "antigravity":
     case "kimi":
     case "opencode":
+    case "cursor":
     default:
       return unknownLabel;
   }

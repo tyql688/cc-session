@@ -20,7 +20,7 @@ npm run format:check          # Prettier check
 ```
 src/                       # Solid.js frontend (components, stores, i18n, lib, styles)
 src-tauri/src/
-  providers/               # claude/, codex/, antigravity/, kimi/, opencode/, cc_mirror.rs
+  providers/               # claude/, codex/, antigravity/, kimi/, opencode/, cursor/, cc_mirror.rs
   commands/                # sessions.rs, settings.rs, trash.rs, terminal.rs
   services/                # provider_snapshots.rs, session_lifecycle.rs, session_resolution.rs, source_sync.rs, image_cache.rs
   exporter/                # json.rs, markdown.rs, html.rs, templates.rs
@@ -119,11 +119,12 @@ Metadata via Bridge pattern: `Provider` enum → `ProviderDescriptor` (zero-size
 | Codex       | `~/.codex/sessions/**/*.jsonl`         | JSONL  | FS    |
 | Antigravity | `~/.gemini/antigravity-cli/brain/*/.system_generated/logs/transcript.jsonl` | JSONL | FS |
 | Kimi Code   | `~/.kimi-code/sessions/wd_*/<session_dir>/agents/*/wire.jsonl` | JSONL | FS |
+| Cursor CLI  | `~/.cursor/projects/<key>/agent-transcripts/<id>/<id>.jsonl`  | JSONL | FS |
 | OpenCode    | `~/.local/share/opencode/opencode.db`  | SQLite | Poll  |
 | CC-Mirror   | `~/.cc-mirror/{variant}/config/projects/**/*.jsonl` | JSONL | FS |
 
 Tool names mapped to canonical set per provider: {Bash, Edit, Read, Write, Glob, Grep, Agent, Plan}.
-Resume: Claude `--resume`, Codex `resume`, Antigravity `agy --conversation <id>`, Kimi `--session`, OpenCode `-s`.
+Resume: Claude `--resume`, Codex `resume`, Antigravity `agy --conversation <id>`, Kimi `--session`, Cursor `agent --resume=<id>`, OpenCode `-s`.
 
 ## Testing
 
@@ -150,6 +151,7 @@ Resume: Claude `--resume`, Codex `resume`, Antigravity `agy --conversation <id>`
 - **macOS watchers**: File-backed providers use `notify` with `macos_kqueue` for more reliable file-level follow behavior; do not assume `FSEvents`.
 - **Codex**: `call_id` pairing, output can be nested JSON.
 - **Kimi**: kimi-code 0.1.1+ uses two coexisting wire formats — **migrated** (only `metadata` + `context.append_message` lines, role=user/assistant/tool with `content[]`+`toolCalls[]`, NO per-line `time`) and **native** (`context.append_loop_event` carrying `content.part`/`tool.call`/`tool.result`/`step.*` plus `usage.record`, per-line `time` in epoch ms). Project path comes from `~/.kimi-code/session_index.jsonl` (`sessionId`/`sessionDir` → `workDir`). Subagents are SEPARATE files (`agents/agent-N/wire.jsonl`) linked via `state.json.agents[].parentAgentId`; subagent session id = `<parent-dir>:<agent-name>`. Resume command requires the full prefixed dir name (`session_<uuid>` or `ses_<uuid>`) — bare UUIDs return "Session not found"; resume for subagents falls back to the parent. Image parts use `imageUrl` (camelCase) in native format and `image_url` (snake_case) in migrated.
+- **Cursor**: Two kinds of sessions live under `~/.cursor/`: CLI (`agent` binary) and IDE (Composer). They share the same `agent-transcripts/<id>/<id>.jsonl` layout, so we filter using `~/.cursor/chats/<md5>/<id>/store.db` as a whitelist — only IDs with a `store.db` are CLI; the rest are IDE and skipped entirely. Workspace path is recovered from a `<user_info>` blob inside that same `store.db` (json-encoded `content` key); fall back to decoding the sanitized projects dir name. Subagents live at `<sessionId>/subagents/<subagentId>.jsonl`; their title comes from the parent's `Task`/`Subagent` tool_use `description`, matched by `prompt`. Cursor uses `<user_query>` to wrap real user text, and `<image_files>` blocks to list workspace-saved images (rewritten to `[Image: source: <path>]` markers). `<think>…</think>` reasoning is promoted to `MessageRole::System` with `[thinking]` prefix; `[REDACTED]` placeholders are stripped. Tool arg keys (`path`, `old_str`, `glob_pattern`) get canonicalised to `file_path`/`old_string`/`pattern` so the existing UI renderer works unchanged.
 - **CC-Mirror**: Multi-variant under `~/.cc-mirror/`, sanitized variant names.
 - **Antigravity**: Steps stream (`USER_INPUT`, `PLANNER_RESPONSE`, tool result). Workspace path comes from `~/.gemini/antigravity-cli/history.jsonl` (`conversationId → workspace`). Subagent linkage isn't in the file — derived from UUID scan during DB upsert, so child sessions inherit `project_path` / `parent_id` only after the parent has been indexed.
 - **compact_string**: Rust `compact_string(s, limit)` truncates with `…` suffix. Do NOT use truncated summaries for matching/comparison — always extract full values from source JSON.
@@ -159,7 +161,7 @@ Resume: Claude `--resume`, Codex `resume`, Antigravity `agy --conversation <id>`
 
 - Commits: conventional commits (`feat:`, `fix:`, `refactor:`, `chore:`, `test:`, `docs:`). One logical change per commit.
 - i18n: all user-facing strings via `t()`. No literal English in JSX.
-- Colors: Claude `#d97757`, Codex `#10b981`, Antigravity `#4f46e5`, OpenCode `#06b6d4`, Kimi `#1783ff`, CC-Mirror `#f472b6`.
+- Colors: Claude `#d97757`, Codex `#10b981`, Antigravity `#4f46e5`, OpenCode `#06b6d4`, Kimi `#1783ff`, Cursor `#3b82f6`, CC-Mirror `#f472b6`.
 
 ## Code Standards
 

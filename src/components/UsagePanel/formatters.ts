@@ -8,6 +8,7 @@ export const SHORT_PROVIDER_LABELS: Record<string, string> = {
   antigravity: "Antigravity",
   opencode: "OpenCode",
   kimi: "Kimi",
+  cursor: "Cursor",
 } as const;
 
 export function fmtTokens(n: number): string {
