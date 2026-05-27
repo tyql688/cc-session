@@ -21,6 +21,11 @@ pub fn start_watcher(
         .flat_map(|p| p.watch_paths())
         .filter(|p| p.exists())
         .collect();
+    let shallow_watch_paths: Vec<PathBuf> = providers
+        .iter()
+        .flat_map(|p| p.watch_paths_shallow())
+        .filter(|p| p.exists())
+        .collect();
 
     // Channel for forwarding changed paths from the notify callback to the
     // debounce thread. The notify callback must be non-blocking, so we just
@@ -114,15 +119,30 @@ pub fn start_watcher(
             }
         }
     }
+    let mut shallow_watched_count = 0usize;
+    for path in &shallow_watch_paths {
+        // NonRecursive: only the top-level dir's fd is opened. Children
+        // are not registered, so unrelated WAL/SHM churn from external
+        // processes inside child dirs can't race the watcher's internal
+        // file-ident map.
+        match watcher.watch(path, RecursiveMode::NonRecursive) {
+            Ok(()) => shallow_watched_count += 1,
+            Err(e) => {
+                log::warn!("failed to watch (shallow) {}: {}", path.display(), e);
+            }
+        }
+    }
 
-    if !watch_paths.is_empty() && watched_count == 0 {
+    if !watch_paths.is_empty() && watched_count == 0 && shallow_watched_count == 0 {
         return Err("failed to watch any provider directory".to_string());
     }
 
     log::info!(
-        "Watching {}/{} directories for changes",
+        "Watching {}/{} directories recursively, {}/{} shallow",
         watched_count,
-        watch_paths.len()
+        watch_paths.len(),
+        shallow_watched_count,
+        shallow_watch_paths.len(),
     );
     Ok(watcher)
 }

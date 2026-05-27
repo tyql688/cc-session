@@ -835,6 +835,15 @@ pub fn all_runtimes() -> Vec<Box<dyn SessionProvider>> {
 pub trait SessionProvider: Send + Sync {
     fn provider(&self) -> Provider;
     fn watch_paths(&self) -> Vec<PathBuf>;
+    /// Directories the provider wants watched non-recursively — the
+    /// watcher fires on entries created/removed at the dir's top level
+    /// but doesn't follow subdirs. Use this for parent dirs whose
+    /// children mutate rapidly under concurrent external processes
+    /// (e.g. SQLite WAL/SHM churn), where a recursive watch would race
+    /// the OS file-watcher's internal fd tracking. Default empty.
+    fn watch_paths_shallow(&self) -> Vec<PathBuf> {
+        Vec::new()
+    }
     fn scan_all(&self) -> Result<Vec<ParsedSession>, ProviderError>;
 
     /// Incremental scan: parse only the source files whose

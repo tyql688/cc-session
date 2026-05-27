@@ -374,18 +374,26 @@ impl SessionProvider for CursorProvider {
                 }
             }
         }
-        // Intentionally NOT watching `~/.cursor/acp-sessions/` recursively.
-        // Each ACP session is a SQLite store.db + WAL + SHM that Cursor
-        // IDE fsyncs aggressively when running concurrently, and the
-        // resulting fd churn races with kqueue-1.1.1's internal
-        // file-ident map — the watcher thread panics with
-        // `Option::unwrap()` on a `None` value (kqueue/src/lib.rs:661,
-        // a known upstream issue without a fix). ACP sessions are
-        // picked up by the normal scan_all pass and by subsequent
-        // incremental scans triggered by any other provider's file
-        // changes, which is good enough for the practical update
-        // cadence (sessions usually outlive their first message).
+        // Note: `~/.cursor/acp-sessions/` is intentionally watched
+        // SHALLOW (via `watch_paths_shallow`), not recursively. Each
+        // ACP session is a SQLite store.db + WAL + SHM that Cursor IDE
+        // fsyncs aggressively under concurrent use, and recursing
+        // would have the watcher open fds on every child file —
+        // racing kqueue-1.1.1's internal file-ident map and panicking
+        // the notify thread (kqueue/src/lib.rs:661, unfixed upstream).
+        // A shallow watch on the parent fires only for top-level
+        // entries (new session dirs created/removed), so we still
+        // catch newly-started ACP sessions live.
         watched
+    }
+
+    fn watch_paths_shallow(&self) -> Vec<PathBuf> {
+        let acp_root = self.home_dir.join(".cursor").join("acp-sessions");
+        if acp_root.is_dir() {
+            vec![acp_root]
+        } else {
+            Vec::new()
+        }
     }
 
     fn scan_all(&self) -> Result<Vec<ParsedSession>, ProviderError> {
