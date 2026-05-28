@@ -88,6 +88,28 @@ function LineDiff(props: { oldText: string; newText: string }) {
   return <DiffRows lines={buildToolLineDiff(props.oldText, props.newText)} />;
 }
 
+/** Parse a possibly-JSON tool payload into an object. Returns undefined
+ *  silently for plain-text payloads (Bash stdout, file contents, etc.)
+ *  — most tool outputs aren't JSON, and calling JSON.parse on them spams
+ *  SyntaxError into the console. We only attempt a parse when the value
+ *  looks like a JSON object/array, and only log a warning when something
+ *  that *looked* like JSON failed to parse (a real anomaly worth seeing). */
+function parseToolJsonObject(
+  raw: string | undefined | null,
+  label: string,
+): Record<string, unknown> | undefined {
+  if (typeof raw !== "string") return undefined;
+  const trimmed = raw.trimStart();
+  if (!trimmed.startsWith("{") && !trimmed.startsWith("[")) return undefined;
+  try {
+    const parsed = JSON.parse(trimmed);
+    return typeof parsed === "object" && parsed !== null ? parsed : undefined;
+  } catch (error) {
+    console.warn(`Failed to parse ${label} JSON:`, error);
+    return undefined;
+  }
+}
+
 export function ToolMessage(props: { message: Message; provider?: string }) {
   const [expanded, setExpanded] = createSignal(false);
   const [previewImage, setPreviewImage] = createSignal<{
@@ -171,28 +193,18 @@ export function ToolMessage(props: { message: Message; provider?: string }) {
   const resultHasDiff = () =>
     !!resultMetadata()?.diff || !!resultMetadata()?.patchDiff;
   const showInputDetail = () => !!formatted() && !resultHasDiff();
-  /** Parsed tool_input JSON, memoized so each Agent-related extractor reuses
-   *  the same JSON.parse call. Logs at most once per message on parse failure. */
-  const toolInputObj = createMemo<Record<string, unknown> | undefined>(() => {
-    if (!hasInput()) return undefined;
-    try {
-      const parsed = JSON.parse(props.message.tool_input!);
-      return typeof parsed === "object" && parsed !== null ? parsed : undefined;
-    } catch (error) {
-      console.warn("Failed to parse tool_input JSON:", error);
-      return undefined;
-    }
-  });
-  const toolOutputObj = createMemo<Record<string, unknown> | undefined>(() => {
-    if (!hasOutput()) return undefined;
-    try {
-      const parsed = JSON.parse(props.message.content);
-      return typeof parsed === "object" && parsed !== null ? parsed : undefined;
-    } catch (error) {
-      console.warn("Failed to parse tool output JSON:", error);
-      return undefined;
-    }
-  });
+  /** Parsed tool_input/tool_output JSON, memoized so each downstream
+   *  extractor reuses the same JSON.parse call. Most tool outputs are
+   *  plain text (Bash stdout, file contents, …), so we pre-screen the
+   *  shape before calling JSON.parse — otherwise every non-JSON output
+   *  spams `SyntaxError: JSON Parse error` into the console. Only a
+   *  malformed JSON-looking payload is worth a warn. */
+  const toolInputObj = createMemo<Record<string, unknown> | undefined>(() =>
+    parseToolJsonObject(props.message.tool_input, "tool_input"),
+  );
+  const toolOutputObj = createMemo<Record<string, unknown> | undefined>(() =>
+    parseToolJsonObject(props.message.content, "tool output"),
+  );
   /** Extract nickname from Agent tool output (Codex: {"nickname":"Faraday"}) */
   const agentNickname = createMemo(() => {
     if (name() !== "Agent") return undefined;
