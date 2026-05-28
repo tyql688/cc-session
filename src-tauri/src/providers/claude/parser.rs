@@ -64,6 +64,13 @@ struct ScanAccum {
     model: Option<String>,
     cc_version: Option<String>,
     git_branch: Option<String>,
+    /// Last `mode` value seen — emitted once per change as a System
+    /// `[mode] <value>` event so plan/accept_edits/normal transitions
+    /// are visible in the timeline without spamming an entry per turn.
+    /// Seeded with `"normal"` so the implicit-default starting mode
+    /// doesn't generate a noisy `[mode] normal` leader on every session
+    /// (Claude Code emits `mode: normal` on essentially every turn).
+    last_mode: Option<String>,
     processed_hashes: HashSet<String>,
 }
 
@@ -91,6 +98,7 @@ impl ScanAccum {
             model: None,
             cc_version: None,
             git_branch: None,
+            last_mode: Some("normal".to_string()),
             processed_hashes: HashSet::new(),
         }
     }
@@ -264,6 +272,10 @@ fn scan_jsonl_lines<R: BufRead>(reader: R, path: &Path, accum: &mut ScanAccum) -
                 handle_pr_link(&entry, &mut accum.state, timestamp);
                 continue;
             }
+            "mode" => {
+                handle_mode(&entry, accum, timestamp);
+                continue;
+            }
             _ => {
                 if preserves_pending_user_message(line_type.as_str()) {
                     continue;
@@ -278,6 +290,9 @@ fn scan_jsonl_lines<R: BufRead>(reader: R, path: &Path, accum: &mut ScanAccum) -
 }
 
 fn preserves_pending_user_message(line_type: &str) -> bool {
+    // `agent-name` is intentionally NOT listed here: the explicit
+    // dispatch arm above already handles it without flushing, and
+    // including it would be dead code (the fall-through never fires).
     matches!(
         line_type,
         "attachment"
@@ -286,8 +301,27 @@ fn preserves_pending_user_message(line_type: &str) -> bool {
             | "progress"
             | "queue-operation"
             | "last-prompt"
-            | "agent-name"
     )
+}
+
+/// Surface mode transitions (`normal` ↔ `plan` ↔ `accept_edits` ↔
+/// `bypass_permissions`) as `[mode] <value>` System messages. Claude
+/// Code emits a `mode` line on every turn, so we deduplicate against
+/// the last-seen value to avoid spamming the timeline.
+fn handle_mode(entry: &Value, accum: &mut ScanAccum, timestamp: Option<String>) {
+    let Some(value) = entry
+        .get("mode")
+        .and_then(|v| v.as_str())
+        .filter(|s| !s.is_empty())
+    else {
+        return;
+    };
+    if accum.last_mode.as_deref() == Some(value) {
+        return;
+    }
+    accum.last_mode = Some(value.to_string());
+    flush_pending(&mut accum.state);
+    append_system_message(&mut accum.state, format!("[mode] {value}"), timestamp);
 }
 
 /// Extract parent session ID from subagent path.
@@ -636,38 +670,77 @@ fn dedup_hash_from_entry(entry: &Value) -> Option<String> {
     let content = entry
         .get("message")
         .and_then(|message| message.get("content"))
-        .map(|content| serde_json::to_string(content).unwrap_or_else(|_| content.to_string()))
+        .map(|content| {
+            // `to_string` on an in-memory Value is infallible (no IO);
+            // the .expect is a tripwire for future signature changes.
+            serde_json::to_string(content)
+                .expect("serde_json::to_string on an in-memory Value is infallible")
+        })
         .unwrap_or_default();
     Some(format!("{base}:{content}"))
 }
 
-fn infer_tool_name_from_result(result: Option<&Value>) -> Option<String> {
-    let result = result?;
-    if result.get("oldString").is_some() && result.get("newString").is_some() {
-        return Some("Edit".to_string());
+/// Heuristic fallback used only when a tool_result reaches us with no
+/// matching `tool_use` (truncated transcript, mid-stream crash). The
+/// authoritative source for tool identity is the `tool_use` line's
+/// `name` field; this exists so we still show *something* useful when
+/// that line is missing.
+///
+/// Logging policy: warn only when we land at the no-signal-at-all
+/// fallback (`UnknownToolResult`). Truncated transcripts where the
+/// heuristic or `use_id` produces a usable name are an expected
+/// degraded path and should not spam warnings — they get `debug!`.
+fn infer_tool_name_from_orphan_result(result: Option<&Value>, use_id: Option<&str>) -> String {
+    let inferred = result.and_then(|r| {
+        if r.get("commandName").is_some() && r.get("allowedTools").is_some() {
+            return Some("SlashCommand");
+        }
+        if r.get("oldString").is_some() && r.get("newString").is_some() {
+            return Some("Edit");
+        }
+        if r.get("stdout").is_some() || r.get("stderr").is_some() {
+            return Some("Bash");
+        }
+        if r.get("matches").is_some() && r.get("total_deferred_tools").is_some() {
+            return Some("ToolSearch");
+        }
+        if r.get("taskId").is_some() && r.get("updatedFields").is_some() {
+            return Some("TaskUpdate");
+        }
+        if r.get("task").is_some() {
+            return Some("TaskCreate");
+        }
+        if r.get("agentId").is_some() {
+            return Some("Agent");
+        }
+        if r.get("url").is_some() && r.get("durationMs").is_some() {
+            return Some("WebFetch");
+        }
+        if r.get("filePath").is_some() {
+            return Some("Write");
+        }
+        None
+    });
+    match (inferred, use_id) {
+        (Some(name), _) => {
+            log::debug!(
+                "Claude tool_result has no matching tool_use (use_id={use_id:?}); heuristic inferred name {name:?}"
+            );
+            name.to_string()
+        }
+        (None, Some(id)) => {
+            log::debug!(
+                "Claude tool_result has no matching tool_use; falling back to use_id={id:?}"
+            );
+            id.to_string()
+        }
+        (None, None) => {
+            log::warn!(
+                "Claude tool_result has no matching tool_use and no use_id — emitting as UnknownToolResult"
+            );
+            "UnknownToolResult".to_string()
+        }
     }
-    if result.get("stdout").is_some() || result.get("stderr").is_some() {
-        return Some("Bash".to_string());
-    }
-    if result.get("matches").is_some() && result.get("total_deferred_tools").is_some() {
-        return Some("ToolSearch".to_string());
-    }
-    if result.get("taskId").is_some() && result.get("updatedFields").is_some() {
-        return Some("TaskUpdate".to_string());
-    }
-    if result.get("task").is_some() {
-        return Some("TaskCreate".to_string());
-    }
-    if result.get("agentId").is_some() {
-        return Some("Agent".to_string());
-    }
-    if result.get("url").is_some() && result.get("durationMs").is_some() {
-        return Some("WebFetch".to_string());
-    }
-    if result.get("filePath").is_some() {
-        return Some("Write".to_string());
-    }
-    None
 }
 
 fn standalone_tool_result_message(
@@ -678,15 +751,11 @@ fn standalone_tool_result_message(
     source_tool_assistant_uuid: Option<&str>,
     timestamp: Option<String>,
 ) -> Message {
-    let inferred_name = infer_tool_name_from_result(top_level_result);
-    let raw_name = inferred_name
-        .as_deref()
-        .or(use_id)
-        .unwrap_or("UnknownToolResult");
-    let canonical_name = canonical_tool_name(Provider::Claude, raw_name);
+    let raw_name = infer_tool_name_from_orphan_result(top_level_result, use_id);
+    let canonical_name = canonical_tool_name(Provider::Claude, &raw_name);
     let mut metadata = build_tool_metadata(ToolCallFacts {
         provider: Provider::Claude,
-        raw_name,
+        raw_name: &raw_name,
         input: None,
         call_id: use_id,
         assistant_id: source_tool_assistant_uuid,
@@ -727,10 +796,17 @@ fn tool_result_facts<'a>(
     result_item: &'a Value,
     top_level_result: Option<&'a Value>,
 ) -> ToolResultFacts<'a> {
+    // Async-Agent results carry a lifecycle marker
+    // (`"async_launched"` / `"completed"` / …). Surface it so the UI
+    // can distinguish "kicked off in background" from "finished",
+    // instead of always showing the default success badge.
+    let status = top_level_result
+        .and_then(|v| v.get("status"))
+        .and_then(|v| v.as_str());
     ToolResultFacts {
         raw_result: top_level_result,
         is_error: result_item.get("is_error").and_then(|v| v.as_bool()),
-        status: None,
+        status,
         artifact_path: top_level_result
             .and_then(|v| v.get("persistedOutputPath"))
             .and_then(|v| v.as_str()),
@@ -1462,7 +1538,11 @@ fn extract_message_content(message: &Value) -> String {
                     "image" => {
                         image_block_count += 1;
                     }
-                    _ => {}
+                    other => {
+                        log::debug!(
+                            "unknown Claude assistant content block type '{other}' — skipped"
+                        );
+                    }
                 }
             }
             let marker_count = parts
@@ -1614,20 +1694,58 @@ fn extract_tool_result_content(result: &Value) -> String {
                         }
                     }
                     Some("image") => {
-                        // Inline base64 image as data URI for frontend rendering
                         let source = item.get("source");
-                        let data = source.and_then(|s| s.get("data")).and_then(|d| d.as_str());
-                        let media = source
-                            .and_then(|s| s.get("media_type"))
-                            .and_then(|m| m.as_str())
-                            .unwrap_or("image/png");
-                        if let Some(b64) = data {
-                            parts.push(format!("[Image: source: data:{};base64,{}]", media, b64));
-                        } else {
-                            parts.push("[Image]".to_string());
+                        let source_type = source
+                            .and_then(|s| s.get("type"))
+                            .and_then(|t| t.as_str())
+                            .unwrap_or("base64");
+                        match source_type {
+                            "base64" => {
+                                let data =
+                                    source.and_then(|s| s.get("data")).and_then(|d| d.as_str());
+                                let media = source
+                                    .and_then(|s| s.get("media_type"))
+                                    .and_then(|m| m.as_str())
+                                    .unwrap_or("image/png");
+                                if let Some(b64) = data {
+                                    parts.push(format!(
+                                        "[Image: source: data:{};base64,{}]",
+                                        media, b64
+                                    ));
+                                } else {
+                                    parts.push("[Image]".to_string());
+                                }
+                            }
+                            "url" => {
+                                if let Some(url) =
+                                    source.and_then(|s| s.get("url")).and_then(|u| u.as_str())
+                                {
+                                    parts.push(format!("[Image: source: {url}]"));
+                                } else {
+                                    parts.push("[Image]".to_string());
+                                }
+                            }
+                            other => {
+                                log::debug!(
+                                    "unknown Claude tool_result image source.type '{other}'"
+                                );
+                                parts.push("[Image]".to_string());
+                            }
                         }
                     }
-                    _ => {}
+                    Some("tool_reference") => {
+                        let name = item
+                            .get("tool_name")
+                            .and_then(|n| n.as_str())
+                            .unwrap_or("?");
+                        parts.push(format!("[Tool: {name}]"));
+                    }
+                    Some(other) => {
+                        log::debug!(
+                            "unknown Claude tool_result content block type '{other}' — skipped"
+                        );
+                    }
+                    None => {}
                 }
             }
             parts.join("\n")
@@ -1909,6 +2027,118 @@ mod tests {
                 "{marker} should be visible as a system event"
             );
         }
+    }
+
+    #[test]
+    fn parse_session_file_surfaces_mode_transitions_and_dedupes_them() {
+        let dir = TempDir::new().unwrap();
+        let file = dir.path().join("session.jsonl");
+        // Five mode lines: normal → plan → plan (dup) → normal → accept_edits.
+        // Expected emissions: [mode] plan, [mode] normal, [mode] accept_edits.
+        //   - Leading `normal` is suppressed (it matches the default).
+        //   - Duplicate `plan` is deduped.
+        //   - Transition back to `normal` is still emitted.
+        let lines = [
+            r#"{"type":"mode","mode":"normal","sessionId":"s"}"#,
+            r#"{"type":"user","timestamp":"2026-04-25T02:03:00Z","message":{"content":"hi"}}"#,
+            r#"{"type":"mode","mode":"plan","sessionId":"s"}"#,
+            r#"{"type":"mode","mode":"plan","sessionId":"s"}"#,
+            r#"{"type":"mode","mode":"normal","sessionId":"s"}"#,
+            r#"{"type":"mode","mode":"accept_edits","sessionId":"s"}"#,
+        ];
+        fs::write(&file, lines.join("\n")).unwrap();
+
+        let parsed = parse_session_file(&file).expect("parsed");
+        let mode_msgs: Vec<&str> = parsed
+            .messages
+            .iter()
+            .filter_map(|m| {
+                if m.content.starts_with("[mode]") {
+                    Some(m.content.as_str())
+                } else {
+                    None
+                }
+            })
+            .collect();
+        assert_eq!(
+            mode_msgs,
+            vec!["[mode] plan", "[mode] normal", "[mode] accept_edits"]
+        );
+    }
+
+    #[test]
+    fn parse_session_file_does_not_emit_leading_mode_normal_for_default_state() {
+        // The common case: session opens with `mode: normal` (the default).
+        // We must NOT inject a [mode] normal System message at the top —
+        // that would clutter every Claude session's timeline.
+        let dir = TempDir::new().unwrap();
+        let file = dir.path().join("session.jsonl");
+        let lines = [
+            r#"{"type":"mode","mode":"normal","sessionId":"s"}"#,
+            r#"{"type":"user","timestamp":"2026-04-25T02:03:00Z","message":{"content":"hi"}}"#,
+            r#"{"type":"mode","mode":"normal","sessionId":"s"}"#,
+        ];
+        fs::write(&file, lines.join("\n")).unwrap();
+        let parsed = parse_session_file(&file).expect("parsed");
+        assert!(
+            !parsed
+                .messages
+                .iter()
+                .any(|m| m.content.starts_with("[mode]")),
+            "no [mode] messages should appear when only `normal` was seen; got {:?}",
+            parsed
+                .messages
+                .iter()
+                .map(|m| m.content.as_str())
+                .collect::<Vec<_>>()
+        );
+    }
+
+    #[test]
+    fn parse_session_file_handles_tool_reference_inside_tool_result_content() {
+        let dir = TempDir::new().unwrap();
+        let file = dir.path().join("session.jsonl");
+        let assistant = r##"{"type":"assistant","uuid":"a1","timestamp":"2026-04-25T02:03:00Z","message":{"id":"msg-1","model":"claude-opus-4-7","role":"assistant","content":[{"type":"tool_use","id":"toolu_ref","name":"ToolSearch","input":{"query":"task"}}]}}"##;
+        let tool_result = r##"{"type":"user","timestamp":"2026-04-25T02:03:01Z","message":{"content":[{"type":"tool_result","tool_use_id":"toolu_ref","content":[{"type":"tool_reference","tool_name":"TaskCreate"},{"type":"tool_reference","tool_name":"TaskUpdate"}]}]},"toolUseResult":{"matches":[],"total_deferred_tools":2}}"##;
+        fs::write(&file, format!("{assistant}\n{tool_result}\n")).unwrap();
+
+        let parsed = parse_session_file(&file).expect("parsed");
+        let tool_msg = parsed
+            .messages
+            .iter()
+            .find(|m| m.tool_name.as_deref() == Some("ToolSearch"))
+            .expect("tool message");
+        assert!(
+            tool_msg.content.contains("[Tool: TaskCreate]"),
+            "tool_reference parts must render as [Tool: <name>], got {:?}",
+            tool_msg.content
+        );
+        assert!(tool_msg.content.contains("[Tool: TaskUpdate]"));
+    }
+
+    #[test]
+    fn parse_session_file_surfaces_async_agent_status() {
+        let dir = TempDir::new().unwrap();
+        let file = dir.path().join("session.jsonl");
+        let assistant = r##"{"type":"assistant","uuid":"a1","timestamp":"2026-04-25T02:03:00Z","message":{"id":"msg-1","model":"claude-opus-4-7","role":"assistant","content":[{"type":"tool_use","id":"toolu_a","name":"Task","input":{"description":"audit","prompt":"go","subagent_type":"general-purpose"}}]}}"##;
+        let tool_result = r##"{"type":"user","timestamp":"2026-04-25T02:03:01Z","message":{"content":[{"type":"tool_result","tool_use_id":"toolu_a","content":[{"type":"text","text":"launched"}]}]},"toolUseResult":{"agentId":"abc","isAsync":true,"status":"async_launched"}}"##;
+        fs::write(&file, format!("{assistant}\n{tool_result}\n")).unwrap();
+
+        let parsed = parse_session_file(&file).expect("parsed");
+        let tool_msg = parsed
+            .messages
+            .iter()
+            .find(|m| {
+                m.tool_metadata
+                    .as_ref()
+                    .is_some_and(|md| md.raw_name == "Task")
+            })
+            .expect("Task tool message");
+        let status = tool_msg
+            .tool_metadata
+            .as_ref()
+            .and_then(|md| md.status.as_deref());
+        assert_eq!(status, Some("async_launched"));
     }
 
     #[test]
