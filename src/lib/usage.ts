@@ -48,7 +48,6 @@ export function makeEmptyUsageStats(): UsageStats {
     project_costs: [],
     recent_sessions: [],
     provider_session_counts: [],
-    prev_period: undefined,
   };
 }
 
@@ -160,6 +159,6 @@ export function trendPercent(
 ): number | null {
   if (!prev) return null;
   const prevVal = prev[field] as number;
-  if (prevVal === 0) return current > 0 ? null : null;
+  if (prevVal === 0) return null;
   return (current - prevVal) / prevVal;
 }

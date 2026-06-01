@@ -11,7 +11,6 @@ import {
 } from "../stores/search";
 import { useI18n } from "../i18n/index";
 import { ProviderIcon } from "../lib/icons";
-import { isMac } from "../lib/platform";
 import { createSignal } from "solid-js";
 
 function sanitizeSnippet(html: string): string {
@@ -144,7 +143,7 @@ export function SearchOverlay(props: {
               onInput={handleInput}
               onKeyDown={handleKeyDown}
             />
-            <kbd class="search-shortcut">{isMac ? "Esc" : "Esc"}</kbd>
+            <kbd class="search-shortcut">Esc</kbd>
           </div>
           <div class="search-overlay-results">
             <Show when={isSearching()}>

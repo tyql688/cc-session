@@ -8,22 +8,6 @@ export function normalizeSessionSearch(term: string): string {
   return term.trim().toLocaleLowerCase();
 }
 
-export function entrySearchText(entry: ProcessedEntry): string {
-  if (entry.type === "message") {
-    return entry.msg.content ?? "";
-  }
-  if (entry.type === "merged-tools") {
-    return entry.messages
-      .map((message) =>
-        [message.tool_name, message.tool_input, message.content]
-          .filter((value): value is string => !!value)
-          .join("\n"),
-      )
-      .join("\n");
-  }
-  return "";
-}
-
 export function entryMatchesSearch(
   entry: ProcessedEntry,
   normalizedTerm: string,

@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
   getPollWatchProviders,
-  getProviderWatchBehavior,
   getProviderWatchConfig,
 } from "./provider-watch";
 import type { Provider } from "./types";
@@ -17,11 +16,11 @@ const ALL_PROVIDERS: Provider[] = [
 ];
 
 describe("provider-watch", () => {
-  it("getProviderWatchBehavior returns config for all providers", () => {
+  it("getProviderWatchConfig returns config for all providers", () => {
     for (const key of ALL_PROVIDERS) {
-      const watch = getProviderWatchBehavior(key);
-      expect(watch).toBeDefined();
-      expect(watch.debounceMs).toBeGreaterThan(0);
+      const config = getProviderWatchConfig(key);
+      expect(config).toBeDefined();
+      expect(config.debounceMs).toBeGreaterThan(0);
     }
   });
 

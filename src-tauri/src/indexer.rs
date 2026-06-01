@@ -83,13 +83,14 @@ impl Indexer {
             stats_batch: Vec<(String, Vec<TokenStatRow>)>,
         }
 
-        let provider_refs: Vec<&Box<dyn SessionProvider>> = self
+        let provider_refs: Vec<&dyn SessionProvider> = self
             .providers
             .iter()
             .filter(|p| match filter {
                 Some(allowed) => allowed.contains(&p.provider()),
                 None => true,
             })
+            .map(|p| p.as_ref())
             .collect();
 
         let works: Result<Vec<ProviderWork>, String> = provider_refs
@@ -151,6 +152,7 @@ impl Indexer {
         // Phase 2 (sequential, DB writer): commit each provider's snapshot.
         // SQLite has a single writer mutex; serializing here avoids contention
         // and keeps each provider's transaction atomic.
+        let image_service = ImageCacheService::new(&self.data_dir);
         for ProviderWork {
             provider_kind,
             sessions,
@@ -174,7 +176,6 @@ impl Indexer {
                 );
             }
 
-            let image_service = ImageCacheService::new(&self.data_dir);
             for parsed in sessions {
                 image_service.cache_images(&parsed.messages);
             }

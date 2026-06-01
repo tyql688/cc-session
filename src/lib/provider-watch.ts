@@ -24,12 +24,6 @@ const WATCH_BEHAVIORS: Record<Provider, ProviderWatchBehavior> = {
   "cc-mirror": { debounceMs: 300 },
 };
 
-export function getProviderWatchBehavior(
-  provider: Provider,
-): ProviderWatchBehavior {
-  return WATCH_BEHAVIORS[provider];
-}
-
 export function getProviderWatchConfig(
   provider: Provider,
 ): ProviderWatchConfig {

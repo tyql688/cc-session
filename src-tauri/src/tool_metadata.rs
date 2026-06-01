@@ -106,7 +106,7 @@ fn tool_category(canonical_name: &str, raw_name: &str) -> String {
     match canonical_name {
         "Bash" => "shell",
         "Read" | "Write" | "Edit" | "Delete" => "file",
-        "Grep" | "Glob" | "Search" | "ToolSearch" | "ListMcpResourcesTool" => "search",
+        "Grep" | "Glob" | "ToolSearch" | "ListMcpResourcesTool" => "search",
         "Agent" | "SendMessage" | "ListAgents" => "agent",
         "TaskCreate" | "TaskUpdate" | "TaskList" | "TaskStop" => "task",
         "FollowupTask" => "task",
@@ -115,7 +115,7 @@ fn tool_category(canonical_name: &str, raw_name: &str) -> String {
         "DynamicTool" => "tool",
         "Skill" => "skill",
         "CronCreate" | "CronDelete" | "ScheduleWakeup" => "cron",
-        "EnterPlanMode" | "ExitPlanMode" | "Plan" => "plan",
+        "Plan" => "plan",
         "AskUserQuestion" | "RequestPermissions" => "interaction",
         "SQL" => "database",
         _ => "unknown",

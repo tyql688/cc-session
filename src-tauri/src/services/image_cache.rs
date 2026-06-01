@@ -92,13 +92,8 @@ impl ImageCacheService {
     }
 
     pub fn resolve_cached_path(&self, original_path: &str) -> Option<PathBuf> {
-        let cache_name = Self::cache_name(original_path);
-        let cache_path = self.cache_dir.join(&cache_name);
-        if cache_path.exists() {
-            Some(cache_path)
-        } else {
-            None
-        }
+        let cache_path = self.cache_dir.join(Self::cache_name(original_path));
+        cache_path.exists().then_some(cache_path)
     }
 
     /// Remove every cache entry referenced by `messages`. Used when a

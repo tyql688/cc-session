@@ -103,7 +103,6 @@ function clearSearch() {
 
 export {
   query,
-  setQuery,
   results,
   isSearching,
   search,
