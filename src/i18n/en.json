@@ -1,5 +1,5 @@
 {
-  "app": { "title": "CC Session", "subtitle": "Session Explorer" },
+  "app": {},
   "error": {
     "title": "Something went wrong",
     "message": "An unexpected error occurred.",
@@ -32,7 +32,6 @@
   },
   "explorer": {
     "title": "Explorer",
-    "providers": "Providers",
     "noProject": "(No Project)",
     "selected": "selected",
     "today": "Today",
@@ -50,7 +49,6 @@
   "session": {
     "messages": "messages",
     "export": "Export",
-    "copy": "Copy",
     "delete": "Delete",
     "resume": "Resume",
     "created": "Created",
@@ -60,7 +58,6 @@
     "favoriteAdd": "Add to favorites",
     "favoriteRemove": "Remove from favorites",
     "loading": "Loading session...",
-    "more": "more...",
     "filterUser": "User",
     "filterAssistant": "Assistant",
     "filterTool": "Tool",
@@ -92,7 +89,6 @@
     "exportOk": "Exported successfully",
     "clearIndexOk": "Index cleared",
     "refreshUsageStarted": "Usage refresh started in the background",
-    "clearUsageOk": "Usage stats cleared",
     "refreshUsageOk": "Usage refreshed",
     "reloadFailed": "Failed to reload session",
     "subagentNotFound": "Subagent session not found",
@@ -105,8 +101,7 @@
   },
   "editor": {
     "recentSessions": "Recent Sessions",
-    "emptyHint": "Select a session from the explorer to view",
-    "noTabsTitle": "Welcome to CC Session"
+    "emptyHint": "Select a session from the explorer to view"
   },
   "export": {
     "title": "Export Session",
@@ -114,7 +109,10 @@
     "markdown": "Markdown",
     "html": "HTML"
   },
-  "inputDialog": { "newTitle": "New title:", "rename": "Rename" },
+  "inputDialog": {
+    "newTitle": "New title:",
+    "rename": "Rename"
+  },
   "confirm": {
     "deleteTitle": "Delete Session",
     "deleteMsg": "Are you sure you want to delete this session? This cannot be undone.",
@@ -126,7 +124,6 @@
     "sessions": "sessions",
     "providers": "providers",
     "lastScan": "Last scan",
-    "todayCost": "Today",
     "justNow": "just now",
     "indexing": "Indexing...",
     "themeLight": "Light",
@@ -166,10 +163,8 @@
     "closeOthers": "Close Others",
     "closeAll": "Close All",
     "closeToRight": "Close to the Right",
-    "openInNewTab": "Open in New Tab",
     "copySessionId": "Copy Session ID",
     "copyResumeCommand": "Copy Resume Command",
-    "openInTerminal": "Open in Terminal",
     "resumeSession": "Resume Session",
     "delete": "Delete",
     "export": "Export",
@@ -214,30 +209,20 @@
     "languageChinese": "Chinese",
     "enabled": "Enabled",
     "disabled": "Disabled",
-    "path": "Path",
-    "providerEnabled": "Enabled",
-    "providerDisabled": "Disabled",
     "clearIndexConfirm": "Clear the entire index? Sessions will be re-scanned on next rebuild.",
     "rebuildIndexNote": "Rebuild Index rescans your local session sources and recomputes usage. It does not delete sessions. Clear Index wipes the local database only; rebuilding imports sessions again.",
     "rebuildShortcutNote": "Manual rebuild shortcut: Cmd/Ctrl + R. It now runs in the background and notifies when complete.",
-    "pricingCatalog": "Pricing Catalog",
-    "pricingUpdatedAt": "Pricing Updated",
     "pricingNotFetched": "Not fetched yet",
     "refreshPricingCatalog": "Refresh Pricing",
-    "pricingCatalogNote": "Refresh pricing to fetch the latest model rate manifest and cache it locally. Rebuild the index afterwards to apply updated rates to stored usage rows.",
     "timeGrouping": "Group by Time",
     "timeGroupingDesc": "Group sessions by today, this week, this month, and older",
     "showOrphans": "Show Subagents",
     "showOrphansDesc": "Show subagent sessions in the tree",
     "checkUpdate": "Check for Updates",
-    "updateAvailable": "Update available",
-    "updateConfirm": "Download and install now?",
     "updating": "Updating...",
-    "updateReady": "available",
     "upToDate": "Up to date",
     "updateFailed": "Check failed",
     "blockedFolders": "Blocked Folders",
-    "blockedFoldersDesc": "Sessions from these paths are hidden",
     "noBlockedFolders": "No blocked folders",
     "unblock": "Unblock"
   },
@@ -273,7 +258,6 @@
     "sessions": "sessions",
     "turns": "turns",
     "tokens": "tokens",
-    "cacheHit": "cache hit",
     "estCost": "estimated cost",
     "allProviders": "All",
     "rangeToday": "Today",
@@ -303,9 +287,6 @@
     "rebuildHint": "Token data not yet indexed. Rebuild index in Settings to populate.",
     "pricingNote": "Estimated from official pricing where available",
     "hoverHint": "Hover a day to inspect the provider mix",
-    "clearUsage": "Clear usage",
-    "clearUsageConfirm": "Clear only usage stats? Sessions stay intact. Rebuild Index will recompute usage from existing sessions.",
-    "clearUsageConfirmSelected": "Clear usage stats for the currently selected {count} provider(s)? Sessions stay intact. Rebuild Index will recompute usage from existing sessions.",
     "refreshUsage": "Refresh usage",
     "refreshUsageConfirm": "Refresh usage now? This will clear cached usage stats and rebuild the index. Sessions themselves are not deleted.",
     "refreshUsageRunning": "Refreshing usage in the background. The page will update automatically when it finishes.",
