@@ -1,4 +1,4 @@
-import { For, JSX } from "solid-js";
+import { For, type JSX } from "solid-js";
 import type {
   Code,
   FootnoteDefinition,
@@ -98,19 +98,17 @@ function renderParagraph(
   }
 
   return (
-    <>
-      <For each={segments}>
-        {(segment) =>
-          segment.type === "phrasing" ? (
-            <p class="msg-text-line">
-              {renderInlineNodes(segment.children, context)}
-            </p>
-          ) : (
-            <div>{renderImageNode(segment.node, context)}</div>
-          )
-        }
-      </For>
-    </>
+    <For each={segments}>
+      {(segment) =>
+        segment.type === "phrasing" ? (
+          <p class="msg-text-line">
+            {renderInlineNodes(segment.children, context)}
+          </p>
+        ) : (
+          <div>{renderImageNode(segment.node, context)}</div>
+        )
+      }
+    </For>
   );
 }
 
@@ -229,19 +227,17 @@ function renderListItemParagraph(
   }
 
   return (
-    <>
-      <For each={segments}>
-        {(segment) =>
-          segment.type === "phrasing" ? (
-            <p class="msg-text-line">
-              {renderInlineNodes(segment.children, context)}
-            </p>
-          ) : (
-            <div>{renderImageNode(segment.node, context)}</div>
-          )
-        }
-      </For>
-    </>
+    <For each={segments}>
+      {(segment) =>
+        segment.type === "phrasing" ? (
+          <p class="msg-text-line">
+            {renderInlineNodes(segment.children, context)}
+          </p>
+        ) : (
+          <div>{renderImageNode(segment.node, context)}</div>
+        )
+      }
+    </For>
   );
 }
 

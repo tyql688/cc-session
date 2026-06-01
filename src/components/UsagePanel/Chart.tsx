@@ -84,90 +84,84 @@ export function Chart(props: ChartProps) {
       </div>
 
       <Show when={props.dailyChartData().dates.length > 0}>
-        <>
-          <div class="usage-chart-wrap">
-            <div class="usage-daily-bars">
-              <For each={props.dailyChartData().dates}>
-                {(date) => {
-                  const providers = props.dailyChartData().byDate.get(date)!;
-                  const max = props.dailyChartData().maxValue;
-                  const active = () => props.hoveredDate() === date;
-                  return (
-                    <button
-                      class={`usage-bar-col${active() ? " active" : ""}`}
-                      onBlur={() => props.setHoveredDate(null)}
-                      onFocus={() => props.setHoveredDate(date)}
-                      onMouseEnter={() => props.setHoveredDate(date)}
-                      onMouseLeave={() => props.setHoveredDate(null)}
-                      title={`${date} · ${props.fmtChartValue(
-                        [...providers.values()].reduce(
-                          (sum, value) => sum + value,
-                          0,
-                        ),
-                      )}`}
-                      type="button"
-                    >
-                      <For
-                        each={props
-                          .dailyChartData()
-                          .providers.slice()
-                          .reverse()}
-                      >
-                        {(provider) => {
-                          const val = providers.get(provider) ?? 0;
-                          const color = () =>
-                            props.providerInfo(provider).color;
-                          return (
-                            <Show when={val > 0}>
-                              <span
-                                class={`usage-bar-seg${
-                                  props.hoveredDate() && !active()
-                                    ? " usage-bar-seg-muted"
-                                    : ""
-                                }`}
-                                style={{
-                                  height: `${Math.max(4, (val / max) * 100)}%`,
-                                  background: color(),
-                                }}
-                              />
-                            </Show>
-                          );
-                        }}
-                      </For>
-                    </button>
-                  );
-                }}
-              </For>
-            </div>
-            <div class="usage-bar-labels">
-              <For each={props.dailyChartData().dates}>
-                {(date) => (
-                  <span
-                    class={props.hoveredDate() === date ? "active" : undefined}
+        <div class="usage-chart-wrap">
+          <div class="usage-daily-bars">
+            <For each={props.dailyChartData().dates}>
+              {(date) => {
+                const providers = props.dailyChartData().byDate.get(date)!;
+                const max = props.dailyChartData().maxValue;
+                const active = () => props.hoveredDate() === date;
+                return (
+                  <button
+                    class={`usage-bar-col${active() ? " active" : ""}`}
+                    onBlur={() => props.setHoveredDate(null)}
+                    onFocus={() => props.setHoveredDate(date)}
+                    onMouseEnter={() => props.setHoveredDate(date)}
+                    onMouseLeave={() => props.setHoveredDate(null)}
+                    title={`${date} · ${props.fmtChartValue(
+                      [...providers.values()].reduce(
+                        (sum, value) => sum + value,
+                        0,
+                      ),
+                    )}`}
+                    type="button"
                   >
-                    {date.slice(5)}
-                  </span>
-                )}
-              </For>
-            </div>
+                    <For
+                      each={props.dailyChartData().providers.slice().reverse()}
+                    >
+                      {(provider) => {
+                        const val = providers.get(provider) ?? 0;
+                        const color = () => props.providerInfo(provider).color;
+                        return (
+                          <Show when={val > 0}>
+                            <span
+                              class={`usage-bar-seg${
+                                props.hoveredDate() && !active()
+                                  ? " usage-bar-seg-muted"
+                                  : ""
+                              }`}
+                              style={{
+                                height: `${Math.max(4, (val / max) * 100)}%`,
+                                background: color(),
+                              }}
+                            />
+                          </Show>
+                        );
+                      }}
+                    </For>
+                  </button>
+                );
+              }}
+            </For>
           </div>
-
-          <div class="usage-legend">
-            <For each={props.dailyChartData().providers}>
-              {(provider) => (
-                <span class="usage-legend-item">
-                  <span
-                    class="usage-provider-dot"
-                    style={{
-                      background: props.providerInfo(provider).color,
-                    }}
-                  />
-                  {props.providerInfo(provider).label}
+          <div class="usage-bar-labels">
+            <For each={props.dailyChartData().dates}>
+              {(date) => (
+                <span
+                  class={props.hoveredDate() === date ? "active" : undefined}
+                >
+                  {date.slice(5)}
                 </span>
               )}
             </For>
           </div>
-        </>
+        </div>
+
+        <div class="usage-legend">
+          <For each={props.dailyChartData().providers}>
+            {(provider) => (
+              <span class="usage-legend-item">
+                <span
+                  class="usage-provider-dot"
+                  style={{
+                    background: props.providerInfo(provider).color,
+                  }}
+                />
+                {props.providerInfo(provider).label}
+              </span>
+            )}
+          </For>
+        </div>
       </Show>
     </section>
   );

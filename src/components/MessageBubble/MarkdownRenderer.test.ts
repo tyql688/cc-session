@@ -18,7 +18,7 @@ describe("parseMarkdownAst", () => {
     expect(tree.children[0]?.type).toBe("paragraph");
 
     const paragraph = tree.children[0];
-    if (!paragraph || paragraph.type !== "paragraph") {
+    if (paragraph?.type !== "paragraph") {
       throw new Error("expected paragraph");
     }
 
@@ -29,7 +29,7 @@ describe("parseMarkdownAst", () => {
     ]);
 
     const image = paragraph.children[1];
-    if (!image || image.type !== "image") {
+    if (image?.type !== "image") {
       throw new Error("expected image node");
     }
 
@@ -43,7 +43,7 @@ describe("parseMarkdownAst", () => {
 
     expect(tree.children[0]?.type).toBe("list");
     const list = tree.children[0];
-    if (!list || list.type !== "list") {
+    if (list?.type !== "list") {
       throw new Error("expected list node");
     }
 
@@ -51,7 +51,7 @@ describe("parseMarkdownAst", () => {
 
     expect(tree.children[1]?.type).toBe("table");
     const table = tree.children[1];
-    if (!table || table.type !== "table") {
+    if (table?.type !== "table") {
       throw new Error("expected table node");
     }
 
@@ -63,7 +63,7 @@ describe("parseMarkdownAst", () => {
 
     expect(tree.children[0]?.type).toBe("paragraph");
     const paragraph = tree.children[0];
-    if (!paragraph || paragraph.type !== "paragraph") {
+    if (paragraph?.type !== "paragraph") {
       throw new Error("expected paragraph");
     }
 
@@ -81,7 +81,7 @@ describe("parseMarkdownAst", () => {
 
     expect(tree.children[0]?.type).toBe("paragraph");
     const paragraph = tree.children[0];
-    if (!paragraph || paragraph.type !== "paragraph") {
+    if (paragraph?.type !== "paragraph") {
       throw new Error("expected paragraph");
     }
 

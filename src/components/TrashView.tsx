@@ -203,7 +203,7 @@ export function TrashView(props: { onRefreshTree: () => void }) {
           >
             {isLeaf()
               ? nodeProps.node.label.length > 50
-                ? nodeProps.node.label.slice(0, 47) + "..."
+                ? `${nodeProps.node.label.slice(0, 47)}...`
                 : nodeProps.node.label
               : nodeProps.node.label}
           </span>

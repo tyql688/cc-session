@@ -35,11 +35,6 @@ function projectFromTrashPath(item: TrashMeta, unknownLabel: string): string {
     case "claude":
     case "cc-mirror":
       return segments.at(-2) || unknownLabel;
-    case "codex":
-    case "antigravity":
-    case "kimi":
-    case "opencode":
-    case "cursor":
     default:
       return unknownLabel;
   }

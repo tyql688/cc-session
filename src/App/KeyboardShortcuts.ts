@@ -64,7 +64,7 @@ export function createKeyboardHandler(
     // Cmd+1-9: Switch to tab by index
     if (mod && e.key >= "1" && e.key <= "9") {
       e.preventDefault();
-      const idx = parseInt(e.key) - 1;
+      const idx = parseInt(e.key, 10) - 1;
       const tabs = deps.openTabs();
       if (idx < tabs.length) {
         deps.setActiveTabId(tabs[idx].id);

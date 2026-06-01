@@ -27,7 +27,7 @@ const QUADRANT_KEYWORDS = new Set([
 
 export function normalizeMermaidCode(code: string): string {
   const firstNonEmpty = code.split("\n").find((l) => l.trim().length > 0);
-  if (!firstNonEmpty || !firstNonEmpty.trim().startsWith("quadrantChart")) {
+  if (!firstNonEmpty?.trim().startsWith("quadrantChart")) {
     return code;
   }
   return code

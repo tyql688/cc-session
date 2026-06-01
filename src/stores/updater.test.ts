@@ -26,8 +26,9 @@ describe("updater store", () => {
       downloadAndInstall: vi.fn(),
     } as unknown as Awaited<ReturnType<typeof check>>);
 
-    const { checkForUpdate, phase, availableVersion } =
-      await import("./updater");
+    const { checkForUpdate, phase, availableVersion } = await import(
+      "./updater"
+    );
     await checkForUpdate();
 
     expect(phase()).toBe("available");

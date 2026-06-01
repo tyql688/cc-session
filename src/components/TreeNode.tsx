@@ -87,7 +87,7 @@ export function formatSessionLabel(raw: string, fallback = "Untitled"): string {
   }
 
   if (label.length > 40) {
-    label = label.slice(0, 37) + "...";
+    label = `${label.slice(0, 37)}...`;
   }
 
   return label || fallback;

@@ -39,7 +39,7 @@ function parseSearchQuery(raw: string): SearchFilters {
   const afterStr = extract("after");
   if (afterStr) {
     const d = Date.parse(afterStr);
-    if (!isNaN(d)) {
+    if (!Number.isNaN(d)) {
       after = Math.floor(d / 1000);
     }
   }
@@ -47,7 +47,7 @@ function parseSearchQuery(raw: string): SearchFilters {
   const beforeStr = extract("before");
   if (beforeStr) {
     const d = Date.parse(beforeStr);
-    if (!isNaN(d)) {
+    if (!Number.isNaN(d)) {
       before = Math.floor(d / 1000);
     }
   }

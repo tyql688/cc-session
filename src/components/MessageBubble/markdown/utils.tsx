@@ -1,4 +1,4 @@
-import { For, JSX } from "solid-js";
+import { For, type JSX } from "solid-js";
 
 export function wrapHighlight(text: string, term?: string): JSX.Element {
   if (!term) return <>{text}</>;
@@ -7,17 +7,15 @@ export function wrapHighlight(text: string, term?: string): JSX.Element {
   const lowerTerm = term.toLowerCase();
 
   return (
-    <>
-      <For each={parts}>
-        {(part) =>
-          part.toLowerCase() === lowerTerm ? (
-            <mark class="search-highlight">{part}</mark>
-          ) : (
-            <>{part}</>
-          )
-        }
-      </For>
-    </>
+    <For each={parts}>
+      {(part) =>
+        part.toLowerCase() === lowerTerm ? (
+          <mark class="search-highlight">{part}</mark>
+        ) : (
+          part
+        )
+      }
+    </For>
   );
 }
 

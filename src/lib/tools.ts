@@ -158,7 +158,7 @@ export function toolSummary(message: Message): string {
       case "Grep": {
         const pattern = firstString(obj, ["pattern", "query", "Query"]);
         const path = firstString(obj, ["path", "SearchPath"]);
-        return `/${pattern}/` + (path ? ` ${shortenHomePath(path)}` : "");
+        return `/${pattern}/${path ? ` ${shortenHomePath(path)}` : ""}`;
       }
       case "Agent":
         return firstString(obj, ["description", "prompt"]);

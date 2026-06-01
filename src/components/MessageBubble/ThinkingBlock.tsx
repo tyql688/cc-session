@@ -4,7 +4,7 @@ export function ThinkingBlock(props: { content: string }) {
   const [expanded, setExpanded] = createSignal(false);
   const preview = () => {
     const first = props.content.split("\n")[0];
-    return first.length > 80 ? first.slice(0, 80) + "..." : first;
+    return first.length > 80 ? `${first.slice(0, 80)}...` : first;
   };
 
   return (

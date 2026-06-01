@@ -1,12 +1,12 @@
 export function parseTimestamp(ts: string | null): number | null {
   if (!ts) return null;
   const n = Number(ts);
-  if (!isNaN(n) && n > 0) {
+  if (!Number.isNaN(n) && n > 0) {
     // If it looks like seconds (< 2e10), convert to ms
     return n < 2e10 ? n * 1000 : n;
   }
   const d = Date.parse(ts);
-  return isNaN(d) ? null : d;
+  return Number.isNaN(d) ? null : d;
 }
 
 export function formatTimeOnly(ms: number): string {

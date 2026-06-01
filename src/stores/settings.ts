@@ -195,7 +195,7 @@ export function removeBlockedFolder(path: string) {
 
 export function isPathBlocked(path: string): boolean {
   return blockedFolders().some(
-    (blocked) => path === blocked || path.startsWith(blocked + "/"),
+    (blocked) => path === blocked || path.startsWith(`${blocked}/`),
   );
 }
 
