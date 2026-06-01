@@ -3,6 +3,7 @@ import { defineConfig } from "vitest/config";
 export default defineConfig({
   test: {
     environment: "node",
-    include: ["src/**/*.test.ts"],
+    // Include .test.tsx too — component render tests must not be silently skipped.
+    include: ["src/**/*.test.{ts,tsx}"],
   },
 });

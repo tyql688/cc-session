@@ -1,8 +1,11 @@
 import js from "@eslint/js";
 import tseslint from "typescript-eslint";
 import solidPlugin from "eslint-plugin-solid";
-import prettier from "eslint-config-prettier";
 
+// Formatting is owned by Biome (biome.json); ESLint keeps only typescript-eslint
+// correctness rules + eslint-plugin-solid reactivity rules that Biome cannot
+// replicate. No formatting rules are enabled here, so there is nothing for an
+// eslint-config-prettier-style disabler to turn off.
 export default tseslint.config(
   { ignores: ["node_modules/", "dist/", "src-tauri/", ".reference/"] },
   js.configs.recommended,
@@ -26,5 +29,4 @@ export default tseslint.config(
       "solid/components-return-once": "off",
     },
   },
-  prettier,
 );

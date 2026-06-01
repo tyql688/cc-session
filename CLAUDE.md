@@ -165,6 +165,12 @@ Resume: Claude `--resume`, Codex `resume`, Antigravity `agy --conversation <id>`
 
 ## Code Standards
 
+> **Canonical, enforcement-mapped guides:** [`style/ts.md`](style/ts.md) and [`style/rust.md`](style/rust.md).
+> Each rule there lists its **enforcing tool** (tsc / biome / eslint / fmt / clippy / review).
+> The section below is the always-loaded condensed copy; when they disagree, `style/*.md` wins.
+> Local tooling: `biome.json`, `eslint.config.js`, `src-tauri/{rustfmt,clippy}.toml`, `lefthook.yml`
+> (pre-commit: biome+eslint on staged files; pre-push: tsc/test/cargo fmt+clippy+test).
+
 Code review (human or agent) **rejects** anything that violates the rules below. They're concrete because most "be reasonable" guidelines are unactionable.
 
 ### Rust

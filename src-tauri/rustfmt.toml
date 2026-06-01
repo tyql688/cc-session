@@ -1,0 +1,11 @@
+# Stable-toolchain rustfmt config. Only STABLE options are set so
+# `cargo fmt --check` is deterministic across rustc releases and in CI.
+# These values match rustfmt's defaults — they are pinned here intentionally
+# so a future toolchain default change cannot silently reformat the tree.
+#
+# Nightly-only niceties are deliberately omitted (they would need a separate
+# nightly fmt job to enforce, and unenforced config drifts):
+#   group_imports = "StdExternalCrate"
+#   imports_granularity = "Crate"
+edition = "2021"
+max_width = 100

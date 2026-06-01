@@ -1,0 +1,24 @@
+# Clippy configuration — machine-enforces parts of style/rust.md.
+# CI runs `cargo clippy --all-targets --all-features -- -D warnings`, so every
+# warning enabled here is effectively a hard gate.
+
+# Ban eprintln! in all code (style/rust.md §2). Verified: zero production uses
+# today, so this is enforced immediately via the default `disallowed_macros` lint.
+disallowed-macros = ["std::eprintln"]
+
+# Complexity smell guards (default-on clippy lints). Kept at sane ceilings; a
+# little headroom over the rustc defaults for the Message/handler constructors
+# introduced during the refactor.
+too-many-arguments-threshold = 8
+type-complexity-threshold = 250
+
+# unwrap()/expect() are forbidden in production but free in tests. These keys
+# scope `clippy::unwrap_used` / `clippy::expect_used` (enabled as warn in
+# src/lib.rs) so #[cfg(test)] code is exempt.
+allow-unwrap-in-tests = true
+allow-expect-in-tests = true
+
+# `cognitive_complexity` is a nursery lint (off by default). The threshold is
+# pre-staged here; enable `#![warn(clippy::cognitive_complexity)]` in lib.rs only
+# after the Wave 2/4 method splits bring the big parser methods under it.
+cognitive-complexity-threshold = 30

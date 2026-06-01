@@ -32,11 +32,11 @@ jobs:
       - name: Type check
         run: npx tsc --noEmit
 
-      - name: Lint
+      - name: Lint (eslint-solid)
         run: npx eslint src/
 
-      - name: Format check
-        run: npx prettier --check "src/**/*.{ts,tsx,css}"
+      - name: Biome check (format + lint)
+        run: npx biome check src/
 
       - name: Frontend tests
         run: npm test
