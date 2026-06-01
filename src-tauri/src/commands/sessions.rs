@@ -7,7 +7,7 @@ use tauri::State;
 
 use crate::db::Database;
 use crate::error::{CommandError, CommandResult};
-use crate::models::{BatchResult, Message, Provider, SessionDetail, SessionMeta, TokenTotals};
+use crate::models::{Message, Provider, SessionDetail, SessionMeta, TokenTotals};
 use crate::services::load_cancel::{self, CancelFlag};
 use crate::services::{load_session_meta, SessionLifecycleService, SourceSyncService};
 
@@ -569,20 +569,6 @@ pub async fn delete_session(session_id: String, state: State<'_, AppState>) -> C
     .await
     .context("task join error")?
     .map_err(CommandError::from)
-}
-
-#[tauri::command]
-pub async fn delete_sessions_batch(
-    items: Vec<String>,
-    state: State<'_, AppState>,
-) -> CommandResult<BatchResult> {
-    let state = state.inner().clone();
-    let result = tokio::task::spawn_blocking(move || {
-        SessionLifecycleService::new(&state.db).purge_sessions(&items)
-    })
-    .await
-    .context("task join error")?;
-    Ok(result)
 }
 
 #[tauri::command]

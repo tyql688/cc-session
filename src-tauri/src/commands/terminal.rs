@@ -3,7 +3,6 @@ use tauri::State;
 
 use crate::db::Database;
 use crate::error::{CommandError, CommandResult};
-use crate::models::Provider;
 use crate::services::load_session_meta;
 use crate::terminal;
 
@@ -64,56 +63,6 @@ fn resolve_resume_target(db: &Database, session_id: &str) -> anyhow::Result<Resu
 
 pub(crate) fn get_resume_command_for_db(db: &Database, session_id: &str) -> anyhow::Result<String> {
     Ok(resolve_resume_target(db, session_id)?.command)
-}
-
-/// Shell metacharacters that must never appear in a terminal command.
-const SHELL_META: &[char] = &[
-    '&', ';', '|', '`', '$', '(', ')', '{', '}', '<', '>', '\n', '\r',
-];
-
-#[tauri::command]
-pub async fn open_in_terminal(
-    command: String,
-    cwd: Option<String>,
-    terminal_app: String,
-) -> CommandResult<()> {
-    tokio::task::spawn_blocking(move || open_in_terminal_sync(command, cwd, terminal_app))
-        .await
-        .context("task join error")?
-}
-
-fn open_in_terminal_sync(
-    command: String,
-    cwd: Option<String>,
-    terminal_app: String,
-) -> CommandResult<()> {
-    // Reject any shell metacharacters to prevent command injection
-    if command.chars().any(|c| SHELL_META.contains(&c)) {
-        return Err(anyhow!("command rejected: contains shell metacharacters").into());
-    }
-
-    // Must match: <provider> <flag> <id> or <provider> --flag=<id> (e.g. agent --resume=xxx)
-    let parts: Vec<&str> = command.split_whitespace().collect();
-    if parts.len() < 2 {
-        return Err(anyhow!("command rejected: expected '<provider> <flag> <session_id>'").into());
-    }
-
-    let cmd_name = parts[0];
-    // Security: only allow known CLI commands or discovered cc-mirror variants.
-    let is_allowed = Provider::all().iter().any(|p| {
-        !p.descriptor().cli_command().is_empty() && p.descriptor().cli_command() == cmd_name
-    }) || is_known_cc_mirror_variant(cmd_name);
-
-    if !is_allowed {
-        return Err(anyhow!("command rejected: unknown provider '{cmd_name}'").into());
-    }
-
-    terminal::launch_terminal(&terminal_app, &command, cwd.as_deref()).map_err(CommandError::from)
-}
-
-/// Check if a command name matches a discovered cc-mirror variant.
-fn is_known_cc_mirror_variant(name: &str) -> bool {
-    crate::providers::cc_mirror::is_known_variant_command(name)
 }
 
 /// Resume a session: looks up cwd from DB, builds command, launches terminal

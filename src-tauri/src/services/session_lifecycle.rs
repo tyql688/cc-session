@@ -97,27 +97,6 @@ impl<'a> SessionLifecycleService<'a> {
         Ok(())
     }
 
-    pub fn purge_sessions(&self, session_ids: &[String]) -> crate::models::BatchResult {
-        let mut succeeded = 0u32;
-        let mut failed = 0u32;
-        let mut errors = Vec::new();
-        for session_id in session_ids {
-            match self.purge_session(session_id) {
-                Ok(()) => succeeded += 1,
-                Err(e) => {
-                    log::warn!("batch purge failed for {session_id}: {e}");
-                    errors.push(format!("{session_id}: {e}"));
-                    failed += 1;
-                }
-            }
-        }
-        crate::models::BatchResult {
-            succeeded,
-            failed,
-            errors,
-        }
-    }
-
     pub fn trash_sessions(&self, session_ids: &[String]) -> crate::models::BatchResult {
         let mut succeeded = 0u32;
         let mut failed = 0u32;

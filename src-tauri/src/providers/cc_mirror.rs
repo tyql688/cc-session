@@ -146,25 +146,6 @@ fn discover_variants(mirror_root: &Path) -> Vec<Variant> {
     variants
 }
 
-pub(crate) fn is_known_variant_command(name: &str) -> bool {
-    let Some(home_dir) = dirs::home_dir() else {
-        return false;
-    };
-    let mirror_root = home_dir.join(".cc-mirror");
-    if !mirror_root.exists() {
-        return false;
-    }
-
-    let candidate = sanitize_command_name(name);
-    if candidate.is_empty() {
-        return false;
-    }
-
-    discover_variants(&mirror_root)
-        .iter()
-        .any(|variant| variant.command_name == candidate || variant.dir_name == candidate)
-}
-
 fn resolve_variant<'a>(
     provider: &'a CcMirrorProvider,
     variant_name: Option<&str>,

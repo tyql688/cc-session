@@ -222,14 +222,6 @@ export async function getProviderSnapshots(): Promise<ProviderSnapshot[]> {
   return invoke<ProviderSnapshot[]>("get_provider_snapshots");
 }
 
-export async function openInTerminal(
-  command: string,
-  cwd: string | null,
-  terminalApp: string,
-): Promise<void> {
-  return invoke<void>("open_in_terminal", { command, cwd, terminalApp });
-}
-
 export async function resumeSession(
   sessionId: string,
   terminalApp: string,
@@ -277,12 +269,6 @@ export async function permanentDeleteTrashBatch(
   items: string[],
 ): Promise<BatchResult> {
   return invoke<BatchResult>("permanent_delete_trash_batch", { items });
-}
-
-export async function deleteSessionsBatch(
-  items: string[],
-): Promise<BatchResult> {
-  return invoke<BatchResult>("delete_sessions_batch", { items });
 }
 
 export async function listRecentSessions(
