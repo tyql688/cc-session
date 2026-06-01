@@ -1,6 +1,7 @@
 use std::fs;
 use std::path::Path;
 
+use super::format::{aggregate_token_usage, fmt_tokens, format_epoch};
 use crate::models::{Message, MessageRole, SessionDetail};
 
 fn role_label(role: &MessageRole) -> &'static str {
@@ -10,16 +11,6 @@ fn role_label(role: &MessageRole) -> &'static str {
         MessageRole::Tool => "Tool",
         MessageRole::System => "System",
     }
-}
-
-fn format_date(epoch: i64) -> String {
-    chrono::DateTime::from_timestamp(epoch, 0)
-        .map(|d| {
-            d.with_timezone(&chrono::Local)
-                .format("%Y-%m-%d %H:%M")
-                .to_string()
-        })
-        .unwrap_or_default()
 }
 
 fn should_render_message(msg: &Message) -> bool {
@@ -33,33 +24,6 @@ fn should_render_message(msg: &Message) -> bool {
     }
 }
 
-fn fmt_tokens(n: u64) -> String {
-    if n >= 1_000_000 {
-        format!("{:.1}M", n as f64 / 1_000_000.0)
-    } else if n >= 1_000 {
-        format!("{:.1}k", n as f64 / 1_000.0)
-    } else {
-        n.to_string()
-    }
-}
-
-fn aggregate_token_usage(messages: &[Message]) -> (u64, u64, u64, u64) {
-    messages
-        .iter()
-        .fold((0u64, 0u64, 0u64, 0u64), |(inp, out, cr, cw), msg| {
-            if let Some(u) = &msg.token_usage {
-                (
-                    inp + u.input_tokens as u64,
-                    out + u.output_tokens as u64,
-                    cr + u.cache_read_input_tokens as u64,
-                    cw + u.cache_creation_input_tokens as u64,
-                )
-            } else {
-                (inp, out, cr, cw)
-            }
-        })
-}
-
 pub fn render(detail: &SessionDetail) -> String {
     let mut out = String::new();
 
@@ -69,7 +33,7 @@ pub fn render(detail: &SessionDetail) -> String {
     if detail.meta.created_at > 0 {
         out.push_str(&format!(
             "- **Date**: {}\n",
-            format_date(detail.meta.created_at)
+            format_epoch(detail.meta.created_at, "")
         ));
     }
     out.push_str(&format!("- **Messages**: {}\n", detail.meta.message_count));

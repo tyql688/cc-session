@@ -4,6 +4,7 @@ use std::path::Path;
 use base64::engine::general_purpose::STANDARD as BASE64;
 use base64::Engine as _;
 
+use super::format::{aggregate_token_usage, fmt_tokens, format_epoch};
 use crate::models::{Message, MessageRole, Provider, SessionDetail};
 
 fn html_escape(s: &str) -> String {
@@ -172,17 +173,6 @@ fn should_render_non_tool_message(msg: &Message) -> bool {
     !msg.content.trim().is_empty()
 }
 
-fn format_timestamp(epoch: i64) -> String {
-    chrono::DateTime::from_timestamp(epoch, 0).map_or_else(
-        || "—".to_string(),
-        |d| {
-            d.with_timezone(&chrono::Local)
-                .format("%Y-%m-%d %H:%M")
-                .to_string()
-        },
-    )
-}
-
 /// Format a message-level timestamp string (RFC3339 or epoch) to local HH:MM.
 fn format_msg_ts(raw: &str) -> String {
     // Try RFC3339 first
@@ -216,16 +206,6 @@ fn fmt_file_size(bytes: u64) -> String {
     format!("{:.1} MB", bytes as f64 / (1024.0 * 1024.0))
 }
 
-fn fmt_k(n: u64) -> String {
-    if n >= 1_000_000 {
-        format!("{:.1}M", n as f64 / 1_000_000.0)
-    } else if n >= 1_000 {
-        format!("{:.1}k", n as f64 / 1_000.0)
-    } else {
-        n.to_string()
-    }
-}
-
 /// Detect whether any message content uses KaTeX math notation.
 fn content_needs_katex(messages: &[Message]) -> bool {
     messages.iter().any(|msg| {
@@ -250,7 +230,7 @@ pub fn render(detail: &SessionDetail) -> String {
     let provider_clr = detail.meta.provider.descriptor().color();
     let project = html_escape(&detail.meta.project_name);
     let count = detail.meta.message_count;
-    let date = format_timestamp(detail.meta.created_at);
+    let date = format_epoch(detail.meta.created_at, "—");
     let file_size = fmt_file_size(detail.meta.file_size_bytes);
     let model = detail.meta.model.as_deref().unwrap_or("");
     let cc_version = detail.meta.cc_version.as_deref().unwrap_or("");
@@ -259,21 +239,8 @@ pub fn render(detail: &SessionDetail) -> String {
     let project_path = detail.meta.project_path.as_str();
 
     // Aggregate token totals
-    let (total_input, total_output, total_cache_read, total_cache_write) = detail
-        .messages
-        .iter()
-        .fold((0u64, 0u64, 0u64, 0u64), |(inp, out, cr, cw), msg| {
-            if let Some(u) = &msg.token_usage {
-                (
-                    inp + u.input_tokens as u64,
-                    out + u.output_tokens as u64,
-                    cr + u.cache_read_input_tokens as u64,
-                    cw + u.cache_creation_input_tokens as u64,
-                )
-            } else {
-                (inp, out, cr, cw)
-            }
-        });
+    let (total_input, total_output, total_cache_read, total_cache_write) =
+        aggregate_token_usage(&detail.messages);
     let has_tokens = total_input > 0 || total_output > 0;
 
     let user_svg = user_avatar_svg();
@@ -316,14 +283,14 @@ pub fn render(detail: &SessionDetail) -> String {
                 if let Some(u) = &msg.token_usage {
                     let mut s = format!(
                         "↑{} ↓{}",
-                        fmt_k(u.input_tokens as u64),
-                        fmt_k(u.output_tokens as u64)
+                        fmt_tokens(u.input_tokens as u64),
+                        fmt_tokens(u.output_tokens as u64)
                     );
                     if u.cache_creation_input_tokens > 0 || u.cache_read_input_tokens > 0 {
                         s.push_str(&format!(
                             r#" · <span class="cache-read">cache_read {}</span> · cache_write {}"#,
-                            fmt_k(u.cache_read_input_tokens as u64),
-                            fmt_k(u.cache_creation_input_tokens as u64)
+                            fmt_tokens(u.cache_read_input_tokens as u64),
+                            fmt_tokens(u.cache_creation_input_tokens as u64)
                         ));
                     }
                     meta_html_parts.push(s);
@@ -442,12 +409,16 @@ pub fn render(detail: &SessionDetail) -> String {
     }
 
     let token_summary_html = if has_tokens {
-        let mut s = format!("↑{} ↓{} tokens", fmt_k(total_input), fmt_k(total_output));
+        let mut s = format!(
+            "↑{} ↓{} tokens",
+            fmt_tokens(total_input),
+            fmt_tokens(total_output)
+        );
         if total_cache_write > 0 || total_cache_read > 0 {
             s.push_str(&format!(
                 r#" · <span class="cache-read">cache_read {}</span> · cache_write {}"#,
-                fmt_k(total_cache_read),
-                fmt_k(total_cache_write)
+                fmt_tokens(total_cache_read),
+                fmt_tokens(total_cache_write)
             ));
         }
         format!("<span>{s}</span>")
