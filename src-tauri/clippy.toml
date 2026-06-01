@@ -2,9 +2,11 @@
 # CI runs `cargo clippy --all-targets --all-features -- -D warnings`, so every
 # warning enabled here is effectively a hard gate.
 
-# Ban eprintln! in all code (style/rust.md §2). Verified: zero production uses
-# today, so this is enforced immediately via the default `disallowed_macros` lint.
-disallowed-macros = ["std::eprintln"]
+# Note: a `disallowed-macros = ["std::eprintln"]` ban was evaluated but removed —
+# clippy's disallowed_macros lint cannot exempt test code or the eprintln! that
+# `tauri::generate_context!` expands to, so it would need scattered #[allow]s for
+# zero current violations. The "no eprintln! in production" rule stays
+# review-enforced (style/rust.md §2).
 
 # Complexity smell guards (default-on clippy lints). Kept at sane ceilings; a
 # little headroom over the rustc defaults for the Message/handler constructors

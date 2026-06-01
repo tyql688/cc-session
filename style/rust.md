@@ -30,7 +30,7 @@ before every commit (the lefthook pre-push hook runs this).
 - **No `unwrap()` / `expect()` outside `#[cfg(test)]`.** Tests may use them freely. — `clippy` (`clippy::unwrap_used` / `clippy::expect_used`, warn; `allow-unwrap-in-tests = true`)
 - **No plausible-but-wrong substitutes.** Never use a parent/session value where a per-record value is required, write `None`/placeholder where a real value should be computed, use non-deterministic `HashMap::iter().find_map()` as a lookup, or `unwrap_or_default()` to mask missing data. If the correct value is unobtainable, **log a warning and skip** — do not fabricate. — `review`
 - **Log levels:** `log::warn!` when skipping a record, `log::error!` for recovered I/O failures, `log::debug!` for parser internals. — `review`
-- **Never `eprintln!` in production paths.** — `clippy` (`disallowed-macros = ["std::eprintln"]`)
+- **Never `eprintln!` in production paths.** — `review` (a clippy `disallowed_macros` ban can't exempt tests or Tauri's generated code, so this stays review-enforced)
 
 ```rust
 // ✅
