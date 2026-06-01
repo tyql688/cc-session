@@ -31,7 +31,7 @@ describe("fmtK", () => {
     expect(fmtK(1_500_000)).toBe("1.5M");
   });
   it("formats thousands", () => {
-    expect(fmtK(2_500)).toBe("2.5k");
+    expect(fmtK(2_500)).toBe("2.5K");
   });
   it("returns raw number for small values", () => {
     expect(fmtK(42)).toBe("42");

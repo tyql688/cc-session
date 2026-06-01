@@ -1,4 +1,4 @@
-import { shortenHomePath } from "../../lib/formatters";
+import { fmtK, shortenHomePath } from "../../lib/formatters";
 import type { ChartMetric, UsageSortState } from "../../lib/usage";
 
 export const SHORT_PROVIDER_LABELS: Record<string, string> = {
@@ -11,11 +11,8 @@ export const SHORT_PROVIDER_LABELS: Record<string, string> = {
   cursor: "Cursor",
 } as const;
 
-export function fmtTokens(n: number): string {
-  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
-  if (n >= 1_000) return `${(n / 1_000).toFixed(1)}K`;
-  return n.toLocaleString();
-}
+/** Compact token formatter, shared with the rest of the app. */
+export const fmtTokens = fmtK;
 
 export function fmtCost(n: number): string {
   return `$${n.toFixed(2)}`;
