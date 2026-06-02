@@ -22,6 +22,28 @@ import {
   listProviderSnapshots,
   refreshProviderSnapshots,
 } from "../../stores/providerSnapshots";
+import {
+  rangeDays,
+  setRangeDays,
+  selectedProviders,
+  setSelectedProviders,
+  didInitProviders,
+  setDidInitProviders,
+  providerSelectionTouched,
+  setProviderSelectionTouched,
+  projectLimit,
+  setProjectLimit,
+  sessionLimit,
+  setSessionLimit,
+  chartMetric,
+  setChartMetric,
+  modelSort,
+  setModelSort,
+  projectSort,
+  setProjectSort,
+  sessionSort,
+  setSessionSort,
+} from "../../stores/usageView";
 import { ConfirmDialog } from "../ConfirmDialog";
 import { toast, toastError, toastInfo } from "../../stores/toast";
 import { errorMessage } from "../../lib/errors";
@@ -34,7 +56,6 @@ import {
   makeEmptyUsageStats,
   totalUsageTokens,
   trendPercent,
-  type ChartMetric,
   type UsageSortState,
 } from "../../lib/usage";
 import type {
@@ -57,23 +78,16 @@ import { SummaryCards } from "./SummaryCards";
 import { Chart } from "./Chart";
 import { TopModels } from "./TopModels";
 import { ModelTable } from "./ModelTable";
-import { ProjectTable, type LimitOption } from "./ProjectTable";
+import { ProjectTable } from "./ProjectTable";
 import { SessionTable } from "./SessionTable";
 
 export function UsagePanel() {
   const { t } = useI18n();
 
-  const [rangeDays, setRangeDays] = createSignal<number | null>(7);
-  const [selectedProviders, setSelectedProviders] = createSignal<Set<string>>(
-    new Set(),
-  );
-  const [didInitProviders, setDidInitProviders] = createSignal(false);
-  const [providerSelectionTouched, setProviderSelectionTouched] =
-    createSignal(false);
-  const [projectLimit, setProjectLimit] = createSignal<LimitOption>(10);
-  const [sessionLimit, setSessionLimit] = createSignal<LimitOption>(10);
+  // Ephemeral per-visit state — intentionally resets each time the panel
+  // remounts. Persistent UI state lives in the `usageView` store so it survives
+  // the `<Show>`-driven remount when switching views.
   const [hoveredDate, setHoveredDate] = createSignal<string | null>(null);
-  const [chartMetric, setChartMetric] = createSignal<ChartMetric>("tokens");
   const [showClearUsageConfirm, setShowClearUsageConfirm] = createSignal(false);
   const [isRefreshingPricing, setIsRefreshingPricing] = createSignal(false);
   const [activeMaintenanceJob, setActiveMaintenanceJob] =
@@ -203,19 +217,6 @@ export function UsagePanel() {
       handleUsageDataChangedIfStale,
     );
     unlistenMaintenance?.();
-  });
-
-  const [modelSort, setModelSort] = createSignal<UsageSortState>({
-    col: "cost",
-    asc: false,
-  });
-  const [projectSort, setProjectSort] = createSignal<UsageSortState>({
-    col: "cost",
-    asc: false,
-  });
-  const [sessionSort, setSessionSort] = createSignal<UsageSortState>({
-    col: "updated_at",
-    asc: false,
   });
 
   const makeSortHandler =
