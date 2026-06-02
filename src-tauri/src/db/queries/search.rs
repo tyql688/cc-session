@@ -84,9 +84,11 @@ pub(super) fn search_with_like(
          WHERE 1=1",
     );
     let mut param_values: Vec<Box<dyn rusqlite::types::ToSql>> = vec![Box::new(raw.clone())];
+    let mut token_indices: Vec<usize> = Vec::new();
 
     for token in &tokens {
         let idx = param_values.len() + 1;
+        token_indices.push(idx);
         sql.push_str(&format!(
             " AND (
                 s.title LIKE '%' || ?{idx} || '%'
@@ -99,8 +101,40 @@ pub(super) fn search_with_like(
 
     let next_index = param_values.len() + 1;
     append_search_filters_numbered(&mut sql, &mut param_values, filters, next_index);
-    sql.push_str(" ORDER BY s.created_at DESC LIMIT 100");
+    // Rank by approximate relevance, not pure recency. The LIKE fallback serves
+    // every short/CJK query (e.g. 2-char Chinese terms), and ordering it purely
+    // by created_at meant the strongest textual match could be pushed past the
+    // 100-row cap and dropped. Title matches now outrank project matches, which
+    // outrank content-only matches, with recency breaking ties.
+    sql.push_str(&like_relevance_order_by(&token_indices));
+    sql.push_str(" LIMIT 100");
     query_like_search_results(conn, &sql, &param_values, &tokens)
+}
+
+/// Build an `ORDER BY` clause approximating relevance for the LIKE fallback:
+/// title matches (tier 0) before project-name matches (tier 1) before
+/// content-only matches (tier 2), with `created_at DESC` breaking ties. Falls
+/// back to pure recency for filter-only queries that carry no tokens.
+fn like_relevance_order_by(token_indices: &[usize]) -> String {
+    if token_indices.is_empty() {
+        return " ORDER BY s.created_at DESC".to_string();
+    }
+    let title_match = column_matches_any("s.title", token_indices);
+    let project_match = column_matches_any("s.project_name", token_indices);
+    format!(
+        " ORDER BY CASE WHEN {title_match} THEN 0 WHEN {project_match} THEN 1 ELSE 2 END, s.created_at DESC"
+    )
+}
+
+/// `col LIKE '%t1%' OR col LIKE '%t2%' ...` over the given bound parameter
+/// indices. Reuses the same `?N` placeholders already bound for the WHERE
+/// clause (SQLite allows a numbered parameter to appear more than once).
+fn column_matches_any(column: &str, token_indices: &[usize]) -> String {
+    token_indices
+        .iter()
+        .map(|idx| format!("{column} LIKE '%' || ?{idx} || '%'"))
+        .collect::<Vec<_>>()
+        .join(" OR ")
 }
 
 fn append_search_filters(

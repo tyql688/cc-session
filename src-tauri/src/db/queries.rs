@@ -138,7 +138,18 @@ impl Database {
         }
 
         if let Some(query) = safe_query {
-            search_with_fts(&conn, filters, &query).or_else(|_| search_with_like(&conn, filters))
+            match search_with_fts(&conn, filters, &query) {
+                Ok(results) => Ok(results),
+                Err(err) => {
+                    // Don't silently swallow the FTS failure (no-silent-fallback
+                    // rule): record why we degraded to the slower LIKE scan.
+                    log::warn!(
+                        "FTS search failed for query {:?}, falling back to LIKE: {err}",
+                        filters.query
+                    );
+                    search_with_like(&conn, filters)
+                }
+            }
         } else {
             search_with_like(&conn, filters)
         }
@@ -625,5 +636,43 @@ mod tests {
 
         assert_eq!(results.len(), 1);
         assert!(results[0].snippet.is_empty());
+    }
+
+    #[test]
+    fn like_search_ranks_title_match_above_newer_content_match() {
+        let dir = TempDir::new().unwrap();
+        let db = Database::open(dir.path()).unwrap();
+
+        let mut title_hit = sample_meta("session-title-rank");
+        title_hit.title = "中文标题命中".into();
+        let mut content_hit = sample_meta("session-content-rank");
+        content_hit.title = "无关标题".into();
+
+        // Both match the 2-char CJK query "中文" via the LIKE fallback. Under the
+        // old pure-recency ORDER BY the content-only hit could outrank the title
+        // hit; relevance ordering must surface the title match first.
+        db.sync_provider_snapshot(
+            &Provider::Claude,
+            &[
+                parsed_session(title_hit, "正文没有目标词".into()),
+                parsed_session(content_hit, "正文里有中文这个词".into()),
+            ],
+            true,
+            &[],
+        )
+        .unwrap();
+
+        let results = db
+            .search_filtered(&SearchFilters {
+                query: "中文".into(),
+                ..SearchFilters::default()
+            })
+            .unwrap();
+
+        assert_eq!(results.len(), 2);
+        assert_eq!(
+            results[0].session.id, "session-title-rank",
+            "title match must rank above a content-only match"
+        );
     }
 }
