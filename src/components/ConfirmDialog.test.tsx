@@ -1,0 +1,69 @@
+import { describe, it, expect, vi } from "vitest";
+import { render, fireEvent } from "@solidjs/testing-library";
+import { ConfirmDialog } from "./ConfirmDialog";
+
+describe("ConfirmDialog", () => {
+  it("renders nothing when closed", () => {
+    const { queryByRole } = render(() => (
+      <ConfirmDialog
+        open={false}
+        title="Delete session"
+        message="Are you sure?"
+        confirmLabel="Delete"
+        onConfirm={() => {}}
+        onCancel={() => {}}
+      />
+    ));
+    expect(queryByRole("dialog")).toBeNull();
+  });
+
+  it("renders title, message and confirm label when open", () => {
+    const { getByRole, getByText } = render(() => (
+      <ConfirmDialog
+        open={true}
+        title="Delete session"
+        message="Are you sure?"
+        confirmLabel="Delete"
+        onConfirm={() => {}}
+        onCancel={() => {}}
+      />
+    ));
+    const dialog = getByRole("dialog");
+    expect(dialog).toBeInTheDocument();
+    expect(dialog).toHaveAttribute("aria-modal", "true");
+    expect(getByText("Delete session")).toBeInTheDocument();
+    expect(getByText("Are you sure?")).toBeInTheDocument();
+    expect(getByText("Delete")).toBeInTheDocument();
+  });
+
+  it("invokes onConfirm when the confirm button is clicked", () => {
+    const onConfirm = vi.fn();
+    const { getByText } = render(() => (
+      <ConfirmDialog
+        open={true}
+        title="Delete session"
+        message="Are you sure?"
+        confirmLabel="Delete"
+        onConfirm={onConfirm}
+        onCancel={() => {}}
+      />
+    ));
+    fireEvent.click(getByText("Delete"));
+    expect(onConfirm).toHaveBeenCalledTimes(1);
+  });
+
+  it("applies the danger class to the confirm button when danger is set", () => {
+    const { getByText } = render(() => (
+      <ConfirmDialog
+        open={true}
+        title="Delete session"
+        message="Are you sure?"
+        confirmLabel="Delete"
+        danger={true}
+        onConfirm={() => {}}
+        onCancel={() => {}}
+      />
+    ));
+    expect(getByText("Delete")).toHaveClass("btn-danger");
+  });
+});
