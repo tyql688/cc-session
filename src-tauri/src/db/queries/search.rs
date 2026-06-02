@@ -55,15 +55,16 @@ pub(super) fn search_with_like(
     filters: &SearchFilters,
 ) -> Result<Vec<SearchResult>, rusqlite::Error> {
     let raw = filters.query.trim().to_string();
-    // Split on whitespace so mixed queries like "auth ui" require both terms
-    // to appear somewhere in the row. Without this we would only match rows
-    // where the whole raw string appears as one contiguous substring, which
-    // silently misses common mixed-token queries.
-    let tokens: Vec<String> = raw
-        .split_whitespace()
-        .map(str::to_string)
-        .filter(|token| !token.is_empty())
-        .collect();
+    // Treat the whole query as one literal substring — "search exactly what you
+    // typed" — instead of splitting into AND-ed tokens. So "347 测试" matches a
+    // contiguous "347 测试", not any row that merely contains "347" and "测试"
+    // separately. FTS serves >= 3-char queries; this LIKE path serves the
+    // short/CJK ones (and any FTS failure) with the same literal semantics.
+    let tokens: Vec<String> = if raw.is_empty() {
+        Vec::new()
+    } else {
+        vec![raw.clone()]
+    };
 
     let mut sql = String::from(
         "SELECT s.id, s.provider, s.title, s.project_path, s.project_name,
@@ -392,28 +393,15 @@ fn collect_like_match_ranges(snippet: &str, token: &str, ranges: &mut Vec<(usize
 }
 
 pub(super) fn build_fts_query(raw: &str) -> Option<String> {
-    // Trigram tokenizer requires each query term to have at least 3 characters
-    // (codepoints). If any token is shorter we bail out so the caller falls
-    // back to LIKE, which correctly handles short substrings (e.g. 2-char CJK).
-    let tokens: Vec<String> = raw
-        .split_whitespace()
-        .map(str::trim)
-        .filter(|token| !token.is_empty())
-        .map(|token| token.to_string())
-        .collect();
-
-    if tokens.is_empty() {
+    // Match the WHOLE query as one literal phrase (a contiguous substring), not
+    // AND-ed tokens — "search exactly what you typed". With the trigram
+    // tokenizer a quoted phrase matches the contiguous text (spaces included).
+    // Trigram needs >= 3 codepoints; shorter queries (including 2-char CJK)
+    // return None so the caller falls back to LIKE, which applies the same
+    // literal substring match.
+    let trimmed = raw.trim();
+    if trimmed.chars().count() < 3 {
         return None;
     }
-    if tokens.iter().any(|t| t.chars().count() < 3) {
-        return None;
-    }
-
-    Some(
-        tokens
-            .iter()
-            .map(|token| format!("\"{}\"", token.replace('"', "\"\"")))
-            .collect::<Vec<_>>()
-            .join(" AND "),
-    )
+    Some(format!("\"{}\"", trimmed.replace('"', "\"\"")))
 }

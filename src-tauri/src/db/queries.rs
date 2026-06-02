@@ -735,4 +735,43 @@ mod tests {
             "per-session detail must exclude rows dated before the cutoff"
         );
     }
+
+    #[test]
+    fn search_matches_whole_query_as_literal_phrase_not_and_tokens() {
+        let dir = TempDir::new().unwrap();
+        let db = Database::open(dir.path()).unwrap();
+        db.sync_provider_snapshot(
+            &Provider::Claude,
+            &[
+                // Contiguous phrase — must match.
+                parsed_session(sample_meta("session-phrase"), "前缀 347 测试 后缀".into()),
+                // Both words present but NOT adjacent — must NOT match, because
+                // search is a literal substring, not an AND of the two words.
+                parsed_session(
+                    sample_meta("session-scattered"),
+                    "这里有 347 然后一堆别的内容 接着 测试 出现".into(),
+                ),
+            ],
+            true,
+            &[],
+        )
+        .unwrap();
+
+        let results = db
+            .search_filtered(&SearchFilters {
+                query: "347 测试".into(),
+                ..SearchFilters::default()
+            })
+            .unwrap();
+        let ids: Vec<&str> = results.iter().map(|r| r.session.id.as_str()).collect();
+
+        assert!(
+            ids.contains(&"session-phrase"),
+            "the literal contiguous phrase must match"
+        );
+        assert!(
+            !ids.contains(&"session-scattered"),
+            "scattered words must NOT match — search is literal, not AND"
+        );
+    }
 }
