@@ -4,6 +4,30 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>CC Session — Session Explorer</title>
+    <script>
+      // Resolve the theme and paint the matching window background BEFORE the
+      // app bundle loads, so cold start shows no flash of a wrong-colored frame.
+      // Mirrors stores/theme.ts: a stored "system" (or unset) follows OS dark.
+      (function () {
+        try {
+          var stored = localStorage.getItem("cc-session-theme");
+          var prefersDark =
+            window.matchMedia &&
+            window.matchMedia("(prefers-color-scheme: dark)").matches;
+          var theme =
+            stored === "light" || stored === "dark"
+              ? stored
+              : prefersDark
+                ? "dark"
+                : "light";
+          document.documentElement.setAttribute("data-theme", theme);
+          document.documentElement.style.backgroundColor =
+            theme === "dark" ? "#1e1e20" : "#f6f6f8";
+        } catch (e) {
+          // localStorage/matchMedia unavailable — fall through to CSS defaults.
+        }
+      })();
+    </script>
     <style>
       html, body, #root {
         margin: 0;
@@ -13,8 +37,6 @@
         font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
           Oxygen, Ubuntu, Cantarell, "Fira Sans", "Droid Sans",
           "Helvetica Neue", sans-serif;
-        background-color: #1e1e2e;
-        color: #cdd6f4;
       }
     </style>
   </head>

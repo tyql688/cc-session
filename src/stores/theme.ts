@@ -12,16 +12,29 @@ function getInitialTheme(): Theme {
   return "system";
 }
 
+/** Resolve the OS color scheme; defaults to light when unavailable (tests/SSR). */
+function resolveSystemTheme(): "light" | "dark" {
+  if (
+    typeof window === "undefined" ||
+    typeof window.matchMedia !== "function"
+  ) {
+    return "light";
+  }
+  return window.matchMedia("(prefers-color-scheme: dark)").matches
+    ? "dark"
+    : "light";
+}
+
 export function applyTheme(theme: Theme) {
   if (typeof document === "undefined" || typeof localStorage === "undefined") {
     return;
   }
-  const root = document.documentElement;
-  if (theme === "system") {
-    root.removeAttribute("data-theme");
-  } else {
-    root.setAttribute("data-theme", theme);
-  }
+  // Always set an explicit light/dark attribute, resolving "system" via the OS
+  // so the app shell follows OS dark mode. (It used to removeAttribute for
+  // "system", falling back to the light :root defaults, which left a dark-mode
+  // OS rendering a fully light app while Mermaid diagrams rendered dark.)
+  const resolved = theme === "system" ? resolveSystemTheme() : theme;
+  document.documentElement.setAttribute("data-theme", resolved);
   localStorage.setItem("cc-session-theme", theme);
 }
 
@@ -30,6 +43,18 @@ const [theme, setThemeSignal] = createSignal<Theme>(getInitialTheme());
 export function setTheme(t: Theme) {
   setThemeSignal(t);
   applyTheme(t);
+}
+
+// Re-apply on OS theme change while we're tracking it ("system" mode), so a
+// live light<->dark switch in the OS is reflected without a restart.
+if (typeof window !== "undefined" && typeof window.matchMedia === "function") {
+  window
+    .matchMedia("(prefers-color-scheme: dark)")
+    .addEventListener("change", () => {
+      if (theme() === "system") {
+        applyTheme("system");
+      }
+    });
 }
 
 export { theme };
