@@ -675,4 +675,64 @@ mod tests {
             "title match must rank above a content-only match"
         );
     }
+
+    #[test]
+    fn usage_session_detail_excludes_out_of_range_dates() {
+        let dir = TempDir::new().unwrap();
+        let db = Database::open(dir.path()).unwrap();
+        let meta = sample_meta("session-range");
+        db.sync_provider_snapshot(
+            &Provider::Claude,
+            &[parsed_session(meta.clone(), String::new())],
+            true,
+            &[],
+        )
+        .unwrap();
+        db.replace_token_stats(
+            &meta.id,
+            &[
+                // Out of range (before the 2026-05-10 cutoff): must NOT be summed.
+                TokenStatRow {
+                    date: "2026-05-01".into(),
+                    model: "m".into(),
+                    turn_count: 1,
+                    input_tokens: 1000,
+                    output_tokens: 0,
+                    cache_read_tokens: 0,
+                    cache_write_tokens: 0,
+                    cost_usd: 1.0,
+                },
+                // In range: the only row that should count.
+                TokenStatRow {
+                    date: "2026-05-20".into(),
+                    model: "m".into(),
+                    turn_count: 1,
+                    input_tokens: 10,
+                    output_tokens: 0,
+                    cache_read_tokens: 0,
+                    cache_write_tokens: 0,
+                    cost_usd: 0.01,
+                },
+            ],
+        )
+        .unwrap();
+
+        let rows = db
+            .usage_session_model_detail(
+                &[Provider::Claude.key().to_string()],
+                Some("2026-05-10"),
+                50,
+            )
+            .unwrap();
+
+        let total_input: u64 = rows
+            .iter()
+            .filter(|r| r.session_id == "session-range")
+            .map(|r| r.input_tokens)
+            .sum();
+        assert_eq!(
+            total_input, 10,
+            "per-session detail must exclude rows dated before the cutoff"
+        );
+    }
 }

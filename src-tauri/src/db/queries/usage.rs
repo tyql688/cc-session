@@ -232,10 +232,24 @@ impl Database {
             return Ok(Vec::new());
         }
 
-        // Now query detail for those sessions
+        // Now query detail for those sessions. Re-apply the SAME date cutoff
+        // used to pick them: session_token_stats grain is (session_id, date,
+        // model), so without it a session active both inside and outside the
+        // range would sum ALL its dated rows, inflating per-session totals so
+        // the Recent Sessions table no longer reconciles with the headline
+        // total_cost / chart for any bounded range.
         let id_placeholders: Vec<String> = (0..session_ids.len())
             .map(|i| format!("?{}", i + 1))
             .collect();
+        let mut detail_params: Vec<Box<dyn rusqlite::types::ToSql>> = session_ids
+            .into_iter()
+            .map(|id| Box::new(id) as _)
+            .collect();
+        let mut detail_where = format!("WHERE s.session_id IN ({})", id_placeholders.join(","));
+        if let Some(cutoff) = cutoff_date {
+            detail_where.push_str(&format!(" AND s.date >= ?{}", detail_params.len() + 1));
+            detail_params.push(Box::new(cutoff.to_string()));
+        }
         let detail_sql = format!(
             "SELECT s.session_id, sess.project_path, sess.project_name, sess.provider, sess.updated_at, \
                     COALESCE(NULLIF(s.model, ''), sess.model, ''), \
@@ -247,15 +261,10 @@ impl Database {
                     SUM(s.cost_usd) \
              FROM session_token_stats s \
              JOIN sessions sess ON s.session_id = sess.id \
-             WHERE s.session_id IN ({}) \
+             {detail_where} \
              GROUP BY s.session_id, COALESCE(NULLIF(s.model, ''), sess.model, '') \
-             ORDER BY sess.updated_at DESC, s.session_id",
-            id_placeholders.join(",")
+             ORDER BY sess.updated_at DESC, s.session_id"
         );
-        let detail_params: Vec<Box<dyn rusqlite::types::ToSql>> = session_ids
-            .into_iter()
-            .map(|id| Box::new(id) as _)
-            .collect();
         let detail_refs: Vec<&dyn rusqlite::types::ToSql> =
             detail_params.iter().map(|p| p.as_ref()).collect();
         let mut stmt = conn.prepare(&detail_sql)?;
