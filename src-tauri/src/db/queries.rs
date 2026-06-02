@@ -518,6 +518,39 @@ mod tests {
     }
 
     #[test]
+    fn search_filtered_caps_fts_results_at_100() {
+        let dir = TempDir::new().unwrap();
+        let db = Database::open(dir.path()).unwrap();
+        // The 100-row hard cap in db/queries/search.rs is a deliberate design
+        // choice — search and the Cmd+K panel intentionally do NOT paginate.
+        // 105 sessions all match the same FTS term, so the result must come
+        // back truncated to exactly 100.
+        let sessions: Vec<ParsedSession> = (0..105)
+            .map(|i| {
+                parsed_session(
+                    sample_meta(&format!("session-cap-{i:03}")),
+                    "searchterm content body".into(),
+                )
+            })
+            .collect();
+        db.sync_provider_snapshot(&Provider::Claude, &sessions, true, &[])
+            .unwrap();
+
+        let results = db
+            .search_filtered(&SearchFilters {
+                query: "searchterm".into(),
+                ..SearchFilters::default()
+            })
+            .unwrap();
+
+        assert_eq!(
+            results.len(),
+            100,
+            "FTS search must cap at 100 results (no pagination by design)"
+        );
+    }
+
+    #[test]
     fn like_search_centers_and_marks_short_chinese_match() {
         let dir = TempDir::new().unwrap();
         let db = Database::open(dir.path()).unwrap();
