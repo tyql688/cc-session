@@ -100,15 +100,8 @@ impl ScanAccum {
         }
         self.content_parts.push(text.to_string());
         self.messages.push(Message {
-            role: MessageRole::User,
-            content: text.to_string(),
             timestamp: ts,
-            tool_name: None,
-            tool_input: None,
-            token_usage: None,
-            model: None,
-            usage_hash: None,
-            tool_metadata: None,
+            ..Message::user(text.to_string())
         });
     }
 
@@ -121,15 +114,9 @@ impl ScanAccum {
             self.current_turn_assistant_idx = Some(self.messages.len());
         }
         self.messages.push(Message {
-            role: MessageRole::Assistant,
-            content: text.to_string(),
             timestamp: ts,
-            tool_name: None,
-            tool_input: None,
-            token_usage: None,
             model: self.current_model.clone(),
-            usage_hash: None,
-            tool_metadata: None,
+            ..Message::assistant(text.to_string())
         });
     }
 
@@ -141,15 +128,9 @@ impl ScanAccum {
         // [thinking] renders under MessageRole::System and the model
         // badge belongs on the real Assistant text that follows.
         self.messages.push(Message {
-            role: MessageRole::System,
-            content: format!("[thinking]\n{text}"),
             timestamp: ts,
-            tool_name: None,
-            tool_input: None,
-            token_usage: None,
             model: self.current_model.clone(),
-            usage_hash: None,
-            tool_metadata: None,
+            ..Message::system(format!("[thinking]\n{text}"))
         });
     }
 
@@ -176,15 +157,12 @@ impl ScanAccum {
             self.call_id_map.insert(cid.to_string(), idx);
         }
         self.messages.push(Message {
-            role: MessageRole::Tool,
-            content: String::new(),
             timestamp: ts,
             tool_name: Some(display_name),
             tool_input,
-            token_usage: None,
             model: self.current_model.clone(),
-            usage_hash: None,
             tool_metadata: Some(metadata),
+            ..Message::new(MessageRole::Tool, String::new())
         });
     }
 
@@ -221,15 +199,8 @@ impl ScanAccum {
             }
         }
         self.messages.push(Message {
-            role: MessageRole::Tool,
-            content: rendered_output,
             timestamp: ts,
-            tool_name: None,
-            tool_input: None,
-            token_usage: None,
-            model: None,
-            usage_hash: None,
-            tool_metadata: None,
+            ..Message::new(MessageRole::Tool, rendered_output)
         });
     }
 

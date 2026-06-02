@@ -78,49 +78,19 @@ pub(crate) fn parse_messages(content: &str, source_label: &str) -> (Vec<Message>
             if clean.is_empty() {
                 return;
             }
-            messages.push(Message {
-                role: MessageRole::User,
-                content: clean,
-                timestamp: None,
-                tool_name: None,
-                tool_input: None,
-                token_usage: None,
-                model: None,
-                usage_hash: None,
-                tool_metadata: None,
-            });
+            messages.push(Message::user(clean));
         }
         "assistant" => {
             let raw = extract_text_from_content(content_val);
             let cleaned = strip_redacted(&raw);
 
             if let Some(thinking) = extract_think_content(&cleaned) {
-                messages.push(Message {
-                    role: MessageRole::System,
-                    content: format!("[thinking]\n{thinking}"),
-                    timestamp: None,
-                    tool_name: None,
-                    tool_input: None,
-                    token_usage: None,
-                    model: None,
-                    usage_hash: None,
-                    tool_metadata: None,
-                });
+                messages.push(Message::system(format!("[thinking]\n{thinking}")));
             }
 
             let visible = strip_think_tags(&cleaned);
             if !visible.is_empty() {
-                messages.push(Message {
-                    role: MessageRole::Assistant,
-                    content: visible,
-                    timestamp: None,
-                    tool_name: None,
-                    tool_input: None,
-                    token_usage: None,
-                    model: None,
-                    usage_hash: None,
-                    tool_metadata: None,
-                });
+                messages.push(Message::assistant(visible));
             }
 
             for part in parse_content_array(content_val) {
@@ -152,15 +122,10 @@ fn push_tool_call(messages: &mut Vec<Message>, part: &Value) {
     let display_name = metadata.canonical_name.clone();
     let tool_input = args.and_then(|a| remap_tool_args(&display_name, a));
     messages.push(Message {
-        role: MessageRole::Tool,
-        content: String::new(),
-        timestamp: None,
         tool_name: Some(display_name),
         tool_input,
-        token_usage: None,
-        model: None,
-        usage_hash: None,
         tool_metadata: Some(metadata),
+        ..Message::new(MessageRole::Tool, String::new())
     });
 }
 

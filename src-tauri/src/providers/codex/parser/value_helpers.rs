@@ -7,7 +7,7 @@
 
 use serde_json::{json, Map, Value};
 
-use crate::models::{Message, MessageRole};
+use crate::models::Message;
 use crate::tool_metadata::{enrich_tool_metadata, ToolResultFacts};
 
 pub(super) fn parse_json_str(value: Option<&str>) -> Option<Value> {
@@ -276,15 +276,8 @@ pub(super) fn push_system_event(
     content: String,
 ) {
     messages.push(Message {
-        role: MessageRole::System,
-        content,
         timestamp,
-        tool_name: None,
-        tool_input: None,
-        tool_metadata: None,
-        token_usage: None,
-        model: None,
-        usage_hash: None,
+        ..Message::system(content)
     });
 }
 

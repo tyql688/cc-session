@@ -132,15 +132,10 @@ fn standalone_tool_result_message(
     );
 
     Message {
-        role: MessageRole::Tool,
-        content: result_text,
         timestamp,
         tool_name: Some(canonical_name),
-        tool_input: None,
         tool_metadata: Some(metadata),
-        token_usage: None,
-        model: None,
-        usage_hash: None,
+        ..Message::new(MessageRole::Tool, result_text)
     }
 }
 
@@ -349,15 +344,8 @@ pub(super) fn handle_assistant_message(
                         if !t.trim().is_empty() {
                             // Emit thinking as a separate assistant message with marker
                             state.messages.push(Message {
-                                role: MessageRole::System,
-                                content: format!("[thinking]\n{t}"),
                                 timestamp: timestamp.clone(),
-                                tool_name: None,
-                                tool_input: None,
-                                token_usage: None,
-                                model: None,
-                                usage_hash: None,
-                                tool_metadata: None,
+                                ..Message::system(format!("[thinking]\n{t}"))
                             });
                         }
                     }
@@ -375,15 +363,9 @@ pub(super) fn handle_assistant_message(
                         let text = text_parts.join("\n");
                         state.content_parts.push(text.clone());
                         state.messages.push(Message {
-                            role: MessageRole::Assistant,
-                            content: text,
                             timestamp: timestamp.clone(),
-                            tool_name: None,
-                            tool_input: None,
-                            token_usage: None,
                             model: per_message_model.clone(),
-                            usage_hash: None,
-                            tool_metadata: None,
+                            ..Message::assistant(text)
                         });
                         text_parts.clear();
                     }
@@ -401,15 +383,11 @@ pub(super) fn handle_assistant_message(
                     let input = item.get("input").map(std::string::ToString::to_string);
                     let msg_idx = state.messages.len();
                     state.messages.push(Message {
-                        role: MessageRole::Tool,
-                        content: String::new(),
                         timestamp: timestamp.clone(),
                         tool_name: Some(canonical_name),
                         tool_input: input,
                         tool_metadata: Some(metadata),
-                        token_usage: None,
-                        model: None,
-                        usage_hash: None,
+                        ..Message::new(MessageRole::Tool, String::new())
                     });
                     tool_indices.push(msg_idx);
                     // Record tool_use_id for merging results later
@@ -444,15 +422,9 @@ pub(super) fn handle_assistant_message(
             let text = text_parts.join("\n");
             state.content_parts.push(text.clone());
             state.messages.push(Message {
-                role: MessageRole::Assistant,
-                content: text,
                 timestamp: timestamp.clone(),
-                tool_name: None,
-                tool_input: None,
-                token_usage: None,
                 model: per_message_model.clone(),
-                usage_hash: None,
-                tool_metadata: None,
+                ..Message::assistant(text)
             });
         }
     } else {
@@ -461,15 +433,9 @@ pub(super) fn handle_assistant_message(
         if !text.trim().is_empty() {
             state.content_parts.push(text.clone());
             state.messages.push(Message {
-                role: MessageRole::Assistant,
-                content: text,
                 timestamp: timestamp.clone(),
-                tool_name: None,
-                tool_input: None,
-                token_usage: None,
                 model: per_message_model.clone(),
-                usage_hash: None,
-                tool_metadata: None,
+                ..Message::assistant(text)
             });
         }
     }
@@ -519,15 +485,11 @@ fn attach_turn_usage(
             }
         } else {
             state.messages.push(Message {
-                role: MessageRole::Assistant,
-                content: String::new(),
                 timestamp: timestamp.clone(),
-                tool_name: None,
-                tool_input: None,
                 token_usage: Some(usage),
                 model: per_message_model.clone(),
                 usage_hash: hash,
-                tool_metadata: None,
+                ..Message::assistant(String::new())
             });
         }
     }
@@ -690,15 +652,8 @@ pub(super) fn handle_system_message(
 
 fn append_system_message(state: &mut ParseState, content: String, timestamp: Option<String>) {
     state.messages.push(Message {
-        role: MessageRole::System,
-        content,
         timestamp,
-        tool_name: None,
-        tool_input: None,
-        token_usage: None,
-        model: None,
-        usage_hash: None,
-        tool_metadata: None,
+        ..Message::system(content)
     });
 }
 
@@ -721,15 +676,8 @@ pub(super) fn handle_pr_link(entry: &Value, state: &mut ParseState, timestamp: O
         .unwrap_or_else(|| "PR".to_string());
 
     state.messages.push(Message {
-        role: MessageRole::System,
-        content: format!("[pr_link] {label}: {pr_url}"),
         timestamp,
-        tool_name: None,
-        tool_input: None,
-        token_usage: None,
-        model: None,
-        usage_hash: None,
-        tool_metadata: None,
+        ..Message::system(format!("[pr_link] {label}: {pr_url}"))
     });
 }
 
@@ -768,14 +716,7 @@ fn append_user_message(
 
     content_parts.push(text.clone());
     messages.push(Message {
-        role: MessageRole::User,
-        content: text,
         timestamp,
-        tool_name: None,
-        tool_input: None,
-        token_usage: None,
-        model: None,
-        usage_hash: None,
-        tool_metadata: None,
+        ..Message::user(text)
     });
 }

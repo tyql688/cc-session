@@ -401,15 +401,11 @@ impl SessionProvider for OpenCodeProvider {
                         messages: usage_entries
                             .into_iter()
                             .map(|entry| Message {
-                                role: MessageRole::Assistant,
-                                content: String::new(),
                                 timestamp: entry.timestamp.or_else(|| ms_to_rfc3339(time_updated)),
-                                tool_name: None,
-                                tool_input: None,
                                 token_usage: Some(entry.usage),
                                 model: entry.model,
                                 usage_hash: entry.usage_hash,
-                                tool_metadata: None,
+                                ..Message::assistant(String::new())
                             })
                             .collect(),
                         content_text: truncate_to_bytes(&content_text, FTS_CONTENT_LIMIT),
@@ -515,15 +511,8 @@ impl SessionProvider for OpenCodeProvider {
 
                     if !text_content.is_empty() {
                         messages.push(Message {
-                            role: MessageRole::User,
-                            content: text_content.join("\n"),
                             timestamp: timestamp.clone(),
-                            tool_name: None,
-                            tool_input: None,
-                            token_usage: None,
-                            model: None,
-                            usage_hash: None,
-                            tool_metadata: None,
+                            ..Message::user(text_content.join("\n"))
                         });
                     }
 
@@ -535,15 +524,8 @@ impl SessionProvider for OpenCodeProvider {
                                 let url = part.get("url").and_then(|u| u.as_str()).unwrap_or("");
                                 if !url.is_empty() {
                                     messages.push(Message {
-                                        role: MessageRole::User,
-                                        content: format!("[Image: source: {url}]"),
                                         timestamp: timestamp.clone(),
-                                        tool_name: None,
-                                        tool_input: None,
-                                        token_usage: None,
-                                        model: None,
-                                        usage_hash: None,
-                                        tool_metadata: None,
+                                        ..Message::user(format!("[Image: source: {url}]"))
                                     });
                                 }
                             }
@@ -579,15 +561,8 @@ impl SessionProvider for OpenCodeProvider {
                                             .and_then(ms_to_rfc3339)
                                             .or_else(|| timestamp.clone());
                                         messages.push(Message {
-                                            role: MessageRole::System,
-                                            content: format!("[thinking]\n{text}"),
                                             timestamp: reasoning_ts,
-                                            tool_name: None,
-                                            tool_input: None,
-                                            token_usage: None,
-                                            model: None,
-                                            usage_hash: None,
-                                            tool_metadata: None,
+                                            ..Message::system(format!("[thinking]\n{text}"))
                                         });
                                     }
                                 }
@@ -658,15 +633,11 @@ impl SessionProvider for OpenCodeProvider {
 
                                 // Emit tool use message
                                 tool_messages.push(Message {
-                                    role: MessageRole::Tool,
-                                    content: output,
                                     timestamp: tool_ts,
                                     tool_name: Some(metadata.canonical_name.clone()),
                                     tool_input,
-                                    token_usage: None,
-                                    model: None,
-                                    usage_hash: None,
                                     tool_metadata: Some(metadata),
+                                    ..Message::new(MessageRole::Tool, output)
                                 });
                             }
                             "patch" => {
@@ -718,11 +689,7 @@ impl SessionProvider for OpenCodeProvider {
 
                     if !text_parts.is_empty() {
                         messages.push(Message {
-                            role: MessageRole::Assistant,
-                            content: text_parts.join("\n"),
                             timestamp: timestamp.clone(),
-                            tool_name: None,
-                            tool_input: None,
                             token_usage: if tool_messages.is_empty() {
                                 token_usage.clone()
                             } else {
@@ -734,7 +701,7 @@ impl SessionProvider for OpenCodeProvider {
                             } else {
                                 None
                             },
-                            tool_metadata: None,
+                            ..Message::assistant(text_parts.join("\n"))
                         });
                     }
 
@@ -760,15 +727,11 @@ impl SessionProvider for OpenCodeProvider {
                         && token_usage.is_some()
                     {
                         messages.push(Message {
-                            role: MessageRole::Assistant,
-                            content: String::new(),
                             timestamp,
-                            tool_name: None,
-                            tool_input: None,
                             token_usage,
                             model: msg_model,
                             usage_hash: Some(msg_id.clone()),
-                            tool_metadata: None,
+                            ..Message::assistant(String::new())
                         });
                     }
                 }

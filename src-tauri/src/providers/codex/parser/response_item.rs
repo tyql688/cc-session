@@ -91,15 +91,9 @@ impl CodexScanAccum {
                     self.content_parts.push(normalized_text);
                 }
                 self.messages.push(Message {
-                    role,
-                    content: text,
                     timestamp: entry.timestamp.clone(),
-                    tool_name: None,
-                    tool_input: None,
-                    token_usage: None,
                     model: msg_model,
-                    usage_hash: None,
-                    tool_metadata: None,
+                    ..Message::new(role, text)
                 });
             }
             "function_call" => {
@@ -151,15 +145,8 @@ impl CodexScanAccum {
                             })
                         {
                             self.messages.push(Message {
-                                role: MessageRole::Assistant,
-                                content: format!("[Image: source: {path}]"),
                                 timestamp: entry.timestamp.clone(),
-                                tool_name: None,
-                                tool_input: None,
-                                token_usage: None,
-                                model: None,
-                                usage_hash: None,
-                                tool_metadata: None,
+                                ..Message::assistant(format!("[Image: source: {path}]"))
                             });
                             return;
                         }
@@ -198,15 +185,11 @@ impl CodexScanAccum {
                     self.call_id_map.insert(cid.to_string(), idx);
                 }
                 self.messages.push(Message {
-                    role: MessageRole::Tool,
-                    content: String::new(),
                     timestamp: entry.timestamp.clone(),
                     tool_name: Some(display_name.to_string()),
                     tool_input,
                     tool_metadata: Some(metadata),
-                    token_usage: None,
-                    model: None,
-                    usage_hash: None,
+                    ..Message::new(MessageRole::Tool, String::new())
                 });
             }
             "function_call_output" => {
@@ -246,15 +229,8 @@ impl CodexScanAccum {
                 }
                 // Fallback: standalone output message
                 self.messages.push(Message {
-                    role: MessageRole::Tool,
-                    content: output,
                     timestamp: entry.timestamp.clone(),
-                    tool_name: None,
-                    tool_input: None,
-                    token_usage: None,
-                    model: None,
-                    usage_hash: None,
-                    tool_metadata: None,
+                    ..Message::new(MessageRole::Tool, output)
                 });
             }
             "web_search_call" => {
@@ -291,15 +267,11 @@ impl CodexScanAccum {
                     self.call_id_map.insert(call_id.to_string(), idx);
                 }
                 self.messages.push(Message {
-                    role: MessageRole::Tool,
-                    content: query.to_string(),
                     timestamp: entry.timestamp.clone(),
                     tool_name: Some(metadata.canonical_name.clone()),
                     tool_input: action.map(|value| value.to_string()),
                     tool_metadata: Some(metadata),
-                    token_usage: None,
-                    model: None,
-                    usage_hash: None,
+                    ..Message::new(MessageRole::Tool, query.to_string())
                 });
             }
             "image_generation_call" => {
@@ -317,15 +289,11 @@ impl CodexScanAccum {
                     self.call_id_map.insert(call_id.to_string(), idx);
                 }
                 self.messages.push(Message {
-                    role: MessageRole::Tool,
-                    content: String::new(),
                     timestamp: entry.timestamp.clone(),
                     tool_name: Some(metadata.canonical_name.clone()),
                     tool_input: Some(input_value.to_string()),
                     tool_metadata: Some(metadata),
-                    token_usage: None,
-                    model: None,
-                    usage_hash: None,
+                    ..Message::new(MessageRole::Tool, String::new())
                 });
             }
             // Older Codex rollouts emit `local_shell_call` as
@@ -349,15 +317,11 @@ impl CodexScanAccum {
                     self.call_id_map.insert(call_id.to_string(), idx);
                 }
                 self.messages.push(Message {
-                    role: MessageRole::Tool,
-                    content: String::new(),
                     timestamp: entry.timestamp.clone(),
                     tool_name: Some(metadata.canonical_name.clone()),
                     tool_input: Some(input_value.to_string()),
                     tool_metadata: Some(metadata),
-                    token_usage: None,
-                    model: None,
-                    usage_hash: None,
+                    ..Message::new(MessageRole::Tool, String::new())
                 });
             }
             "tool_search_call" => {
@@ -374,15 +338,11 @@ impl CodexScanAccum {
                     self.call_id_map.insert(call_id.to_string(), idx);
                 }
                 self.messages.push(Message {
-                    role: MessageRole::Tool,
-                    content: String::new(),
                     timestamp: entry.timestamp.clone(),
                     tool_name: Some(metadata.canonical_name.clone()),
                     tool_input: Some(input_value.to_string()),
                     tool_metadata: Some(metadata),
-                    token_usage: None,
-                    model: None,
-                    usage_hash: None,
+                    ..Message::new(MessageRole::Tool, String::new())
                 });
             }
             "tool_search_output" => {
@@ -430,15 +390,11 @@ impl CodexScanAccum {
                     self.call_id_map.insert(cid.to_string(), idx);
                 }
                 self.messages.push(Message {
-                    role: MessageRole::Tool,
-                    content: String::new(),
                     timestamp: entry.timestamp.clone(),
                     tool_name: Some(display_name.to_string()),
                     tool_input: input,
                     tool_metadata: Some(metadata),
-                    token_usage: None,
-                    model: None,
-                    usage_hash: None,
+                    ..Message::new(MessageRole::Tool, String::new())
                 });
             }
             "custom_tool_call_output" => {
@@ -473,15 +429,8 @@ impl CodexScanAccum {
                 }
                 if !output.is_empty() {
                     self.messages.push(Message {
-                        role: MessageRole::Tool,
-                        content: output,
                         timestamp: entry.timestamp.clone(),
-                        tool_name: None,
-                        tool_input: None,
-                        token_usage: None,
-                        model: None,
-                        usage_hash: None,
-                        tool_metadata: None,
+                        ..Message::new(MessageRole::Tool, output)
                     });
                 }
             }

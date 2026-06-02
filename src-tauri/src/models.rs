@@ -136,6 +136,38 @@ pub struct Message {
     pub usage_hash: Option<String>,
 }
 
+impl Message {
+    /// Construct a message with the given role and content; all optional
+    /// fields default to `None`. Use the struct-update syntax
+    /// (`Message { timestamp: Some(t), ..Message::assistant(content) }`)
+    /// to override individual fields.
+    pub fn new(role: MessageRole, content: impl Into<String>) -> Self {
+        Self {
+            role,
+            content: content.into(),
+            timestamp: None,
+            tool_name: None,
+            tool_input: None,
+            tool_metadata: None,
+            token_usage: None,
+            model: None,
+            usage_hash: None,
+        }
+    }
+
+    pub fn user(content: impl Into<String>) -> Self {
+        Self::new(MessageRole::User, content)
+    }
+
+    pub fn assistant(content: impl Into<String>) -> Self {
+        Self::new(MessageRole::Assistant, content)
+    }
+
+    pub fn system(content: impl Into<String>) -> Self {
+        Self::new(MessageRole::System, content)
+    }
+}
+
 pub fn token_totals_from_messages(messages: &[Message]) -> TokenTotals {
     let mut totals = TokenTotals::default();
     let mut seen_hashes = HashSet::new();

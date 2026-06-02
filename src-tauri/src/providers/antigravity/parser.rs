@@ -382,15 +382,9 @@ impl AntigravityScanAccum {
             self.first_user_msg = Some(clean.clone());
         }
         self.messages.push(Message {
-            role: MessageRole::User,
-            content: clean,
             timestamp: timestamp_str,
-            tool_name: None,
-            tool_input: None,
-            tool_metadata: None,
-            token_usage: None,
             model: self.current_model.clone(),
-            usage_hash: None,
+            ..Message::user(clean)
         });
     }
 
@@ -404,15 +398,8 @@ impl AntigravityScanAccum {
             thinking_len = thinking.len();
             if !thinking.trim().is_empty() {
                 self.messages.push(Message {
-                    role: MessageRole::System,
-                    content: format!("[thinking]\n{}", thinking.trim()),
                     timestamp: timestamp_str.clone(),
-                    tool_name: None,
-                    tool_input: None,
-                    tool_metadata: None,
-                    token_usage: None,
-                    model: None,
-                    usage_hash: None,
+                    ..Message::system(format!("[thinking]\n{}", thinking.trim()))
                 });
             }
         }
@@ -426,12 +413,7 @@ impl AntigravityScanAccum {
                 let output_tokens = ((thinking_len + assistant_content_len) / 4).max(1) as u32;
 
                 self.messages.push(Message {
-                    role: MessageRole::Assistant,
-                    content: content.clone(),
                     timestamp: timestamp_str.clone(),
-                    tool_name: None,
-                    tool_input: None,
-                    tool_metadata: None,
                     token_usage: Some(TokenUsage {
                         input_tokens,
                         output_tokens,
@@ -439,7 +421,7 @@ impl AntigravityScanAccum {
                         cache_read_input_tokens: 0,
                     }),
                     model: self.current_model.clone(),
-                    usage_hash: None,
+                    ..Message::assistant(content.clone())
                 });
                 has_assistant_msg = true;
             }
@@ -494,15 +476,13 @@ impl AntigravityScanAccum {
                 };
 
                 self.messages.push(Message {
-                    role: MessageRole::Tool,
-                    content: String::new(),
                     timestamp: timestamp_str.clone(),
                     tool_name: Some(canonical),
                     tool_input: tool_input_str,
                     tool_metadata: Some(metadata),
                     token_usage,
                     model,
-                    usage_hash: None,
+                    ..Message::new(MessageRole::Tool, String::new())
                 });
                 self.pending_tool_indices.push_back(idx);
             }

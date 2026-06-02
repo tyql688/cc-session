@@ -7,7 +7,7 @@ use crate::services::tail_reader::tail_byte_offset;
 use serde::Deserialize;
 use serde_json::Value;
 
-use crate::models::{Message, MessageRole, Provider, SessionMeta};
+use crate::models::{Message, Provider, SessionMeta};
 use crate::provider::{ParsedSession, UsageEvent};
 use crate::provider_utils::{
     is_system_content, parse_rfc3339_timestamp, project_name_from_path, session_title,
@@ -597,15 +597,8 @@ pub(super) fn append_user_message(
     }
 
     messages.push(Message {
-        role: MessageRole::User,
-        content,
         timestamp,
-        tool_name: None,
-        tool_input: None,
-        token_usage: None,
-        model: None,
-        usage_hash: None,
-        tool_metadata: None,
+        ..Message::user(content)
     });
 }
 
