@@ -1,4 +1,4 @@
-import { createEffect, createMemo, createSignal, on } from "solid-js";
+import { createEffect, createSignal, on } from "solid-js";
 import type { Accessor, Setter } from "solid-js";
 import {
   pendingSessionSearch,
@@ -7,7 +7,6 @@ import {
 import type { ProcessedEntry } from "./hooks";
 import {
   SESSION_SEARCH_DEBOUNCE_MS,
-  countMatchingEntries,
   findNewestMatchingEntryIndex,
 } from "./search-utils";
 
@@ -33,7 +32,6 @@ export interface CreateSessionSearchResult {
   setSearchBarOpen: Setter<boolean>;
   searchMatchIdx: Accessor<number>;
   setSearchMatchIdx: Setter<number>;
-  searchMatchCount: Accessor<number>;
 }
 
 /**
@@ -56,10 +54,6 @@ export function createSessionSearch(
   >(null);
   const [searchBarOpen, setSearchBarOpen] = createSignal(false);
   const [searchMatchIdx, setSearchMatchIdx] = createSignal(0);
-
-  const searchMatchCount = createMemo(() =>
-    countMatchingEntries(opts.filteredEntries(), activeSessionSearch()),
-  );
 
   let sessionSearchDebounce: ReturnType<typeof setTimeout> | undefined;
   let suppressNextSearchEffect = false;
@@ -139,6 +133,5 @@ export function createSessionSearch(
     setSearchBarOpen,
     searchMatchIdx,
     setSearchMatchIdx,
-    searchMatchCount,
   };
 }

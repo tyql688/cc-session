@@ -1,4 +1,4 @@
-import { fireEvent, render } from "@solidjs/testing-library";
+import { fireEvent, render, waitFor } from "@solidjs/testing-library";
 import { createSignal } from "solid-js";
 import { beforeAll, describe, expect, it } from "vitest";
 import { SessionSearch } from "./SessionSearch";
@@ -10,9 +10,8 @@ beforeAll(() => {
 
 function setup(messagesRef: () => HTMLDivElement | undefined) {
   const [sessionSearch, setSessionSearch] = createSignal("foo");
-  const [activeSessionSearch] = createSignal("foo");
+  const [activeSessionSearch, setActiveSessionSearch] = createSignal("foo");
   const [searchMatchIdx, setSearchMatchIdx] = createSignal(0);
-  const [searchMatchCount] = createSignal(2);
   const [, setSearchBarOpen] = createSignal(true);
   const result = render(() => (
     <SessionSearch
@@ -20,13 +19,22 @@ function setup(messagesRef: () => HTMLDivElement | undefined) {
       activeSessionSearch={activeSessionSearch}
       setSessionSearch={setSessionSearch}
       searchMatchIdx={searchMatchIdx}
-      searchMatchCount={searchMatchCount}
       setSearchMatchIdx={setSearchMatchIdx}
       setSearchBarOpen={setSearchBarOpen}
       messagesRef={messagesRef}
     />
   ));
-  return { ...result, searchMatchIdx };
+  return { ...result, searchMatchIdx, setActiveSessionSearch };
+}
+
+function markedContainer(count: number): HTMLDivElement {
+  const div = document.createElement("div");
+  div.innerHTML = Array.from(
+    { length: count },
+    () => '<mark class="search-highlight">x</mark>',
+  ).join("");
+  document.body.appendChild(div);
+  return div;
 }
 
 describe("SessionSearch", () => {
@@ -61,5 +69,36 @@ describe("SessionSearch", () => {
     const { getByLabelText, searchMatchIdx } = setup(() => undefined);
     fireEvent.click(getByLabelText("Next match"));
     expect(searchMatchIdx()).toBe(0);
+  });
+
+  it("displays a total equal to the navigable mark count", async () => {
+    // The counter total must match how many times Next advances before
+    // looping: both read the same `<mark>` list. A single entry can hold many
+    // marks (merged tool groups), so an entry-count total would disagree.
+    const div = markedContainer(3);
+    const { getByText } = setup(() => div);
+
+    // Count is derived from the DOM after the committed query renders marks.
+    await waitFor(() => expect(getByText("1/3")).toBeInTheDocument());
+
+    div.remove();
+  });
+
+  it("keeps the counter total in sync with navigation across the full cycle", async () => {
+    const div = markedContainer(3);
+    const { getByLabelText, getByText } = setup(() => div);
+
+    await waitFor(() => expect(getByText("1/3")).toBeInTheDocument());
+
+    // Next three times must cycle 1/3 -> 2/3 -> 3/3 -> 1/3 (loop), proving the
+    // displayed total equals the number of navigable marks.
+    fireEvent.click(getByLabelText("Next match"));
+    expect(getByText("2/3")).toBeInTheDocument();
+    fireEvent.click(getByLabelText("Next match"));
+    expect(getByText("3/3")).toBeInTheDocument();
+    fireEvent.click(getByLabelText("Next match"));
+    expect(getByText("1/3")).toBeInTheDocument();
+
+    div.remove();
   });
 });

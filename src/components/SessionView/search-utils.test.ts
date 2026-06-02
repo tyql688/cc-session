@@ -2,8 +2,8 @@ import { describe, expect, it } from "vitest";
 import type { Message } from "../../lib/types";
 import type { ProcessedEntry } from "./hooks";
 import {
-  countMatchingEntries,
   findNewestMatchingEntryIndex,
+  getMarksInVisualOrder,
   searchWindowBounds,
 } from "./search-utils";
 
@@ -19,7 +19,7 @@ function message(content: string): Message {
 }
 
 describe("session search utilities", () => {
-  it("matches short Chinese terms in messages and tool groups", () => {
+  it("finds the newest matching entry across messages and tool groups", () => {
     const entries: ProcessedEntry[] = [
       {
         key: "m1",
@@ -51,12 +51,18 @@ describe("session search utilities", () => {
       },
     ];
 
-    expect(countMatchingEntries(entries, "中文")).toBe(2);
     expect(findNewestMatchingEntryIndex(entries, "中文")).toBe(2);
   });
 
   it("builds a bounded render window around the nearest match", () => {
     expect(searchWindowBounds(1000, 950)).toEqual({ start: 860, end: 1000 });
     expect(searchWindowBounds(1000, 100)).toEqual({ start: 80, end: 220 });
+  });
+
+  it("returns an empty list when the mark container is missing", () => {
+    // getMarksInVisualOrder is the single source of truth shared by the counter
+    // total and Next/Prev navigation; with no container both must yield zero.
+    // DOM-backed counting is covered in SessionSearch.test.tsx (happy-dom).
+    expect(getMarksInVisualOrder(undefined)).toEqual([]);
   });
 });

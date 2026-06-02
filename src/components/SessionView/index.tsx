@@ -97,8 +97,9 @@ export function SessionView(props: {
   const { hiddenRoles, roleCounts, filteredEntries, toggleRole } =
     createRoleFilter(processedEntries);
 
-  // In-session search slice: query/active/focus signals + match count + the
-  // pending-consume and debounce effects.
+  // In-session search slice: query/active/focus signals + the pending-consume
+  // and debounce effects. The displayed match total comes from the rendered
+  // `<mark>` count inside SessionSearch (same source as Next/Prev navigation).
   const {
     sessionSearch,
     setSessionSearch,
@@ -108,7 +109,6 @@ export function SessionView(props: {
     setSearchBarOpen,
     searchMatchIdx,
     setSearchMatchIdx,
-    searchMatchCount,
   } = createSessionSearch({
     filteredEntries,
     getMessagesRef: () => messagesRef,
@@ -392,7 +392,6 @@ export function SessionView(props: {
           activeSessionSearch={activeSessionSearch}
           setSessionSearch={setSessionSearch}
           searchMatchIdx={searchMatchIdx}
-          searchMatchCount={searchMatchCount}
           setSearchMatchIdx={setSearchMatchIdx}
           setSearchBarOpen={setSearchBarOpen}
           messagesRef={() => messagesRef}

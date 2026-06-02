@@ -4,7 +4,8 @@ import { ProviderIcon, UserIcon } from "../../lib/icons";
 import { useI18n } from "../../i18n/index";
 import { parseTimestamp } from "../../lib/formatters";
 import {
-  renderMarkdownContent,
+  parseMarkdownDocument,
+  renderParsedMarkdown,
   sanitizeMessageForClipboard,
 } from "./MarkdownRenderer";
 import { ImagePreview } from "./ImagePreview";
@@ -96,8 +97,15 @@ export function MessageBubble(props: {
   const copyText = createMemo(() =>
     sanitizeMessageForClipboard(props.message.content),
   );
+  // Split the markdown parse (expensive, content-only) from the render
+  // (highlight-dependent). Keying the parse on content alone means committing a
+  // new in-session Cmd+F query re-renders highlights without re-parsing the AST
+  // of every visible bubble — the prior jank source.
+  const parsedMarkdown = createMemo(() =>
+    parseMarkdownDocument(props.message.content),
+  );
   const markdownContent = createMemo(() =>
-    renderMarkdownContent(props.message.content, {
+    renderParsedMarkdown(parsedMarkdown(), {
       footnotePrefix,
       highlightTerm: props.highlightTerm,
       onPreview: (src, source) => setPreviewImage({ src, source }),

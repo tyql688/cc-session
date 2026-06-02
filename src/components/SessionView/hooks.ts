@@ -2,8 +2,8 @@ import type { Message } from "../../lib/types";
 import { parseTimestamp, formatTimeOnly } from "../../lib/formatters";
 
 /// Lowercased haystack used by in-session search. Computed once when the
-/// entry is built so per-keystroke `findNewestMatchingEntryIndex` /
-/// `countMatchingEntries` walks avoid re-lowercasing every entry.
+/// entry is built so per-keystroke `findNewestMatchingEntryIndex` walks
+/// avoid re-lowercasing every entry.
 export type ProcessedEntry =
   | { key: string; type: "message"; msg: Message; searchHaystack: string }
   | { key: string; type: "time-sep"; time: string; searchHaystack: string }
