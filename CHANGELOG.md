@@ -7,6 +7,35 @@ versioned with [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.4.7] - 2026-06-02
+
+### Added
+
+- Cost by Project table now merges usage across all providers for each project, showing one row per project with provider chips and combined totals instead of separate rows per (project, provider) pair (1faa83c)
+- Project rows in Cost by Project are expandable when more than one provider contributed: click the triangle to reveal a per-provider breakdown of sessions, turns, tokens, and cost (b0f1d1e)
+- Cost by Model table now includes a Total row summing turns, input, output, and cache tokens across all models with a combined cost (d962d8b)
+- Global Cmd+K search now matches the entire query as a literal substring instead of splitting it into AND-ed tokens, so a mixed query like `347 测试` matches only contiguous occurrences, not sessions that happen to contain both fragments scattered apart (833a403)
+
+### Fixed
+
+- Codex cached input tokens are no longer double-counted in aggregate usage; input now excludes the cached portion so `input + cache_read` equals true context, keeping Codex totals disjoint like Claude (ac23881)
+- Codex token-count events re-emitted verbatim (identical timestamp, model, and all token counts) are now deduplicated instead of summed, fixing inflated totals in sessions that repeat events (4039885)
+- "system" theme now resolves and follows OS dark mode live instead of falling back to the light defaults, and cold start no longer flashes a mismatched background frame (0ae66f5)
+- File watcher no longer panics and stops following live sessions when a watched file rotates; kqueue 1.2.0 replaces the panic with graceful error handling (0f718b1)
+- Global search index cap raised from 64 KiB to 1 MiB per session, so phrases deep in long conversations are searchable instead of silently truncated out of the FTS index (e16beb3)
+- Opening a session from global search now lands on the top match consistently — scroll position, highlight, and Next/Prev all target the same occurrence (6f22759)
+- In-session Cmd+F match counter now reports the exact number of navigable marks and stays in sync with Next/Prev, and no longer re-parses the markdown AST on every keystroke (df1a8bc)
+- In-session Cmd+F works when opened before the messages container has mounted, by reading the messages ref as a live accessor instead of capturing it by value (e5642c3)
+- Recent Sessions per-session rows now honor the selected date range, so their token totals reconcile with the headline cost and daily chart for any bounded range (52d2418)
+- Usage panel filter state (date range, provider selection, chart metric, table sorts, row limits) persists across view switches instead of resetting on each return (e3c545a)
+- Global search LIKE fallback ranks title over project-name over content-only matches (recency breaks ties), so the strongest match is no longer pushed past the 100-row cap, and FTS degradation is now logged instead of silently swallowed (64b1cf4)
+- Windows minimize glyph is crisp again, the maximize button swaps to a restore glyph when maximized, and Linux no longer renders a double title bar stacked with the WM decorator (4a62cc1)
+
+### Changed
+
+- Global and in-session search now cover user and assistant dialogue only; tool calls, results, thinking, and system messages are no longer searchable, keeping the two search modes consistent (3d56523)
+- Internal hardening: bare `String` service errors replaced with a typed `ServiceError`; per-provider parsers (claude/codex/kimi/antigravity) and core modules (commands, db queries, exporter, tools) split into focused submodules; spacing/radius/type/motion design-token scales added to theme CSS; Biome + lefthook pre-commit/pre-push gates, expanded Rust coverage (exporter/terminal/opencode) and a Solid render harness added; dead code, orphan i18n keys, and ROADMAP.md removed; README refreshed with screenshots (f4efcde, 9569393, 13ff642, 1d4bc89, 967aba7, c88d195, f1d8a99, 038bed6, c698599, 9025d92)
+
 ## [0.4.6] - 2026-05-28
 
 ### Added
