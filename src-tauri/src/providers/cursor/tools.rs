@@ -401,6 +401,10 @@ fn remap_patch_string(patch: &str) -> String {
     serde_json::json!({ "file_path": file_path, "patch": patch }).to_string()
 }
 
+// These tests cover only the parseable CLI/JSONL helpers (string extraction,
+// user-text normalisation, think/redaction handling, tool-arg remapping). The
+// binary ACP `store.db` protobuf path has no synthetic fixture and is verified
+// by the `#[ignore]` real-data smoke test in `tests/cursor_real_smoke.rs`.
 #[cfg(test)]
 mod tests {
     use super::*;

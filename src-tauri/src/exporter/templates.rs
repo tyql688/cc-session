@@ -298,3 +298,81 @@ document.addEventListener('DOMContentLoaded',function(){{
         mermaid_js = mermaid_js,
     )
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[allow(clippy::too_many_arguments)]
+    fn assemble(needs_katex: bool, needs_mermaid: bool) -> String {
+        assemble_html(
+            "My Session",
+            "Claude Code",
+            "#d97757",
+            7,
+            "2026-01-02",
+            "12 KB",
+            "<div class=\"msg\">BODY</div>",
+            "<span>TOKENS</span>",
+            "<span>MODEL</span>",
+            "<span>VERSION</span>",
+            "<span>BRANCH</span>",
+            "<span>PATH</span>",
+            needs_katex,
+            needs_mermaid,
+        )
+    }
+
+    #[test]
+    fn inline_script_asset_neutralises_closing_script_tags() {
+        // A nested </script> inside an inlined asset would prematurely close
+        // the host <script> tag; it must be escaped to <\/script>.
+        let input = "before </script> after";
+        assert_eq!(inline_script_asset(input), r"before <\/script> after");
+    }
+
+    #[test]
+    fn assemble_html_substitutes_all_placeholders() {
+        let html = assemble(false, false);
+        assert!(html.starts_with("<!DOCTYPE html>"));
+        assert!(html.contains("<title>My Session</title>"));
+        assert!(html.contains("<h1>My Session</h1>"));
+        // Provider color flows into both the badge background and avatar rule.
+        assert!(html.contains(r#"style="background:#d97757""#));
+        assert!(html.contains(".avatar-assistant { color: #d97757; }"));
+        assert!(html.contains(">Claude Code</span>"));
+        assert!(html.contains("💬 7 messages"));
+        assert!(html.contains("📅 2026-01-02"));
+        assert!(html.contains("📦 12 KB"));
+        // The injected fragment blocks are placed verbatim.
+        assert!(html.contains("<div class=\"msg\">BODY</div>"));
+        assert!(html.contains("<span>TOKENS</span>"));
+        assert!(html.contains("<span>MODEL</span>"));
+        assert!(html.contains("<span>VERSION</span>"));
+        assert!(html.contains("<span>BRANCH</span>"));
+        assert!(html.contains("<span>PATH</span>"));
+        assert!(html.trim_end().ends_with("</html>"));
+    }
+
+    #[test]
+    fn assemble_html_inlines_asset_bundles_only_when_requested() {
+        // The static template body already mentions `window.katex` /
+        // `window.mermaid` in its runtime glue, so we can't assert on those
+        // names. Instead, the multi-hundred-KB minified bundles inflate the
+        // document size only when the corresponding flag is set.
+        let bare = assemble(false, false);
+        let with_katex = assemble(true, false);
+        let with_both = assemble(true, true);
+
+        // Inlining KaTeX adds far more than a few KB.
+        assert!(
+            with_katex.len() > bare.len() + 50_000,
+            "katex bundle should inflate output"
+        );
+        // Adding Mermaid on top inflates further still.
+        assert!(
+            with_both.len() > with_katex.len() + 50_000,
+            "mermaid bundle should inflate output"
+        );
+    }
+}

@@ -1,20 +1,17 @@
 mod parser;
 
-use parser::{extract_tokens, ms_to_rfc3339};
+use parser::{build_assistant_messages, build_user_messages, ms_to_rfc3339};
 
 use std::path::PathBuf;
 
 use rusqlite::{params, Connection};
 
-use crate::models::{Message, MessageRole, Provider, SessionMeta};
+use crate::models::{Message, Provider, SessionMeta};
 use crate::provider::{
     ChildPlan, DeletionPlan, FileAction, LoadedSession, ParsedSession, ProviderError,
     SessionProvider,
 };
 use crate::provider_utils::{session_title, truncate_to_bytes, FTS_CONTENT_LIMIT};
-use crate::tool_metadata::{
-    build_tool_metadata, enrich_tool_metadata, ToolCallFacts, ToolResultFacts,
-};
 
 pub struct Descriptor;
 impl crate::provider::ProviderDescriptor for Descriptor {
@@ -44,38 +41,6 @@ impl crate::provider::ProviderDescriptor for Descriptor {
     fn watch_strategy(&self) -> crate::provider::WatchStrategy {
         crate::provider::WatchStrategy::Poll
     }
-}
-
-fn opencode_tool_input_value(state: Option<&serde_json::Value>) -> Option<serde_json::Value> {
-    let input = state?.get("input")?;
-    if let Some(text) = input.as_str() {
-        serde_json::from_str(text)
-            .ok()
-            .or_else(|| Some(serde_json::json!({ "input": text })))
-    } else {
-        Some(input.clone())
-    }
-}
-
-fn opencode_tool_result_value(
-    state: Option<&serde_json::Value>,
-    output: &str,
-) -> Option<serde_json::Value> {
-    let state = state?;
-    let mut result = state.clone();
-    if let Some(obj) = result.as_object_mut() {
-        if !output.is_empty() && !obj.contains_key("output") {
-            obj.insert("output".to_string(), serde_json::json!(output));
-        }
-    }
-    Some(result)
-}
-
-fn opencode_patch_part_value(part: &serde_json::Value) -> Option<serde_json::Value> {
-    Some(serde_json::json!({
-        "hash": part.get("hash")?.as_str()?,
-        "files": part.get("files")?.clone(),
-    }))
 }
 
 pub struct OpenCodeProvider {
@@ -500,240 +465,11 @@ impl SessionProvider for OpenCodeProvider {
 
             let parts = parts_by_msg.get(msg_id).cloned().unwrap_or_default();
 
+            let ts = timestamp.as_deref();
             match role_str {
-                "user" => {
-                    // Collect text parts as user message content
-                    let text_content: Vec<&str> = parts
-                        .iter()
-                        .filter(|p| p.get("type").and_then(|t| t.as_str()) == Some("text"))
-                        .filter_map(|p| p.get("text").and_then(|t| t.as_str()))
-                        .collect();
-
-                    if !text_content.is_empty() {
-                        messages.push(Message {
-                            timestamp: timestamp.clone(),
-                            ..Message::user(text_content.join("\n"))
-                        });
-                    }
-
-                    // Check for file parts (images)
-                    for part in &parts {
-                        if part.get("type").and_then(|t| t.as_str()) == Some("file") {
-                            let mime = part.get("mime").and_then(|m| m.as_str()).unwrap_or("");
-                            if mime.starts_with("image/") {
-                                let url = part.get("url").and_then(|u| u.as_str()).unwrap_or("");
-                                if !url.is_empty() {
-                                    messages.push(Message {
-                                        timestamp: timestamp.clone(),
-                                        ..Message::user(format!("[Image: source: {url}]"))
-                                    });
-                                }
-                            }
-                        }
-                    }
-                }
+                "user" => messages.extend(build_user_messages(&parts, ts)),
                 "assistant" => {
-                    let token_usage = extract_tokens(&msg_json);
-
-                    // Collect text parts
-                    let mut text_parts: Vec<String> = Vec::new();
-                    // Collect tool parts to emit after the text message
-                    let mut tool_messages: Vec<Message> = Vec::new();
-                    let mut patch_parts: Vec<serde_json::Value> = Vec::new();
-
-                    for part in &parts {
-                        let part_type = part.get("type").and_then(|t| t.as_str()).unwrap_or("");
-                        match part_type {
-                            "text" => {
-                                if let Some(text) = part.get("text").and_then(|t| t.as_str()) {
-                                    if !text.is_empty() {
-                                        text_parts.push(text.to_string());
-                                    }
-                                }
-                            }
-                            "reasoning" => {
-                                if let Some(text) = part.get("text").and_then(|t| t.as_str()) {
-                                    if !text.trim().is_empty() {
-                                        let reasoning_ts = part
-                                            .get("time")
-                                            .and_then(|t| t.get("start"))
-                                            .and_then(|s| s.as_i64())
-                                            .and_then(ms_to_rfc3339)
-                                            .or_else(|| timestamp.clone());
-                                        messages.push(Message {
-                                            timestamp: reasoning_ts,
-                                            ..Message::system(format!("[thinking]\n{text}"))
-                                        });
-                                    }
-                                }
-                            }
-                            "tool" => {
-                                let tool_name = part
-                                    .get("tool")
-                                    .and_then(|t| t.as_str())
-                                    .unwrap_or("tool")
-                                    .to_string();
-                                let state = part.get("state");
-                                let status = state
-                                    .and_then(|s| s.get("status"))
-                                    .and_then(|s| s.as_str())
-                                    .unwrap_or("");
-
-                                let input_value = opencode_tool_input_value(state);
-                                let mut metadata = build_tool_metadata(ToolCallFacts {
-                                    provider: Provider::OpenCode,
-                                    raw_name: &tool_name,
-                                    input: input_value.as_ref(),
-                                    call_id: part
-                                        .get("callID")
-                                        .or_else(|| part.get("id"))
-                                        .and_then(|v| v.as_str()),
-                                    assistant_id: Some(msg_id.as_str()),
-                                });
-
-                                // Tool input
-                                let tool_input = state.and_then(|s| s.get("input")).map(|i| {
-                                    i.as_str()
-                                        .map(str::to_string)
-                                        .unwrap_or_else(|| i.to_string())
-                                });
-
-                                // Tool output
-                                let output = match status {
-                                    "completed" => state
-                                        .and_then(|s| s.get("output"))
-                                        .and_then(|o| o.as_str())
-                                        .unwrap_or("")
-                                        .to_string(),
-                                    "error" => state
-                                        .and_then(|s| s.get("error"))
-                                        .and_then(|e| e.as_str())
-                                        .map(|e| format!("[Error] {e}"))
-                                        .unwrap_or_default(),
-                                    _ => String::new(),
-                                };
-
-                                let result_value = opencode_tool_result_value(state, &output);
-                                enrich_tool_metadata(
-                                    &mut metadata,
-                                    ToolResultFacts {
-                                        raw_result: result_value.as_ref(),
-                                        is_error: Some(status == "error"),
-                                        status: (!status.is_empty()).then_some(status),
-                                        artifact_path: None,
-                                    },
-                                );
-
-                                let tool_ts = state
-                                    .and_then(|s| s.get("time"))
-                                    .and_then(|t| t.get("start"))
-                                    .and_then(|s| s.as_i64())
-                                    .and_then(ms_to_rfc3339)
-                                    .or_else(|| timestamp.clone());
-
-                                // Emit tool use message
-                                tool_messages.push(Message {
-                                    timestamp: tool_ts,
-                                    tool_name: Some(metadata.canonical_name.clone()),
-                                    tool_input,
-                                    tool_metadata: Some(metadata),
-                                    ..Message::new(MessageRole::Tool, output)
-                                });
-                            }
-                            "patch" => {
-                                if let Some(patch) = opencode_patch_part_value(part) {
-                                    patch_parts.push(patch);
-                                }
-                            }
-                            // Skip step-start, step-finish, reasoning, snapshot, patch, etc.
-                            _ => {}
-                        }
-                    }
-
-                    if !patch_parts.is_empty() {
-                        for tool_message in tool_messages.iter_mut().rev() {
-                            let Some(metadata) = tool_message.tool_metadata.as_mut() else {
-                                continue;
-                            };
-                            if metadata.raw_name != "apply_patch" {
-                                continue;
-                            }
-
-                            let mut structured = metadata
-                                .structured
-                                .take()
-                                .unwrap_or_else(|| serde_json::json!({}));
-                            if !structured.is_object() {
-                                structured = serde_json::json!({});
-                            }
-                            if let Some(obj) = structured.as_object_mut() {
-                                if patch_parts.len() == 1 {
-                                    obj.insert("patch".to_string(), patch_parts[0].clone());
-                                } else {
-                                    obj.insert(
-                                        "patches".to_string(),
-                                        serde_json::Value::Array(patch_parts.clone()),
-                                    );
-                                }
-                            }
-                            metadata.structured = Some(structured);
-                            break;
-                        }
-                    }
-
-                    // Emit text message first (with token usage on last text msg of this turn)
-                    let msg_model = msg_json
-                        .get("modelID")
-                        .and_then(|m| m.as_str())
-                        .map(|s| s.to_string());
-
-                    if !text_parts.is_empty() {
-                        messages.push(Message {
-                            timestamp: timestamp.clone(),
-                            token_usage: if tool_messages.is_empty() {
-                                token_usage.clone()
-                            } else {
-                                None
-                            },
-                            model: msg_model.clone(),
-                            usage_hash: if tool_messages.is_empty() {
-                                Some(msg_id.clone())
-                            } else {
-                                None
-                            },
-                            ..Message::assistant(text_parts.join("\n"))
-                        });
-                    }
-
-                    // Emit tool messages
-                    if !tool_messages.is_empty() {
-                        let last_idx = tool_messages.len() - 1;
-                        for (i, mut tool_msg) in tool_messages.into_iter().enumerate() {
-                            // Attach token usage to last tool message if no text parts,
-                            // otherwise it was already attached to the text message above
-                            if i == last_idx && text_parts.is_empty() {
-                                tool_msg.token_usage = token_usage.clone();
-                                tool_msg.usage_hash = Some(msg_id.clone());
-                            }
-                            messages.push(tool_msg);
-                        }
-                    }
-
-                    // If assistant message had no text and no tools (rare), still emit for token tracking
-                    if text_parts.is_empty()
-                        && !parts
-                            .iter()
-                            .any(|p| p.get("type").and_then(|t| t.as_str()) == Some("tool"))
-                        && token_usage.is_some()
-                    {
-                        messages.push(Message {
-                            timestamp,
-                            token_usage,
-                            model: msg_model,
-                            usage_hash: Some(msg_id.clone()),
-                            ..Message::assistant(String::new())
-                        });
-                    }
+                    messages.extend(build_assistant_messages(&parts, &msg_json, msg_id, ts))
                 }
                 _ => {}
             }
