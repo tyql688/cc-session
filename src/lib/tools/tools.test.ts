@@ -7,8 +7,8 @@ import {
   toolDisplayName,
   toolIcon,
   toolSummary,
-} from "./tools";
-import type { Message } from "./types";
+} from "./index";
+import type { Message } from "../types";
 
 const baseMessage: Message = {
   role: "tool",
@@ -19,7 +19,7 @@ const baseMessage: Message = {
   token_usage: null,
 };
 
-describe("tool registry", () => {
+describe("tools/names", () => {
   it("parses and displays MCP tool names", () => {
     const name = "mcp__plugin_playwright_playwright__browser_take_screenshot";
 
@@ -49,88 +49,7 @@ describe("tool registry", () => {
     expect(toolSummary(message)).toBe("Fix Live2D leak");
   });
 
-  it("formats structured edit results as a diff", () => {
-    const detail = formatToolResultMetadata({
-      raw_name: "Edit",
-      canonical_name: "Edit",
-      display_name: "Edit",
-      category: "file",
-      status: "success",
-      structured: {
-        file_path: "/tmp/App.tsx",
-        old_string: "old",
-        new_string: "new",
-      },
-    });
-
-    expect(detail?.lines).toContainEqual({
-      label: "file",
-      value: "/tmp/App.tsx",
-    });
-    expect(detail?.diff).toEqual({ old: "old", new: "new" });
-  });
-
-  it("formats Claude structuredPatch results as patch diff rows", () => {
-    const detail = formatToolResultMetadata({
-      raw_name: "Edit",
-      canonical_name: "Edit",
-      display_name: "Edit",
-      category: "file",
-      status: "success",
-      structured: {
-        filePath: "/tmp/App.tsx",
-        structuredPatch: [
-          {
-            oldStart: 4,
-            oldLines: 2,
-            newStart: 4,
-            newLines: 2,
-            lines: [" const same = true;", "-old", "+new"],
-          },
-        ],
-      },
-    });
-
-    expect(detail?.patchDiff?.map((line) => line.type)).toEqual([
-      "skip",
-      "context",
-      "remove",
-      "add",
-    ]);
-  });
-
-  it("formats task status changes without object stringification", () => {
-    const detail = formatToolResultMetadata({
-      raw_name: "TaskUpdate",
-      canonical_name: "TaskUpdate",
-      display_name: "TaskUpdate",
-      category: "task",
-      status: "success",
-      structured: {
-        taskId: "11",
-        statusChange: { from: "in_progress", to: "completed" },
-      },
-    });
-
-    expect(detail?.lines).toContainEqual({
-      label: "statusChange",
-      value: "in_progress → completed",
-    });
-    expect(detail?.lines.some((line) => line.value === "[object Object]")).toBe(
-      false,
-    );
-  });
-
-  it("formats canonical input for known tools", () => {
-    const detail = formatToolInput({
-      ...baseMessage,
-      tool_name: "Grep",
-      tool_input: JSON.stringify({
-        pattern: "fn main",
-        path: "/Users/alice/repo/src",
-      }),
-    });
-
+  it("summarizes Grep input into /pattern/ path form", () => {
     expect(
       toolSummary({
         ...baseMessage,
@@ -141,6 +60,25 @@ describe("tool registry", () => {
         }),
       }),
     ).toBe("/fn main/ ~/repo/src");
+  });
+
+  it("returns image and dynamic tool icons", () => {
+    expect(toolIcon("ImageGeneration")).toBe("🖼️");
+    expect(toolIcon("DynamicTool")).toBe("🧩");
+  });
+});
+
+describe("tools/input", () => {
+  it("formats canonical input for known tools", () => {
+    const detail = formatToolInput({
+      ...baseMessage,
+      tool_name: "Grep",
+      tool_input: JSON.stringify({
+        pattern: "fn main",
+        path: "/Users/alice/repo/src",
+      }),
+    });
+
     expect(detail?.lines).toContainEqual({
       label: "pattern",
       value: "fn main",
@@ -242,6 +180,80 @@ describe("tool registry", () => {
     ]);
     expect(detail?.patchDiff?.[0]?.text).toBe(
       "*** Update File: ~/project/src/app.ts",
+    );
+  });
+});
+
+describe("tools/result", () => {
+  it("formats structured edit results as a diff", () => {
+    const detail = formatToolResultMetadata({
+      raw_name: "Edit",
+      canonical_name: "Edit",
+      display_name: "Edit",
+      category: "file",
+      status: "success",
+      structured: {
+        file_path: "/tmp/App.tsx",
+        old_string: "old",
+        new_string: "new",
+      },
+    });
+
+    expect(detail?.lines).toContainEqual({
+      label: "file",
+      value: "/tmp/App.tsx",
+    });
+    expect(detail?.diff).toEqual({ old: "old", new: "new" });
+  });
+
+  it("formats Claude structuredPatch results as patch diff rows", () => {
+    const detail = formatToolResultMetadata({
+      raw_name: "Edit",
+      canonical_name: "Edit",
+      display_name: "Edit",
+      category: "file",
+      status: "success",
+      structured: {
+        filePath: "/tmp/App.tsx",
+        structuredPatch: [
+          {
+            oldStart: 4,
+            oldLines: 2,
+            newStart: 4,
+            newLines: 2,
+            lines: [" const same = true;", "-old", "+new"],
+          },
+        ],
+      },
+    });
+
+    expect(detail?.patchDiff?.map((line) => line.type)).toEqual([
+      "skip",
+      "context",
+      "remove",
+      "add",
+    ]);
+  });
+
+  it("formats task status changes without object stringification", () => {
+    const detail = formatToolResultMetadata({
+      raw_name: "TaskUpdate",
+      canonical_name: "TaskUpdate",
+      display_name: "TaskUpdate",
+      category: "task",
+      status: "success",
+      structured: {
+        taskId: "11",
+        statusChange: { from: "in_progress", to: "completed" },
+      },
+    });
+
+    expect(detail?.lines).toContainEqual({
+      label: "statusChange",
+      value: "in_progress → completed",
+    });
+    expect(detail?.lines.some((line) => line.value === "[object Object]")).toBe(
+      false,
     );
   });
 
