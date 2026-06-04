@@ -7,6 +7,18 @@ versioned with [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.4.8] - 2026-06-04
+
+### Added
+
+- Usage panel supports a custom date range: pick start/end dates next to the Today/7d/30d/90d/All presets, with trend comparison against the preceding window of the same length (05346ae)
+- Token counts follow the UI language: Chinese uses 万/亿/万亿 scales, English extends past M to B/T, applied across the usage panel, status bar, and session toolbar (a563f70)
+- First launch automatically fetches the model pricing catalog and computes usage, so costs are populated without manually clicking refresh pricing and refresh usage (eba4e0d)
+
+### Fixed
+
+- Pricing catalog fetch is now bounded by a 15-second timeout; a hung connection no longer blocks cold-start indexing indefinitely (eba4e0d)
+
 ## [0.4.7] - 2026-06-02
 
 ### Added
