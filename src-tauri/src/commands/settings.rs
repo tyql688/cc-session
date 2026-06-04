@@ -124,7 +124,15 @@ pub async fn get_pricing_catalog_status(
 pub async fn refresh_pricing_catalog(
     state: State<'_, AppState>,
 ) -> CommandResult<PricingCatalogStatus> {
-    let response = reqwest::get(PRICING_CATALOG_URL)
+    // Bounded timeout: the first-use bootstrap awaits this before the initial
+    // reindex, so a hung connection must not block indexing forever.
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(15))
+        .build()
+        .context("failed to build pricing catalog client")?;
+    let response = client
+        .get(PRICING_CATALOG_URL)
+        .send()
         .await
         .context("failed to fetch pricing catalog")?;
     let response = response
@@ -197,6 +205,24 @@ pub async fn clear_index(state: State<'_, AppState>) -> CommandResult<()> {
         .await
         .context("task join error")?
         .map_err(CommandError::from)?;
+    Ok(())
+}
+
+/// Clear cached usage stats and invalidate the incremental-scan snapshot so
+/// the next reindex re-parses every file. Used by the first-use bootstrap to
+/// re-price stats that were indexed before a pricing catalog existed.
+#[tauri::command]
+pub async fn clear_usage_stats(state: State<'_, AppState>) -> CommandResult<()> {
+    let state = state.inner().clone();
+    tokio::task::spawn_blocking(move || {
+        state
+            .db
+            .clear_usage_stats()
+            .context("failed to clear usage stats")
+    })
+    .await
+    .context("task join error")?
+    .map_err(CommandError::from)?;
     Ok(())
 }
 

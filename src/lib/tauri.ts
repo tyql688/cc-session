@@ -214,6 +214,10 @@ export async function startRefreshUsage(): Promise<boolean> {
   return invoke<boolean>("start_refresh_usage");
 }
 
+export async function clearUsageStats(): Promise<void> {
+  return invoke<void>("clear_usage_stats");
+}
+
 export async function detectTerminal(): Promise<string> {
   return invoke<string>("detect_terminal");
 }

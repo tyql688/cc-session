@@ -5,12 +5,16 @@ import {
   getTree,
   getSessionCount,
   reindexProviders,
+  getPricingCatalogStatus,
+  refreshPricingCatalog,
+  clearUsageStats,
 } from "../lib/tauri";
 import {
   getPollWatchProviders,
   loadProviderWatchSnapshots,
 } from "../lib/provider-watch";
-import { toastError } from "../stores/toast";
+import { useI18n } from "../i18n/index";
+import { toastError, toastInfo } from "../stores/toast";
 
 export interface SyncCallbacks {
   setTree: (tree: TreeNode[]) => void;
@@ -178,6 +182,41 @@ export function createSyncManager(callbacks: SyncCallbacks) {
     pollTimer = undefined;
   }
 
+  /**
+   * First use: the pricing catalog has never been fetched, so the index pass
+   * would cost every session at $0. Fetch the catalog up front, then clear any
+   * stats a previous catalog-less run left behind so the reindex that follows
+   * re-parses everything with real prices. Once the fetch succeeds the catalog
+   * timestamp is set and this never runs again; on failure (e.g. offline) it
+   * retries on the next launch.
+   */
+  async function bootstrapPricingIfNeeded() {
+    const { t } = useI18n();
+    const pricing = await getPricingCatalogStatus().catch((error: unknown) => {
+      toastError(String(error));
+      return null;
+    });
+    if (!pricing || pricing.updated_at) return;
+
+    toastInfo(t("usage.firstUseBootstrap"));
+    // The catalog fetch is a single short HTTP request but flaky networks are
+    // common; retry a couple of times before deferring to the next launch.
+    const attempts = 3;
+    for (let attempt = 1; attempt <= attempts; attempt++) {
+      try {
+        await refreshPricingCatalog();
+        await clearUsageStats();
+        return;
+      } catch (error) {
+        if (attempt === attempts) {
+          toastError(`${t("usage.firstUseBootstrapFailed")}: ${String(error)}`);
+          return;
+        }
+        await new Promise((resolve) => setTimeout(resolve, 2000 * attempt));
+      }
+    }
+  }
+
   /** Load cached tree immediately, then reindex in background. */
   async function coldStart() {
     // Show cached data instantly so the user doesn't stare at a spinner
@@ -190,6 +229,8 @@ export function createSyncManager(callbacks: SyncCallbacks) {
     }
     // Only dismiss spinner early on cache hit; keep it up on cache miss
     if (cacheHit) callbacks.setIsLoading(false);
+
+    await bootstrapPricingIfNeeded();
 
     // Reindex in background
     try {

@@ -308,6 +308,7 @@ pub fn run() {
             commands::start_rebuild_index,
             commands::refresh_pricing_catalog,
             commands::clear_index,
+            commands::clear_usage_stats,
             commands::start_refresh_usage,
             commands::get_provider_snapshots,
             commands::get_resume_command,
