@@ -54,7 +54,7 @@ import {
 import { ConfirmDialog } from "../ConfirmDialog";
 import { toast, toastError, toastInfo } from "../../stores/toast";
 import { errorMessage } from "../../lib/errors";
-import { formatLocalDateTime } from "../../lib/formatters";
+import { formatLocalDateTime, toLocalISODate } from "../../lib/formatters";
 import {
   buildDailyChartData,
   buildHoveredDaySummary,
@@ -68,7 +68,6 @@ import {
 import {
   buildHeatmapGrid,
   dateRangeForYear,
-  todayISO,
   type HeatmapGrid,
 } from "../../lib/heatmap";
 import type {
@@ -189,7 +188,7 @@ export function UsagePanel() {
   // fetched range and the laid-out grid can never disagree (e.g. across a
   // midnight tick if today were read twice). Refetches on provider/window change.
   const calendarWindow = createMemo(() =>
-    dateRangeForYear(calendarYear(), todayISO()),
+    dateRangeForYear(calendarYear(), toLocalISODate()),
   );
   const [calendar, { refetch: refetchCalendar }] = createResource(
     () =>
