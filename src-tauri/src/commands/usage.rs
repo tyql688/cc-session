@@ -385,7 +385,10 @@ fn build_project_costs(project_model_rows: Vec<UsageProjectModelDetailRow>) -> V
                 .remove(&key)
                 .map(|sessions| sessions.len() as u64)
                 .unwrap_or(0);
-            let breakdown = by_project.remove(&key).unwrap_or_default();
+            let breakdown = by_project.remove(&key).unwrap_or_else(|| {
+                log::warn!("missing per-provider breakdown for project_path={key}");
+                Vec::new()
+            });
             let mut providers: Vec<String> = breakdown.iter().map(|p| p.provider.clone()).collect();
             providers.sort();
             cost_row.providers = providers;

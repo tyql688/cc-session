@@ -378,7 +378,10 @@ impl Database {
         let conn = self.lock_write()?;
         let now = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
-            .unwrap_or_default()
+            .unwrap_or_else(|e| {
+                log::warn!("system clock before UNIX epoch in add_favorite: {e}");
+                std::time::Duration::ZERO
+            })
             .as_secs() as i64;
         conn.execute(
             "INSERT OR IGNORE INTO favorites (session_id, added_at) VALUES (?1, ?2)",
