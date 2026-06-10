@@ -245,29 +245,21 @@ pub fn jsonl_subagents_deletion_plan(meta: &SessionMeta, children: &[SessionMeta
 }
 
 pub fn jsonl_subagent_related_paths(source: &Path) -> Vec<PathBuf> {
-    let is_child = source
-        .parent()
-        .and_then(|parent| parent.file_name())
-        .and_then(|name| name.to_str())
-        == Some("subagents");
-
-    let (parent_file, subagents_dir) = if is_child {
-        let Some(subagents_dir) = source.parent() else {
-            return existing_path(source);
+    let (parent_file, subagents_dir) =
+        if let Some(subagents_dir) = crate::provider_utils::subagents_ancestor(source) {
+            let Some(session_dir) = subagents_dir.parent() else {
+                return existing_path(source);
+            };
+            (
+                session_dir.with_extension("jsonl"),
+                subagents_dir.to_path_buf(),
+            )
+        } else {
+            (
+                source.to_path_buf(),
+                source.with_extension("").join("subagents"),
+            )
         };
-        let Some(session_dir) = subagents_dir.parent() else {
-            return existing_path(source);
-        };
-        (
-            session_dir.with_extension("jsonl"),
-            subagents_dir.to_path_buf(),
-        )
-    } else {
-        (
-            source.to_path_buf(),
-            source.with_extension("").join("subagents"),
-        )
-    };
 
     let mut paths = Vec::new();
     if parent_file.is_file() {
@@ -275,20 +267,7 @@ pub fn jsonl_subagent_related_paths(source: &Path) -> Vec<PathBuf> {
     }
 
     if subagents_dir.is_dir() {
-        let mut children = match std::fs::read_dir(&subagents_dir) {
-            Ok(entries) => entries
-                .filter_map(Result::ok)
-                .map(|entry| entry.path())
-                .filter(|path| path.extension().and_then(|ext| ext.to_str()) == Some("jsonl"))
-                .collect::<Vec<_>>(),
-            Err(error) => {
-                log::warn!(
-                    "failed to read subagent dir '{}': {error}",
-                    subagents_dir.display()
-                );
-                Vec::new()
-            }
-        };
+        let mut children = crate::provider_utils::collect_subagent_jsonl_files(&subagents_dir);
         children.sort();
         paths.extend(children);
     }
@@ -429,6 +408,27 @@ mod tests {
             jsonl_subagent_related_paths(&child_a),
             vec![parent, child_b]
         );
+    }
+
+    #[test]
+    fn jsonl_subagent_related_paths_covers_workflow_nested_children() {
+        let dir = TempDir::new().unwrap();
+        let project = dir.path().join("project");
+        let subagents_dir = project.join("parent").join("subagents");
+        let workflow_dir = subagents_dir.join("workflows").join("wf_1");
+        std::fs::create_dir_all(&workflow_dir).unwrap();
+        let parent = project.join("parent.jsonl");
+        let plain_child = subagents_dir.join("agent-a.jsonl");
+        let workflow_child = workflow_dir.join("agent-b.jsonl");
+        std::fs::write(&parent, "").unwrap();
+        std::fs::write(&plain_child, "").unwrap();
+        std::fs::write(&workflow_child, "").unwrap();
+
+        let expected = vec![parent.clone(), plain_child.clone(), workflow_child.clone()];
+        assert_eq!(jsonl_subagent_related_paths(&parent), expected);
+        // A workflow child resolves the same family despite the extra
+        // workflows/wf_*/ levels between it and subagents/.
+        assert_eq!(jsonl_subagent_related_paths(&workflow_child), expected);
     }
 
     #[test]

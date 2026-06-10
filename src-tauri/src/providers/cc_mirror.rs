@@ -234,15 +234,10 @@ impl CcMirrorProvider {
                     } else if is_dir {
                         let subagents_dir = file_path.join("subagents");
                         if subagents_dir.is_dir() {
-                            if let Ok(sub_entries) = fs::read_dir(&subagents_dir) {
-                                for sub_entry in sub_entries.flatten() {
-                                    let sub_path = sub_entry.path();
-                                    if sub_path.extension().and_then(|ext| ext.to_str())
-                                        == Some("jsonl")
-                                    {
-                                        all_files.push((sub_path, variant.clone()));
-                                    }
-                                }
+                            for sub_path in
+                                crate::provider_utils::collect_subagent_jsonl_files(&subagents_dir)
+                            {
+                                all_files.push((sub_path, variant.clone()));
                             }
                         }
                     }

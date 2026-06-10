@@ -150,6 +150,8 @@ Resume: Claude `--resume`, Codex `resume`, Antigravity `agy --conversation <id>`
 
 ## Pitfalls
 
+- **Claude streamed usage**: since ~June 2026 Claude Code writes one assistant API call across several JSONL lines (same `message.id` + `requestId`) with **cumulative** `usage` — `output_tokens` grows line over line and only the largest entry is the call's total. Any usage aggregation must keep the **max-total entry per `messageId:requestId`** (`models.rs::dedup_usage_messages`), never the first occurrence. This matches the cumulative semantics of Anthropic streaming `message_delta` events.
+- **Claude workflow subagents**: Workflow runs nest agents at `{session}/subagents/workflows/wf_*/agent-{id}.jsonl` — deeper than plain Task subagents. Anything resolving the subagent family must use the nearest `subagents` ancestor (`provider_utils::subagents_ancestor`) and recurse (`provider_utils::collect_subagent_jsonl_files`), not assume one level.
 - **OpenCode**: Must use `SQLITE_OPEN_READ_WRITE` (not READ_ONLY) for WAL. Uses XDG path, not macOS `~/Library/`.
 - **macOS watchers**: File-backed providers use `notify` with `macos_kqueue` for more reliable file-level follow behavior; do not assume `FSEvents`.
 - **Codex**: `call_id` pairing, output can be nested JSON.

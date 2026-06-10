@@ -37,15 +37,17 @@ pub struct UsageEvent {
 }
 
 /// Default token-stats aggregation: walk per-message `token_usage`,
-/// dedup by `Message.usage_hash`, apply pricing. Used by all providers
-/// except Codex (which overrides with usage-event aggregation).
+/// dedup by `Message.usage_hash` (keeping the largest entry per hash —
+/// Claude streams cumulative usage across the lines of one API call),
+/// apply pricing. Used by all providers except Codex (which overrides
+/// with usage-event aggregation).
 pub fn default_compute_token_stats_from_messages(
     parsed: &ParsedSession,
     pricing_catalog: Option<&PricingCatalog>,
     mut seen_hashes: Option<&mut HashSet<String>>,
 ) -> Vec<TokenStatRow> {
     let mut stats_map: HashMap<(String, String), TokenStatRow> = HashMap::with_capacity(32);
-    for msg in &parsed.messages {
+    for msg in crate::models::dedup_usage_messages(&parsed.messages) {
         let Some(usage) = &msg.token_usage else {
             continue;
         };

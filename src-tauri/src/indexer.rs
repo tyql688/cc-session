@@ -569,6 +569,36 @@ mod tests {
     }
 
     #[test]
+    fn compute_token_stats_keeps_max_cumulative_usage_per_hash() {
+        // Claude Code streams cumulative usage: the JSONL lines of one API
+        // call share a messageId:requestId and output_tokens grows line
+        // over line. Counting the first line undercounts the call; the
+        // largest entry is its final total.
+        let make_message = |output: u32| Message {
+            role: MessageRole::Assistant,
+            content: String::new(),
+            timestamp: Some("2026-06-07T12:00:00Z".into()),
+            tool_name: None,
+            tool_input: None,
+            token_usage: token_usage(100, output),
+            model: Some("claude-opus-4-8".into()),
+            usage_hash: Some("msg-1:req-1".into()),
+            tool_metadata: None,
+        };
+
+        let parsed = make_session(
+            Some("claude-opus-4-8"),
+            vec![make_message(5), make_message(480), make_message(60)],
+        );
+
+        let rows = compute_token_stats(&parsed);
+        assert_eq!(rows.len(), 1);
+        assert_eq!(rows[0].turn_count, 1);
+        assert_eq!(rows[0].input_tokens, 100);
+        assert_eq!(rows[0].output_tokens, 480);
+    }
+
+    #[test]
     fn compute_token_stats_skips_synthetic_model() {
         // Claude emits usage entries with model="<synthetic>" as internal
         // placeholders (continuation stubs, retry shells, etc.). They

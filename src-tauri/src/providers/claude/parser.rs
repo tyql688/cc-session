@@ -10,8 +10,8 @@ use crate::services::tail_reader::open_tail_reader;
 use crate::models::{Message, Provider};
 use crate::provider::ParsedSession;
 use crate::provider_utils::{
-    parse_rfc3339_timestamp, project_name_from_path, session_title, truncate_to_bytes,
-    FTS_CONTENT_LIMIT,
+    parse_rfc3339_timestamp, project_name_from_path, session_title, subagents_ancestor,
+    truncate_to_bytes, FTS_CONTENT_LIMIT,
 };
 
 mod content;
@@ -299,13 +299,10 @@ fn scan_jsonl_lines<R: BufRead>(reader: R, path: &Path, accum: &mut ScanAccum) -
 }
 
 /// Extract parent session ID from subagent path.
-/// Path pattern: .../{parent_session_id}/subagents/agent-{agentId}.jsonl
+/// Plain subagent: .../{parent_session_id}/subagents/agent-{agentId}.jsonl
+/// Workflow agent: .../{parent_session_id}/subagents/workflows/wf_{id}/agent-{agentId}.jsonl
 fn parent_id_from_path(path: &Path) -> Option<String> {
-    let parent = path.parent()?; // subagents/
-    if parent.file_name()?.to_str()? != "subagents" {
-        return None;
-    }
-    let session_dir = parent.parent()?; // {parent_session_id}/
+    let session_dir = subagents_ancestor(path)?.parent()?; // {parent_session_id}/
     Some(session_dir.file_name()?.to_str()?.to_string())
 }
 
@@ -399,12 +396,12 @@ pub fn parse_session_file(path: &PathBuf) -> Option<ParsedSession> {
     // Their own cwd may differ (e.g. subagent ran in src-tauri/ subfolder).
     // We derive the parent's project path from the file system path instead.
     let project_path = if let Some(parent_id) = parent_id.as_ref() {
-        // Path: .../{project_dir}/{parent_id}/subagents/agent-xxx.jsonl
+        // Path: .../{project_dir}/{parent_id}/subagents/.../agent-xxx.jsonl
         // Parent JSONL: .../{project_dir}/{parent_id}.jsonl
         // We need the project_dir's cwd, which we can't get here.
         // But the parent session's project_path is stored by its own cwd.
         // Best effort: walk up to the project directory and read the parent session's cwd.
-        path.parent() // subagents/
+        subagents_ancestor(path)
             .and_then(|p| p.parent()) // {parent_id}/
             .and_then(|p| p.parent()) // {project_dir}/
             .and_then(|project_dir| {

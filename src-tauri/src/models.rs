@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use std::collections::{BTreeMap, HashSet};
+use std::collections::{BTreeMap, HashMap};
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
 #[serde(rename_all = "lowercase")]
@@ -74,6 +74,15 @@ pub struct TokenUsage {
     pub output_tokens: u32,
     pub cache_creation_input_tokens: u32,
     pub cache_read_input_tokens: u32,
+}
+
+impl TokenUsage {
+    pub fn total_tokens(&self) -> u64 {
+        u64::from(self.input_tokens)
+            + u64::from(self.output_tokens)
+            + u64::from(self.cache_creation_input_tokens)
+            + u64::from(self.cache_read_input_tokens)
+    }
 }
 
 impl TokenTotals {
@@ -170,21 +179,53 @@ impl Message {
 
 pub fn token_totals_from_messages(messages: &[Message]) -> TokenTotals {
     let mut totals = TokenTotals::default();
-    let mut seen_hashes = HashSet::new();
-    for message in messages {
+    for message in dedup_usage_messages(messages) {
         if !message_counts_for_usage(message) {
             continue;
-        }
-        if let Some(hash) = message.usage_hash.as_deref() {
-            if !seen_hashes.insert(hash) {
-                continue;
-            }
         }
         if let Some(usage) = &message.token_usage {
             totals.add_usage(usage);
         }
     }
     totals
+}
+
+/// Collapse usage-bearing messages that share a `usage_hash`, keeping the
+/// entry with the largest token total per hash.
+///
+/// Claude Code streams cumulative usage: one API call's usage appears on
+/// several JSONL lines (same `messageId:requestId`), each carrying the
+/// running total, so the largest entry is the call's final total. Keeping
+/// the first entry instead would undercount output tokens. Messages
+/// without a hash are kept as-is.
+pub fn dedup_usage_messages(messages: &[Message]) -> Vec<&Message> {
+    let mut best_index: HashMap<&str, usize> = HashMap::new();
+    let mut deduped: Vec<&Message> = Vec::new();
+    for message in messages {
+        let Some(usage) = &message.token_usage else {
+            continue;
+        };
+        let Some(hash) = message.usage_hash.as_deref() else {
+            deduped.push(message);
+            continue;
+        };
+        match best_index.get(hash) {
+            Some(&index) => {
+                let kept_total = deduped[index]
+                    .token_usage
+                    .as_ref()
+                    .map_or(0, TokenUsage::total_tokens);
+                if usage.total_tokens() > kept_total {
+                    deduped[index] = message;
+                }
+            }
+            None => {
+                best_index.insert(hash, deduped.len());
+                deduped.push(message);
+            }
+        }
+    }
+    deduped
 }
 
 fn message_counts_for_usage(message: &Message) -> bool {
@@ -268,10 +309,48 @@ mod tests {
         assert_eq!(
             totals,
             TokenTotals {
-                input_tokens: 107,
-                output_tokens: 53,
-                cache_read_tokens: 22,
-                cache_write_tokens: 11,
+                input_tokens: 800,
+                output_tokens: 350,
+                cache_read_tokens: 220,
+                cache_write_tokens: 110,
+            }
+        );
+    }
+
+    #[test]
+    fn token_totals_keep_final_cumulative_usage_per_hash() {
+        // Claude Code streams cumulative usage: the lines of one API call
+        // share a usage_hash and the output count grows line over line.
+        // The largest entry (the call's final total) must win regardless
+        // of line order.
+        let totals = token_totals_from_messages(&[
+            message_with_hash(
+                Some("2026-06-07T10:00:00Z"),
+                Some("claude-opus-4-8"),
+                usage(100, 5, 1000, 50),
+                Some("msg-1:req-1"),
+            ),
+            message_with_hash(
+                Some("2026-06-07T10:00:01Z"),
+                Some("claude-opus-4-8"),
+                usage(100, 480, 1000, 50),
+                Some("msg-1:req-1"),
+            ),
+            message_with_hash(
+                Some("2026-06-07T10:00:02Z"),
+                Some("claude-opus-4-8"),
+                usage(100, 60, 1000, 50),
+                Some("msg-1:req-1"),
+            ),
+        ]);
+
+        assert_eq!(
+            totals,
+            TokenTotals {
+                input_tokens: 100,
+                output_tokens: 480,
+                cache_read_tokens: 1000,
+                cache_write_tokens: 50,
             }
         );
     }

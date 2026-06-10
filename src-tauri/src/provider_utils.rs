@@ -21,6 +21,43 @@ pub const NO_PROJECT: &str = "(No Project)";
 /// files otherwise). The FTS `AFTER UPDATE` trigger refreshes the index then.
 pub const FTS_CONTENT_LIMIT: usize = 1024 * 1024;
 
+/// Nearest ancestor directory named `subagents`, if any. Identifies a file
+/// as a subagent transcript regardless of how deeply the agent is nested
+/// (plain Task subagents sit directly in `subagents/`, Workflow agents
+/// under `subagents/workflows/wf_*/`).
+pub fn subagents_ancestor(path: &Path) -> Option<&Path> {
+    path.ancestors()
+        .skip(1)
+        .find(|dir| dir.file_name().is_some_and(|name| name == "subagents"))
+}
+
+/// Collect every `.jsonl` file under a session's `subagents/` directory,
+/// recursively. Plain Task subagents sit directly in `subagents/`, while
+/// Workflow runs nest theirs under `subagents/workflows/wf_*/`, so a
+/// single-level read misses them.
+pub fn collect_subagent_jsonl_files(subagents_dir: &Path) -> Vec<std::path::PathBuf> {
+    let mut files = Vec::new();
+    let mut pending = vec![subagents_dir.to_path_buf()];
+    while let Some(dir) = pending.pop() {
+        let entries = match std::fs::read_dir(&dir) {
+            Ok(entries) => entries,
+            Err(error) => {
+                log::warn!("failed to read subagent dir '{}': {error}", dir.display());
+                continue;
+            }
+        };
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if path.is_dir() {
+                pending.push(path);
+            } else if path.extension().and_then(|ext| ext.to_str()) == Some("jsonl") {
+                files.push(path);
+            }
+        }
+    }
+    files
+}
+
 pub fn is_system_content(trimmed: &str) -> bool {
     trimmed.starts_with("<environment_context")
         || trimmed.starts_with("<permissions")

@@ -379,6 +379,27 @@ impl Database {
             )?;
         }
 
+        // Migration: force a one-time re-parse of Claude-format sessions after
+        // the usage accounting fixes (cumulative streamed usage now keeps the
+        // largest entry per messageId:requestId; subagents/workflows/ files are
+        // now scanned). Token stats are only rewritten when a file is re-parsed,
+        // and the incremental scan skips files whose (size, mtime) match the DB,
+        // so resetting source_mtime is what makes the next scan revisit them.
+        // Bump CLAUDE_USAGE_STATS_VERSION whenever stats need a full rebuild.
+        const CLAUDE_USAGE_STATS_VERSION: &str = "max_usage_v1";
+        let current_usage_stats_version: Option<String> = {
+            let mut stmt =
+                write_conn.prepare("SELECT value FROM meta WHERE key = 'usage_stats_version'")?;
+            stmt.query_row([], |row| row.get(0)).ok()
+        };
+        if current_usage_stats_version.as_deref() != Some(CLAUDE_USAGE_STATS_VERSION) {
+            write_conn.execute_batch(&format!(
+                "UPDATE sessions SET source_mtime = 0 WHERE provider IN ('claude', 'cc-mirror');
+                 INSERT INTO meta (key, value) VALUES ('usage_stats_version', '{CLAUDE_USAGE_STATS_VERSION}')
+                     ON CONFLICT(key) DO UPDATE SET value = excluded.value;",
+            ))?;
+        }
+
         let supported_provider_keys: Vec<&str> = crate::models::Provider::all()
             .iter()
             .map(|p| p.key())
