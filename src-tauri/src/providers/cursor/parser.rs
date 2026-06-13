@@ -16,6 +16,7 @@
 //! line shape, and we link them by directory structure rather than an
 //! embedded parent id.
 
+use std::io::Read;
 use std::path::{Path, PathBuf};
 
 use serde_json::Value;
@@ -25,6 +26,7 @@ use crate::provider::ParsedSession;
 use crate::provider_utils::{
     project_name_from_path, session_title, truncate_to_bytes, FTS_CONTENT_LIMIT,
 };
+use crate::services::tail_reader::open_tail_reader;
 use crate::tool_metadata::{build_tool_metadata, ToolCallFacts};
 
 use super::tools::{
@@ -103,6 +105,55 @@ pub(crate) fn parse_messages(content: &str, source_label: &str) -> (Vec<Message>
         _ => {}
     });
     (messages, warnings)
+}
+
+/// Tail-only parse result for Cursor CLI JSONL transcripts. The caller
+/// already has metadata from the DB, so this carries just the messages
+/// and warning count needed to build a session window.
+pub(crate) struct CursorTailResult {
+    pub messages: Vec<Message>,
+    pub parse_warning_count: u32,
+}
+
+/// Parse only the tail of a Cursor CLI transcript. ACP sessions are
+/// SQLite-backed and are intentionally handled by the full load path.
+///
+/// Cursor emits one JSON object per turn, but an assistant turn can
+/// expand into text + thinking + multiple tool calls, so we over-scan
+/// and trim to the exact requested message window after parsing.
+pub(crate) fn parse_session_tail(path: &Path, target_messages: usize) -> Option<CursorTailResult> {
+    let safety_buffer = target_messages / 2 + 100;
+    let scan_lines = target_messages.saturating_add(safety_buffer);
+    let (mut reader, _window) = open_tail_reader(path, scan_lines, "Cursor")?;
+
+    let mut content = String::new();
+    if let Err(error) = reader.read_to_string(&mut content) {
+        log::warn!(
+            "failed to read Cursor session tail '{}': {error}",
+            path.display()
+        );
+        return None;
+    }
+
+    let source_label = path.display().to_string();
+    let (mut messages, parse_warning_count) = parse_messages(&content, &source_label);
+    if messages.is_empty() {
+        log::debug!(
+            "Cursor tail parse produced no messages for '{}'; falling back to full parse",
+            path.display()
+        );
+        return None;
+    }
+
+    let len = messages.len();
+    if len > target_messages {
+        messages.drain(0..(len - target_messages));
+    }
+
+    Some(CursorTailResult {
+        messages,
+        parse_warning_count,
+    })
 }
 
 fn push_tool_call(messages: &mut Vec<Message>, part: &Value) {
@@ -483,6 +534,39 @@ mod tests {
         let input: Value =
             serde_json::from_str(parsed.messages[2].tool_input.as_ref().unwrap()).unwrap();
         assert_eq!(input["file_path"], "/tmp/a");
+    }
+
+    #[test]
+    fn parse_session_tail_returns_only_the_last_n_messages() {
+        let dir = tempfile::tempdir().unwrap();
+        let mut body = String::new();
+        for idx in 0..200 {
+            body.push_str(&format!(
+                r#"{{"role":"user","message":{{"content":[{{"type":"text","text":"<user_query>msg-{idx}</user_query>"}}]}}}}"#
+            ));
+            body.push('\n');
+        }
+        let path = write_transcript(dir.path(), "TestProj", "tail_s1", &body);
+
+        let tail = parse_session_tail(&path, 20).expect("tail parse");
+
+        assert_eq!(tail.messages.len(), 20);
+        assert_eq!(tail.messages[0].content, "msg-180");
+        assert_eq!(tail.messages[19].content, "msg-199");
+    }
+
+    #[test]
+    fn parse_session_tail_returns_full_file_when_smaller_than_window() {
+        let dir = tempfile::tempdir().unwrap();
+        let body = r#"{"role":"user","message":{"content":[{"type":"text","text":"<user_query>first</user_query>"}]}}
+{"role":"assistant","message":{"content":[{"type":"text","text":"second"}]}}"#;
+        let path = write_transcript(dir.path(), "TestProj", "tail_s2", body);
+
+        let tail = parse_session_tail(&path, 20).expect("tail parse");
+
+        assert_eq!(tail.messages.len(), 2);
+        assert_eq!(tail.messages[0].content, "first");
+        assert_eq!(tail.messages[1].content, "second");
     }
 
     #[test]

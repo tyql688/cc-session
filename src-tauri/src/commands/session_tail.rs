@@ -1,4 +1,4 @@
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 use anyhow::Result;
 
@@ -35,8 +35,8 @@ pub(super) fn try_tail_fast_path(
     }
     // Resolve the provider's tail parser up front. `None` means the
     // provider has no line-tail entry point (OpenCode is SQLite-backed;
-    // Cursor isn't wired) — bail before paying for the stat below.
-    // CC-Mirror reuses the Claude parser.
+    // Pi has no tail parser yet) — bail before paying for the stat
+    // below. CC-Mirror reuses the Claude parser.
     let Some(parse_tail) = tail_parser_for(&meta.provider) else {
         return Ok(None);
     };
@@ -59,11 +59,10 @@ pub(super) fn try_tail_fast_path(
     }
 
     let target_messages = limit.max(offset.unsigned_abs() as usize).max(1);
-    let path = PathBuf::from(&meta.source_path);
     // Run the provider's tail parser (resolved above). It returns the
     // common shape — messages + parse warnings — projected from each
     // provider's distinct result type by the adapter in `tail_parser_for`.
-    let (tail_messages, parse_warning_count) = match parse_tail(&path, target_messages) {
+    let (tail_messages, parse_warning_count) = match parse_tail(meta, target_messages) {
         Some(tail) => tail,
         None => return Ok(None),
     };
@@ -104,45 +103,55 @@ pub(super) fn try_tail_fast_path(
 }
 
 /// A provider's tail parser projected onto the shape `try_tail_fast_path`
-/// needs: given the source path and a target window size, return the
+/// needs: given the session metadata and a target window size, return the
 /// trailing messages plus the per-record parse-warning count, or `None`
 /// when the tail came up empty / unreadable (caller falls back to the
 /// full parse).
-type TailParseFn = fn(&Path, usize) -> Option<(Vec<Message>, u32)>;
+type TailParseFn = fn(&SessionMeta, usize) -> Option<(Vec<Message>, u32)>;
 
 /// Map a provider to its tail-parser adapter, or `None` for providers
 /// that don't expose a line-tail entry point (OpenCode is SQLite-backed;
-/// Cursor is JSONL but has no tail parser wired yet). CC-Mirror reuses
-/// the Claude parser. The match is exhaustive so adding a `Provider`
-/// variant forces a decision here.
+/// Pi has no tail parser yet). CC-Mirror reuses the Claude parser. The
+/// match is exhaustive so adding a `Provider` variant forces a decision
+/// here.
 fn tail_parser_for(provider: &Provider) -> Option<TailParseFn> {
     match provider {
         Provider::Claude | Provider::CcMirror => Some(claude_tail),
         Provider::Codex => Some(codex_tail),
         Provider::Antigravity => Some(antigravity_tail),
         Provider::Kimi => Some(kimi_tail),
-        Provider::OpenCode | Provider::Cursor | Provider::Pi => None,
+        Provider::Cursor => Some(cursor_tail),
+        Provider::OpenCode | Provider::Pi => None,
     }
 }
 
-fn claude_tail(path: &Path, target_messages: usize) -> Option<(Vec<Message>, u32)> {
+fn claude_tail(meta: &SessionMeta, target_messages: usize) -> Option<(Vec<Message>, u32)> {
+    let path = Path::new(&meta.source_path);
     crate::providers::claude::parser::parse_session_tail(path, target_messages)
         .map(|tail| (tail.messages, tail.parse_warning_count))
 }
 
-fn codex_tail(path: &Path, target_messages: usize) -> Option<(Vec<Message>, u32)> {
+fn codex_tail(meta: &SessionMeta, target_messages: usize) -> Option<(Vec<Message>, u32)> {
+    let path = Path::new(&meta.source_path);
     crate::providers::codex::parser::parse_session_tail(path, target_messages)
         .map(|tail| (tail.messages, tail.parse_warning_count))
 }
 
-fn antigravity_tail(path: &Path, target_messages: usize) -> Option<(Vec<Message>, u32)> {
+fn antigravity_tail(meta: &SessionMeta, target_messages: usize) -> Option<(Vec<Message>, u32)> {
+    let path = Path::new(&meta.source_path);
     crate::providers::antigravity::parser::parse_session_tail(path, target_messages)
         .map(|tail| (tail.messages, tail.parse_warning_count))
 }
 
-fn kimi_tail(path: &Path, target_messages: usize) -> Option<(Vec<Message>, u32)> {
+fn kimi_tail(meta: &SessionMeta, target_messages: usize) -> Option<(Vec<Message>, u32)> {
+    let path = Path::new(&meta.source_path);
     crate::providers::kimi::parser::parse_session_tail(path, target_messages)
         .map(|tail| (tail.messages, tail.parse_warning_count))
+}
+
+fn cursor_tail(meta: &SessionMeta, target_messages: usize) -> Option<(Vec<Message>, u32)> {
+    let provider = crate::providers::cursor::CursorProvider::new()?;
+    provider.parse_tail_messages(&meta.id, Path::new(&meta.source_path), target_messages)
 }
 
 /// Fire-and-forget background full parse that overwrites the in-memory

@@ -26,7 +26,7 @@ use std::path::{Path, PathBuf};
 
 use rayon::prelude::*;
 
-use crate::models::{Provider, SessionMeta};
+use crate::models::{Message, Provider, SessionMeta};
 use crate::provider::{
     ChildPlan, DeletionPlan, FileAction, LoadedSession, ParsedSession, ProviderError,
     SessionProvider,
@@ -288,6 +288,39 @@ impl CursorProvider {
         if !info.image_paths.is_empty() {
             substitute_image_placeholders(&mut session.messages, &info.image_paths);
         }
+    }
+
+    pub(crate) fn parse_tail_messages(
+        &self,
+        session_id: &str,
+        source_path: &Path,
+        target_messages: usize,
+    ) -> Option<(Vec<Message>, u32)> {
+        if is_acp_store_path(source_path.to_string_lossy().as_ref()) {
+            return None;
+        }
+        if source_path.extension().and_then(|ext| ext.to_str()) != Some("jsonl") {
+            return None;
+        }
+
+        let mut tail = parser::parse_session_tail(source_path, target_messages)?;
+        if tail
+            .messages
+            .iter()
+            .any(|message| message.content.contains("[Image #"))
+        {
+            let lookup_id = parser::parent_id_for_subagent(source_path)
+                .unwrap_or_else(|| session_id.to_string());
+            let stores = self.collect_cli_store_paths();
+            if let Some(store) = stores.get(&lookup_id) {
+                let info = store_db::read_store_db(store, session_id);
+                if !info.image_paths.is_empty() {
+                    substitute_image_placeholders(&mut tail.messages, &info.image_paths);
+                }
+            }
+        }
+
+        Some((tail.messages, tail.parse_warning_count))
     }
 }
 
@@ -755,6 +788,46 @@ mod tests {
             .unwrap();
         assert_eq!(sessions.len(), 1);
         assert_eq!(sessions[0].meta.id, sid);
+    }
+
+    #[test]
+    fn parse_tail_messages_reads_cursor_cli_jsonl() {
+        let dir = tempfile::tempdir().unwrap();
+        let sid = "tail-cli";
+        let mut body = String::new();
+        for idx in 0..200 {
+            body.push_str(&format!(
+                r#"{{"role":"user","message":{{"content":[{{"type":"text","text":"<user_query>msg-{idx}</user_query>"}}]}}}}"#
+            ));
+            body.push('\n');
+        }
+        let path = write_main_transcript(dir.path(), "Users-test-proj", sid, &body);
+        let provider = CursorProvider::with_home(dir.path().to_path_buf());
+
+        let (messages, warnings) = provider
+            .parse_tail_messages(sid, &path, 20)
+            .expect("tail messages");
+
+        assert_eq!(warnings, 0);
+        assert_eq!(messages.len(), 20);
+        assert_eq!(messages[0].content, "msg-180");
+        assert_eq!(messages[19].content, "msg-199");
+    }
+
+    #[test]
+    fn parse_tail_messages_skips_acp_store_paths() {
+        let dir = tempfile::tempdir().unwrap();
+        let provider = CursorProvider::with_home(dir.path().to_path_buf());
+        let store_path = dir
+            .path()
+            .join(".cursor")
+            .join("acp-sessions")
+            .join("session-1")
+            .join("store.db");
+
+        assert!(provider
+            .parse_tail_messages("session-1", &store_path, 20)
+            .is_none());
     }
 
     #[test]
