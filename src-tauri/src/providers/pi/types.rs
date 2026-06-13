@@ -132,6 +132,7 @@ pub struct PiLabelEntry {
     pub base: PiEntryBase,
     #[serde(rename = "targetId")]
     pub target_id: String,
+    #[serde(default)]
     pub label: Option<String>,
 }
 
@@ -140,7 +141,8 @@ pub struct PiLabelEntry {
 pub struct PiSessionInfoEntry {
     #[serde(flatten)]
     pub base: PiEntryBase,
-    pub name: String,
+    #[serde(default)]
+    pub name: Option<String>,
 }
 
 /// Agent message types

@@ -752,12 +752,19 @@ fn extract_content_blocks_text(blocks: &[PiContentBlock]) -> String {
 fn extract_title(entries: &[PiEntry], branch: &[String], header: &PiSessionHeader) -> String {
     let branch_set: HashSet<&str> = branch.iter().map(String::as_str).collect();
 
-    // Look for session_info entry
-    for entry in entries.iter().rev() {
-        if let PiEntry::SessionInfo(info) = entry {
-            if branch_set.contains(info.base.id.as_str()) {
-                return info.name.clone();
-            }
+    // Look for the latest session_info entry. Empty/missing names clear the
+    // custom title, so older custom names must not win after a clear.
+    if let Some(info) = entries.iter().rev().find_map(|entry| match entry {
+        PiEntry::SessionInfo(info) if branch_set.contains(info.base.id.as_str()) => Some(info),
+        _ => None,
+    }) {
+        if let Some(name) = info
+            .name
+            .as_deref()
+            .map(str::trim)
+            .filter(|name| !name.is_empty())
+        {
+            return name.to_string();
         }
     }
 
@@ -1241,6 +1248,70 @@ mod tests {
 
         assert_eq!(session.meta.parent_id.as_deref(), Some("parent-session"));
         assert!(session.meta.is_sidechain);
+    }
+
+    #[test]
+    fn parse_session_file_treats_empty_session_info_as_cleared_title() {
+        let tmp = tempfile::tempdir().unwrap();
+        let path = tmp.path().join("session.jsonl");
+        std::fs::write(
+            &path,
+            [
+                r#"{"type":"session","version":3,"id":"session-1","timestamp":"2026-06-10T07:00:00.000Z","cwd":"/tmp/project"}"#,
+                r#"{"type":"message","id":"user-1","parentId":null,"timestamp":"2026-06-10T07:00:01.000Z","message":{"role":"user","content":"Fallback user title","timestamp":1781074801000}}"#,
+                r#"{"type":"session_info","id":"info-1","parentId":"user-1","timestamp":"2026-06-10T07:00:02.000Z","name":"Custom title"}"#,
+                r#"{"type":"session_info","id":"info-2","parentId":"info-1","timestamp":"2026-06-10T07:00:03.000Z","name":""}"#,
+            ]
+            .join("\n"),
+        )
+        .unwrap();
+
+        let session = parse_session_file(&path).unwrap();
+
+        assert_eq!(session.meta.title, "Fallback user title");
+        assert_eq!(session.parse_warning_count, 0);
+    }
+
+    #[test]
+    fn parse_session_file_accepts_session_info_without_name() {
+        let tmp = tempfile::tempdir().unwrap();
+        let path = tmp.path().join("session.jsonl");
+        std::fs::write(
+            &path,
+            [
+                r#"{"type":"session","version":3,"id":"session-1","timestamp":"2026-06-10T07:00:00.000Z","cwd":"/tmp/project"}"#,
+                r#"{"type":"message","id":"user-1","parentId":null,"timestamp":"2026-06-10T07:00:01.000Z","message":{"role":"user","content":"Fallback user title","timestamp":1781074801000}}"#,
+                r#"{"type":"session_info","id":"info-1","parentId":"user-1","timestamp":"2026-06-10T07:00:02.000Z"}"#,
+            ]
+            .join("\n"),
+        )
+        .unwrap();
+
+        let session = parse_session_file(&path).unwrap();
+
+        assert_eq!(session.meta.title, "Fallback user title");
+        assert_eq!(session.parse_warning_count, 0);
+    }
+
+    #[test]
+    fn parse_session_file_accepts_label_without_label_text() {
+        let tmp = tempfile::tempdir().unwrap();
+        let path = tmp.path().join("session.jsonl");
+        std::fs::write(
+            &path,
+            [
+                r#"{"type":"session","version":3,"id":"session-1","timestamp":"2026-06-10T07:00:00.000Z","cwd":"/tmp/project"}"#,
+                r#"{"type":"message","id":"user-1","parentId":null,"timestamp":"2026-06-10T07:00:01.000Z","message":{"role":"user","content":"Fallback user title","timestamp":1781074801000}}"#,
+                r#"{"type":"label","id":"label-1","parentId":"user-1","timestamp":"2026-06-10T07:00:02.000Z","targetId":"user-1"}"#,
+            ]
+            .join("\n"),
+        )
+        .unwrap();
+
+        let session = parse_session_file(&path).unwrap();
+
+        assert_eq!(session.meta.title, "Fallback user title");
+        assert_eq!(session.parse_warning_count, 0);
     }
 
     #[test]

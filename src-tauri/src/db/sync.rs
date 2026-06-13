@@ -424,12 +424,19 @@ fn upsert_session_on(
             file_size_bytes = excluded.file_size_bytes,
             source_path = excluded.source_path,
             content_text = excluded.content_text,
-            is_sidechain = CASE WHEN excluded.is_sidechain = 1 OR sessions.is_sidechain = 1 THEN 1 ELSE 0 END,
+            is_sidechain = CASE
+                WHEN excluded.provider = 'pi' THEN excluded.is_sidechain
+                WHEN excluded.is_sidechain = 1 OR sessions.is_sidechain = 1 THEN 1
+                ELSE 0
+            END,
             variant_name = excluded.variant_name,
             model = excluded.model,
             cc_version = excluded.cc_version,
             git_branch = excluded.git_branch,
-            parent_id = COALESCE(excluded.parent_id, sessions.parent_id),
+            parent_id = CASE
+                WHEN excluded.provider = 'pi' THEN excluded.parent_id
+                ELSE COALESCE(excluded.parent_id, sessions.parent_id)
+            END,
             source_mtime = excluded.source_mtime",
         params![
             meta.id,
@@ -899,6 +906,63 @@ mod tests {
         assert!(loaded_child_final.is_sidechain);
         assert_eq!(loaded_child_final.project_path, "/tmp/ccsession");
         assert_eq!(loaded_child_final.project_name, "ccsession");
+    }
+
+    #[test]
+    fn pi_upsert_clears_stale_parent_when_parser_no_longer_resolves_it() {
+        let dir = TempDir::new().unwrap();
+        let db = Database::open(dir.path()).unwrap();
+
+        let child_id = "22222222-2222-4222-a222-222222222222";
+        let parent_id = "11111111-1111-4111-a111-111111111111";
+
+        let mut child_meta = sample_meta(child_id);
+        child_meta.provider = Provider::Pi;
+        child_meta.parent_id = Some(parent_id.to_string());
+        child_meta.is_sidechain = true;
+
+        db.sync_provider_snapshot(
+            &Provider::Pi,
+            &[ParsedSession {
+                meta: child_meta.clone(),
+                messages: Vec::new(),
+                content_text: String::new(),
+                parse_warning_count: 0,
+                child_session_ids: Vec::new(),
+                usage_events: Vec::new(),
+                source_mtime: 0,
+            }],
+            true,
+            &[],
+        )
+        .unwrap();
+
+        let loaded_child = db.get_session(child_id).unwrap().unwrap();
+        assert_eq!(loaded_child.parent_id, Some(parent_id.to_string()));
+        assert!(loaded_child.is_sidechain);
+
+        child_meta.parent_id = None;
+        child_meta.is_sidechain = false;
+
+        db.sync_provider_snapshot(
+            &Provider::Pi,
+            &[ParsedSession {
+                meta: child_meta,
+                messages: Vec::new(),
+                content_text: String::new(),
+                parse_warning_count: 0,
+                child_session_ids: Vec::new(),
+                usage_events: Vec::new(),
+                source_mtime: 0,
+            }],
+            true,
+            &[],
+        )
+        .unwrap();
+
+        let loaded_child_after = db.get_session(child_id).unwrap().unwrap();
+        assert_eq!(loaded_child_after.parent_id, None);
+        assert!(!loaded_child_after.is_sidechain);
     }
 
     #[test]
