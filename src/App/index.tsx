@@ -56,6 +56,7 @@ import { useI18n } from "../i18n";
 import { createKeyboardHandler } from "./KeyboardShortcuts";
 import { createSyncManager } from "./SyncManager";
 import { createOpenSubagentHandler } from "./SubagentOpen";
+import { TitleBar } from "./TitleBar";
 import "../styles/index.css";
 
 // Linux derived locally (platform.ts is intentionally minimal). On Linux the
@@ -308,113 +309,14 @@ export default function App() {
       )}
     >
       <div class="app-layout">
-        <div
-          class="titlebar"
-          onMouseDown={(e) => {
-            if (e.buttons !== 1) return;
-            if (
-              (e.target as HTMLElement).closest("input, button, .search-panel")
-            )
-              return;
-            e.preventDefault();
-            if (e.detail === 2) {
-              getCurrentWindow().toggleMaximize();
-            } else {
-              getCurrentWindow().startDragging();
-            }
-          }}
-        >
-          <div class="titlebar-center">
-            <span class="app-name">
-              <span class="app-name-bracket">&lt;</span>cc-session
-              <span class="app-name-bracket">/&gt;</span>
-            </span>
-          </div>
-          <div class="titlebar-right" />
-
-          <Show when={showWindowControls}>
-            <div class="win-controls">
-              <button
-                class="win-ctrl-btn"
-                onClick={() => void getCurrentWindow().minimize()}
-              >
-                <svg viewBox="0 0 10 10">
-                  <line
-                    x1="0"
-                    y1="5"
-                    x2="10"
-                    y2="5"
-                    stroke="currentColor"
-                    stroke-width="1.2"
-                  />
-                </svg>
-              </button>
-              <button
-                class="win-ctrl-btn"
-                onClick={() => void getCurrentWindow().toggleMaximize()}
-              >
-                <Show
-                  when={isMaximized()}
-                  fallback={
-                    <svg viewBox="0 0 10 10">
-                      <rect
-                        x="0.6"
-                        y="0.6"
-                        width="8.8"
-                        height="8.8"
-                        fill="none"
-                        stroke="currentColor"
-                        stroke-width="1.2"
-                      />
-                    </svg>
-                  }
-                >
-                  {/* Restore: two overlapping squares (rear top-right, front bottom-left) */}
-                  <svg viewBox="0 0 10 10">
-                    <path
-                      d="M2.6 2.6 V1.1 H8.9 V7.4 H7.4"
-                      fill="none"
-                      stroke="currentColor"
-                      stroke-width="1.2"
-                    />
-                    <rect
-                      x="1.1"
-                      y="2.6"
-                      width="6.3"
-                      height="6.3"
-                      fill="none"
-                      stroke="currentColor"
-                      stroke-width="1.2"
-                    />
-                  </svg>
-                </Show>
-              </button>
-              <button
-                class="win-ctrl-btn close"
-                onClick={() => void getCurrentWindow().close()}
-              >
-                <svg viewBox="0 0 10 10">
-                  <line
-                    x1="0.5"
-                    y1="0.5"
-                    x2="9.5"
-                    y2="9.5"
-                    stroke="currentColor"
-                    stroke-width="1.2"
-                  />
-                  <line
-                    x1="9.5"
-                    y1="0.5"
-                    x2="0.5"
-                    y2="9.5"
-                    stroke="currentColor"
-                    stroke-width="1.2"
-                  />
-                </svg>
-              </button>
-            </div>
-          </Show>
-        </div>
+        <TitleBar
+          showWindowControls={showWindowControls}
+          isMaximized={isMaximized()}
+          onMinimize={() => void getCurrentWindow().minimize()}
+          onToggleMaximize={() => void getCurrentWindow().toggleMaximize()}
+          onClose={() => void getCurrentWindow().close()}
+          onStartDragging={() => void getCurrentWindow().startDragging()}
+        />
         <div class="main-layout">
           <ActivityBar
             activeView={activeView()}
