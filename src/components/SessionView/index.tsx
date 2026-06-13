@@ -5,7 +5,6 @@ import {
   For,
   Show,
   on,
-  onMount,
   onCleanup,
 } from "solid-js";
 import type {
@@ -38,6 +37,7 @@ import { TimelineMinimap } from "./TimelineMinimap";
 import { useLiveWatch } from "./useLiveWatch";
 import { useFavoriteSync } from "./useFavoriteSync";
 import { useAutoLoad } from "./useAutoLoad";
+import { useSessionCommandEvents } from "./useSessionCommandEvents";
 import { createRoleFilter } from "./createRoleFilter";
 import { createSessionSearch } from "./createSessionSearch";
 import {
@@ -205,50 +205,9 @@ export function SessionView(props: {
     }
   });
 
-  // Global keyboard shortcut listeners — must be inside lifecycle hooks
-  const onResume = () => {
-    if (props.active) void handleResume();
-  };
-  const onExport = () => {
-    if (props.active) setShowExportDialog(true);
-  };
-  const onFavorite = () => {
-    if (props.active) void handleToggleFavorite();
-  };
-  const onWatch = () => {
-    if (props.active) setWatching((v) => !v);
-  };
-  const onDelete = () => {
-    if (props.active) setShowDeleteConfirm(true);
-  };
-  const onSessionSearch = () => {
-    if (!props.active) return;
-    setSearchBarOpen(true);
-    requestAnimationFrame(() => {
-      (
-        document.querySelector(".session-search-input") as HTMLInputElement
-      )?.focus();
-    });
-  };
-
-  onMount(() => {
-    document.addEventListener("cc-session:resume", onResume);
-    document.addEventListener("cc-session:export", onExport);
-    document.addEventListener("cc-session:favorite", onFavorite);
-    document.addEventListener("cc-session:watch", onWatch);
-    document.addEventListener("cc-session:delete", onDelete);
-    document.addEventListener("cc-session:session-search", onSessionSearch);
-  });
-
   onCleanup(() => {
     loadOlderDebounce?.();
     sessionSearchDebounce?.();
-    document.removeEventListener("cc-session:resume", onResume);
-    document.removeEventListener("cc-session:export", onExport);
-    document.removeEventListener("cc-session:favorite", onFavorite);
-    document.removeEventListener("cc-session:watch", onWatch);
-    document.removeEventListener("cc-session:delete", onDelete);
-    document.removeEventListener("cc-session:session-search", onSessionSearch);
   });
 
   // column-reverse: scrollTop=0 naturally shows newest messages. No scroll-to-bottom needed.
@@ -343,6 +302,23 @@ export function SessionView(props: {
       toastError(t("toast.resumeFailed"));
     }
   };
+
+  useSessionCommandEvents({
+    active: () => props.active,
+    onResume: () => void handleResume(),
+    onExport: () => setShowExportDialog(true),
+    onFavorite: () => void handleToggleFavorite(),
+    onWatch: () => setWatching((v) => !v),
+    onDelete: () => setShowDeleteConfirm(true),
+    onSessionSearch: () => {
+      setSearchBarOpen(true);
+      requestAnimationFrame(() => {
+        document
+          .querySelector<HTMLInputElement>(".session-search-input")
+          ?.focus();
+      });
+    },
+  });
 
   return (
     <div class="session-view">

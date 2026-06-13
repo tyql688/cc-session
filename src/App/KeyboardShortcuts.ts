@@ -1,4 +1,8 @@
 import type { SessionRef } from "../lib/types";
+import {
+  dispatchSessionCommand,
+  SESSION_COMMAND_EVENTS,
+} from "../lib/session-command-events";
 
 export interface KeyboardDeps {
   activeTabId: () => string | null;
@@ -165,42 +169,42 @@ export function createKeyboardHandler(
     // Cmd+F: Find in session
     if (mod && e.key === "f") {
       e.preventDefault();
-      document.dispatchEvent(new CustomEvent("cc-session:session-search"));
+      dispatchSessionCommand(SESSION_COMMAND_EVENTS.sessionSearch);
       return;
     }
 
     // Cmd+Shift+R: Resume session
     if (mod && e.shiftKey && (e.key === "r" || e.key === "R")) {
       e.preventDefault();
-      document.dispatchEvent(new CustomEvent("cc-session:resume"));
+      dispatchSessionCommand(SESSION_COMMAND_EVENTS.resume);
       return;
     }
 
     // Cmd+Shift+E: Export session
     if (mod && e.shiftKey && (e.key === "e" || e.key === "E")) {
       e.preventDefault();
-      document.dispatchEvent(new CustomEvent("cc-session:export"));
+      dispatchSessionCommand(SESSION_COMMAND_EVENTS.exportSession);
       return;
     }
 
     // Cmd+B: Toggle favorite
     if (mod && e.key === "b") {
       e.preventDefault();
-      document.dispatchEvent(new CustomEvent("cc-session:favorite"));
+      dispatchSessionCommand(SESSION_COMMAND_EVENTS.favorite);
       return;
     }
 
     // Cmd+L: Toggle live watch
     if (mod && e.key === "l") {
       e.preventDefault();
-      document.dispatchEvent(new CustomEvent("cc-session:watch"));
+      dispatchSessionCommand(SESSION_COMMAND_EVENTS.watch);
       return;
     }
 
     // Cmd+Backspace: Delete session
     if (mod && e.key === "Backspace") {
       e.preventDefault();
-      document.dispatchEvent(new CustomEvent("cc-session:delete"));
+      dispatchSessionCommand(SESSION_COMMAND_EVENTS.delete);
       return;
     }
   };
