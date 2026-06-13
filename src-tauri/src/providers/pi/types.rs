@@ -29,12 +29,18 @@ pub enum PiEntry {
 /// Session header (first line of JSONL)
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PiSessionHeader {
+    #[serde(default = "default_session_version")]
     pub version: u32,
     pub id: String,
     pub timestamp: String,
     pub cwd: String,
+    #[serde(rename = "parentSession")]
     #[serde(default)]
     pub parent_session: Option<String>,
+}
+
+fn default_session_version() -> u32 {
+    1
 }
 
 /// Base for all entries (except header)
@@ -42,6 +48,7 @@ pub struct PiSessionHeader {
 pub struct PiEntryBase {
     pub id: String,
     #[serde(rename = "parentId")]
+    #[serde(default)]
     pub parent_id: Option<String>,
     pub timestamp: String,
 }
@@ -81,6 +88,8 @@ pub struct PiCompactionEntry {
     pub summary: String,
     #[serde(rename = "firstKeptEntryId")]
     pub first_kept_entry_id: Option<String>,
+    #[serde(rename = "firstKeptEntryIndex")]
+    pub first_kept_entry_index: Option<usize>,
     #[serde(rename = "tokensBefore")]
     pub tokens_before: Option<u64>,
 }

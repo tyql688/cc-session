@@ -444,6 +444,44 @@ impl Database {
             ))?;
         }
 
+        // Migration: early Pi parent linking stored header.parentSession
+        // directly, but Pi writes that field as a JSONL file path. The app's
+        // tree expects parent_id to be the parent session id, so clear path-like
+        // values and force a Pi reparse that resolves the parent header id.
+        const PI_PARENT_SESSION_VERSION: &str = "parent_session_id_v1";
+        let current_pi_parent_session_version: Option<String> = {
+            let mut stmt = write_conn
+                .prepare("SELECT value FROM meta WHERE key = 'pi_parent_session_version'")?;
+            stmt.query_row([], |row| row.get(0)).ok()
+        };
+        if current_pi_parent_session_version.as_deref() != Some(PI_PARENT_SESSION_VERSION) {
+            let repaired_rows = write_conn.execute(
+                "UPDATE sessions
+                    SET parent_id = NULL,
+                        is_sidechain = 0
+                  WHERE provider = 'pi'
+                    AND parent_id IS NOT NULL
+                    AND (parent_id LIKE '%/%'
+                         OR parent_id LIKE '%\\%'
+                         OR parent_id LIKE '%.jsonl')",
+                [],
+            )?;
+            let invalidated_rows = write_conn.execute(
+                "UPDATE sessions SET source_mtime = 0 WHERE provider = 'pi'",
+                [],
+            )?;
+            if repaired_rows > 0 || invalidated_rows > 0 {
+                log::info!(
+                    "repaired {repaired_rows} Pi parent links and invalidated {invalidated_rows} Pi source snapshots"
+                );
+            }
+            write_conn.execute_batch(&format!(
+                "INSERT INTO meta (key, value)
+                     VALUES ('pi_parent_session_version', '{PI_PARENT_SESSION_VERSION}')
+                 ON CONFLICT(key) DO UPDATE SET value = excluded.value;",
+            ))?;
+        }
+
         let supported_provider_keys: Vec<&str> = crate::models::Provider::all()
             .iter()
             .map(|p| p.key())
@@ -546,5 +584,79 @@ mod tests {
         assert_eq!(updated_at, 1_781_081_413);
         assert_eq!(source_mtime, 0);
         assert_eq!(version, "message_activity_epoch_seconds_v1");
+    }
+
+    #[test]
+    fn open_migrates_pi_parent_session_paths() {
+        let dir = tempfile::tempdir().unwrap();
+        {
+            let db = Database::open(dir.path()).unwrap();
+            let conn = db.lock_write().unwrap();
+            conn.execute(
+                "INSERT INTO sessions (
+                    id, provider, title, project_path, project_name,
+                    created_at, updated_at, message_count, file_size_bytes,
+                    source_path, content_text, is_sidechain, parent_id, source_mtime
+                ) VALUES (
+                    'pi-child-path', 'pi', 'Pi child path', '/tmp/project', 'project',
+                    1781076452, 1781081413, 1, 123,
+                    '/tmp/child.jsonl', 'hello', 1,
+                    '/Users/test/.pi/agent/sessions/--tmp-project--/parent.jsonl', 42
+                )",
+                [],
+            )
+            .unwrap();
+            conn.execute(
+                "INSERT INTO sessions (
+                    id, provider, title, project_path, project_name,
+                    created_at, updated_at, message_count, file_size_bytes,
+                    source_path, content_text, is_sidechain, parent_id, source_mtime
+                ) VALUES (
+                    'pi-child-id', 'pi', 'Pi child id', '/tmp/project', 'project',
+                    1781076452, 1781081413, 1, 123,
+                    '/tmp/child-id.jsonl', 'hello', 1,
+                    'parent-session-id', 99
+                )",
+                [],
+            )
+            .unwrap();
+            conn.execute(
+                "DELETE FROM meta WHERE key = 'pi_parent_session_version'",
+                [],
+            )
+            .unwrap();
+        }
+
+        let db = Database::open(dir.path()).unwrap();
+        let conn = db.lock_read().unwrap();
+        let path_row: (Option<String>, i64, i64) = conn
+            .query_row(
+                "SELECT parent_id, is_sidechain, source_mtime
+                   FROM sessions
+                  WHERE id = 'pi-child-path'",
+                [],
+                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+            )
+            .unwrap();
+        let id_row: (Option<String>, i64, i64) = conn
+            .query_row(
+                "SELECT parent_id, is_sidechain, source_mtime
+                   FROM sessions
+                  WHERE id = 'pi-child-id'",
+                [],
+                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+            )
+            .unwrap();
+        let version: String = conn
+            .query_row(
+                "SELECT value FROM meta WHERE key = 'pi_parent_session_version'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+
+        assert_eq!(path_row, (None, 0, 0));
+        assert_eq!(id_row, (Some("parent-session-id".to_string()), 1, 0));
+        assert_eq!(version, "parent_session_id_v1");
     }
 }

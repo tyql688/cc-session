@@ -1,5 +1,6 @@
 use std::collections::{HashMap, HashSet};
-use std::path::Path;
+use std::io::{BufRead, BufReader};
+use std::path::{Path, PathBuf};
 
 use chrono::{DateTime, Utc};
 use serde_json::{Map, Value};
@@ -15,17 +16,10 @@ use super::types::*;
 /// Parse a Pi session JSONL file
 pub fn parse_session_file(path: &Path) -> Option<ParsedSession> {
     let (header, entries, parse_warning_count) = parse_entries(path)?;
-    if header.version < 2 {
-        log::warn!(
-            "Skipping Pi session v{}: {}",
-            header.version,
-            path.display()
-        );
-        return None;
-    }
 
     let active_branch = build_active_branch(&entries);
-    let messages = extract_messages(&entries, &active_branch);
+    let context_branch = build_context_branch(&entries, &active_branch, path);
+    let messages = extract_messages(&entries, &context_branch);
     let title = extract_title(&entries, &active_branch, &header);
     let model = extract_model(&entries, &active_branch);
     let (input_tokens, output_tokens, cache_read_tokens, cache_write_tokens) =
@@ -43,6 +37,8 @@ pub fn parse_session_file(path: &Path) -> Option<ParsedSession> {
         }
     };
     let updated_at = extract_modified_at(&entries, path).unwrap_or(created_at);
+    let parent_id = resolve_parent_session_id(header.parent_session.as_deref(), path);
+    let is_sidechain = parent_id.is_some();
 
     let meta = SessionMeta {
         id: header.id.clone(),
@@ -55,12 +51,12 @@ pub fn parse_session_file(path: &Path) -> Option<ParsedSession> {
         message_count: messages.len() as u32,
         file_size_bytes: std::fs::metadata(path).map(|m| m.len()).unwrap_or(0),
         source_path: path.to_string_lossy().to_string(),
-        is_sidechain: false,
+        is_sidechain,
         variant_name: None,
         model,
         cc_version: None,
         git_branch: None,
-        parent_id: header.parent_session.clone(),
+        parent_id,
         input_tokens,
         output_tokens,
         cache_read_tokens,
@@ -94,7 +90,8 @@ pub fn parse_session_file(path: &Path) -> Option<ParsedSession> {
 pub fn load_messages(path: &Path) -> Option<LoadedSession> {
     let (_header, entries, parse_warning_count) = parse_entries(path)?;
     let active_branch = build_active_branch(&entries);
-    let messages = extract_messages(&entries, &active_branch);
+    let context_branch = build_context_branch(&entries, &active_branch, path);
+    let messages = extract_messages(&entries, &context_branch);
 
     Some(LoadedSession::from_messages(messages, parse_warning_count))
 }
@@ -113,7 +110,7 @@ fn parse_entries(path: &Path) -> Option<(PiSessionHeader, Vec<PiEntry>, u32)> {
         return None;
     }
 
-    let header: PiSessionHeader = match serde_json::from_str(lines.first()?) {
+    let mut header_value: Value = match serde_json::from_str(lines.first()?) {
         Ok(header) => header,
         Err(error) => {
             log::warn!(
@@ -123,16 +120,57 @@ fn parse_entries(path: &Path) -> Option<(PiSessionHeader, Vec<PiEntry>, u32)> {
             return None;
         }
     };
-    let mut entries: Vec<PiEntry> = Vec::new();
+    let original_version = header_value
+        .get("version")
+        .and_then(Value::as_u64)
+        .and_then(|version| u32::try_from(version).ok())
+        .unwrap_or(1);
+    if original_version > 3 {
+        log::warn!(
+            "Skipping unsupported Pi session v{}: {}",
+            original_version,
+            path.display()
+        );
+        return None;
+    }
+    migrate_pi_header_value(&mut header_value);
+
+    let header: PiSessionHeader = match serde_json::from_value(header_value) {
+        Ok(header) => header,
+        Err(error) => {
+            log::warn!(
+                "Failed to parse Pi session header '{}': {error}",
+                path.display()
+            );
+            return None;
+        }
+    };
+    let mut entry_values = Vec::new();
     let mut parse_warning_count = 0u32;
     for (i, line) in lines.iter().enumerate().skip(1) {
-        match serde_json::from_str::<PiEntry>(line) {
+        match serde_json::from_str::<Value>(line) {
+            Ok(value) => entry_values.push(value),
+            Err(error) => {
+                parse_warning_count = parse_warning_count.saturating_add(1);
+                log::warn!(
+                    "Failed to parse Pi session entry JSON at line {} in '{}': {error}",
+                    i + 1,
+                    path.display()
+                );
+            }
+        }
+    }
+    migrate_pi_entry_values(&mut entry_values, original_version);
+
+    let mut entries: Vec<PiEntry> = Vec::new();
+    for (i, value) in entry_values.into_iter().enumerate() {
+        match serde_json::from_value::<PiEntry>(value) {
             Ok(entry) => entries.push(entry),
             Err(error) => {
                 parse_warning_count = parse_warning_count.saturating_add(1);
                 log::warn!(
                     "Failed to parse Pi session entry at line {} in '{}': {error}",
-                    i + 1,
+                    i + 2,
                     path.display()
                 );
             }
@@ -140,6 +178,72 @@ fn parse_entries(path: &Path) -> Option<(PiSessionHeader, Vec<PiEntry>, u32)> {
     }
 
     Some((header, entries, parse_warning_count))
+}
+
+fn migrate_pi_header_value(header: &mut Value) {
+    let Some(obj) = header.as_object_mut() else {
+        return;
+    };
+    obj.insert("version".to_string(), Value::from(3));
+    if !obj.contains_key("parentSession") {
+        if let Some(branched_from) = obj.remove("branchedFrom") {
+            obj.insert("parentSession".to_string(), branched_from);
+        }
+    }
+}
+
+fn migrate_pi_entry_values(entries: &mut [Value], original_version: u32) {
+    if original_version < 2 {
+        let mut file_index_to_id: HashMap<usize, String> = HashMap::new();
+        let mut previous_id: Option<String> = None;
+
+        for (entry_index, value) in entries.iter_mut().enumerate() {
+            let id = format!("legacy-{entry_index:08}");
+            file_index_to_id.insert(entry_index + 1, id.clone());
+            if let Some(obj) = value.as_object_mut() {
+                obj.insert("id".to_string(), Value::String(id.clone()));
+                obj.insert(
+                    "parentId".to_string(),
+                    previous_id
+                        .as_ref()
+                        .map(|parent_id| Value::String(parent_id.clone()))
+                        .unwrap_or(Value::Null),
+                );
+            }
+            previous_id = Some(id);
+        }
+
+        for value in entries.iter_mut() {
+            let Some(obj) = value.as_object_mut() else {
+                continue;
+            };
+            let Some(first_kept_index) = obj
+                .get("firstKeptEntryIndex")
+                .and_then(Value::as_u64)
+                .and_then(|idx| usize::try_from(idx).ok())
+            else {
+                continue;
+            };
+            if let Some(first_kept_id) = file_index_to_id.get(&first_kept_index) {
+                obj.insert(
+                    "firstKeptEntryId".to_string(),
+                    Value::String(first_kept_id.clone()),
+                );
+            }
+            obj.remove("firstKeptEntryIndex");
+        }
+    }
+
+    if original_version < 3 {
+        for value in entries.iter_mut() {
+            let Some(message) = value.get_mut("message").and_then(Value::as_object_mut) else {
+                continue;
+            };
+            if message.get("role").and_then(Value::as_str) == Some("hookMessage") {
+                message.insert("role".to_string(), Value::String("custom".to_string()));
+            }
+        }
+    }
 }
 
 /// Build the active branch by walking from the last entry to root
@@ -175,21 +279,72 @@ fn build_active_branch(entries: &[PiEntry]) -> Vec<String> {
     branch
 }
 
+/// Build the message context branch using Pi's compaction semantics.
+///
+/// Pi's active tree path still contains all entries from root to leaf, but the
+/// visible/LLM context after compaction is:
+///   compaction summary, kept pre-compaction entries, post-compaction entries.
+fn build_context_branch(entries: &[PiEntry], active_branch: &[String], path: &Path) -> Vec<String> {
+    let entry_by_id: HashMap<String, &PiEntry> = entries
+        .iter()
+        .filter_map(|entry| get_entry_id(entry).map(|id| (id, entry)))
+        .collect();
+    let latest_compaction = active_branch
+        .iter()
+        .enumerate()
+        .filter_map(|(idx, id)| match entry_by_id.get(id).copied() {
+            Some(PiEntry::Compaction(compaction)) => Some((idx, compaction)),
+            _ => None,
+        })
+        .next_back();
+
+    let Some((compaction_idx, compaction)) = latest_compaction else {
+        return active_branch.to_vec();
+    };
+
+    let mut context_branch = vec![compaction.base.id.clone()];
+    if let Some(first_kept_id) = compaction_first_kept_id(compaction, entries) {
+        if let Some(first_kept_idx) = active_branch[..compaction_idx]
+            .iter()
+            .position(|id| id == &first_kept_id)
+        {
+            context_branch.extend_from_slice(&active_branch[first_kept_idx..compaction_idx]);
+        } else {
+            log::warn!(
+                "Pi compaction firstKeptEntryId '{}' was not on the active branch: {}",
+                first_kept_id,
+                path.display()
+            );
+        }
+    }
+    context_branch.extend_from_slice(&active_branch[compaction_idx + 1..]);
+    context_branch
+}
+
+fn compaction_first_kept_id(compaction: &PiCompactionEntry, entries: &[PiEntry]) -> Option<String> {
+    if let Some(first_kept_id) = compaction.first_kept_entry_id.as_ref() {
+        return Some(first_kept_id.clone());
+    }
+    let legacy_index = compaction.first_kept_entry_index?;
+    if legacy_index == 0 {
+        return None;
+    }
+    entries.get(legacy_index - 1).and_then(get_entry_id)
+}
+
 /// Extract messages from entries on the active branch
 fn extract_messages(entries: &[PiEntry], branch: &[String]) -> Vec<Message> {
-    let branch_set: HashSet<&str> = branch.iter().map(String::as_str).collect();
+    let entry_by_id: HashMap<String, &PiEntry> = entries
+        .iter()
+        .filter_map(|entry| get_entry_id(entry).map(|id| (id, entry)))
+        .collect();
     let mut messages = Vec::new();
     let mut call_id_to_idx: HashMap<String, usize> = HashMap::new();
 
-    for entry in entries {
-        let entry_id = match get_entry_id(entry) {
-            Some(id) => id,
-            None => continue,
-        };
-
-        if !branch_set.contains(entry_id.as_str()) {
+    for entry_id in branch {
+        let Some(entry) = entry_by_id.get(entry_id).copied() else {
             continue;
-        }
+        };
 
         match entry {
             PiEntry::Message(msg_entry) => {
@@ -725,6 +880,72 @@ fn extract_modified_at(entries: &[PiEntry], path: &Path) -> Option<i64> {
     modified_at
 }
 
+fn resolve_parent_session_id(parent_session: Option<&str>, child_path: &Path) -> Option<String> {
+    let parent_session = parent_session?.trim();
+    if parent_session.is_empty() {
+        return None;
+    }
+
+    let parent_path = resolve_parent_session_path(parent_session, child_path);
+    if parent_path == child_path {
+        log::warn!(
+            "Skipping Pi parentSession that points to itself: {}",
+            child_path.display()
+        );
+        return None;
+    }
+
+    let file = match std::fs::File::open(&parent_path) {
+        Ok(file) => file,
+        Err(error) => {
+            log::warn!(
+                "Skipping unresolved Pi parentSession '{}': {error}",
+                parent_path.display()
+            );
+            return None;
+        }
+    };
+    let mut reader = BufReader::new(file);
+    let mut line = String::new();
+    if let Err(error) = reader.read_line(&mut line) {
+        log::warn!(
+            "Failed to read Pi parentSession header '{}': {error}",
+            parent_path.display()
+        );
+        return None;
+    }
+    if line.trim().is_empty() {
+        log::warn!(
+            "Skipping Pi parentSession with empty header: {}",
+            parent_path.display()
+        );
+        return None;
+    }
+
+    match serde_json::from_str::<PiSessionHeader>(&line) {
+        Ok(header) => Some(header.id),
+        Err(error) => {
+            log::warn!(
+                "Failed to parse Pi parentSession header '{}': {error}",
+                parent_path.display()
+            );
+            None
+        }
+    }
+}
+
+fn resolve_parent_session_path(parent_session: &str, child_path: &Path) -> PathBuf {
+    let raw_path = Path::new(parent_session);
+    if raw_path.is_absolute() {
+        return raw_path.to_path_buf();
+    }
+
+    child_path
+        .parent()
+        .map(|dir| dir.join(raw_path))
+        .unwrap_or_else(|| raw_path.to_path_buf())
+}
+
 /// Get entry ID
 fn get_entry_id(entry: &PiEntry) -> Option<String> {
     match entry {
@@ -987,6 +1208,117 @@ mod tests {
         let session = parse_session_file(&path).unwrap();
 
         assert_eq!(session.meta.updated_at, 1_781_074_802);
+    }
+
+    #[test]
+    fn parse_session_file_resolves_parent_session_path_to_parent_id() {
+        let tmp = tempfile::tempdir().unwrap();
+        let parent_path = tmp.path().join("parent.jsonl");
+        let child_path = tmp.path().join("child.jsonl");
+        std::fs::write(
+            &parent_path,
+            [
+                r#"{"type":"session","version":3,"id":"parent-session","timestamp":"2026-06-10T07:00:00.000Z","cwd":"/tmp/project"}"#,
+                r#"{"type":"message","id":"parent-user","parentId":null,"timestamp":"2026-06-10T07:00:01.000Z","message":{"role":"user","content":"Parent","timestamp":1781074801000}}"#,
+            ]
+            .join("\n"),
+        )
+        .unwrap();
+        std::fs::write(
+            &child_path,
+            [
+                format!(
+                    r#"{{"type":"session","version":3,"id":"child-session","timestamp":"2026-06-10T07:10:00.000Z","cwd":"/tmp/project","parentSession":{}}}"#,
+                    serde_json::to_string(parent_path.to_str().unwrap()).unwrap()
+                ),
+                r#"{"type":"message","id":"child-user","parentId":null,"timestamp":"2026-06-10T07:10:01.000Z","message":{"role":"user","content":"Child","timestamp":1781075401000}}"#.to_string(),
+            ]
+            .join("\n"),
+        )
+        .unwrap();
+
+        let session = parse_session_file(&child_path).unwrap();
+
+        assert_eq!(session.meta.parent_id.as_deref(), Some("parent-session"));
+        assert!(session.meta.is_sidechain);
+    }
+
+    #[test]
+    fn parse_session_file_does_not_store_unresolved_parent_session_path() {
+        let tmp = tempfile::tempdir().unwrap();
+        let missing_parent_path = tmp.path().join("missing-parent.jsonl");
+        let child_path = tmp.path().join("child.jsonl");
+        std::fs::write(
+            &child_path,
+            [
+                format!(
+                    r#"{{"type":"session","version":3,"id":"child-session","timestamp":"2026-06-10T07:10:00.000Z","cwd":"/tmp/project","parentSession":{}}}"#,
+                    serde_json::to_string(missing_parent_path.to_str().unwrap()).unwrap()
+                ),
+                r#"{"type":"message","id":"child-user","parentId":null,"timestamp":"2026-06-10T07:10:01.000Z","message":{"role":"user","content":"Child","timestamp":1781075401000}}"#.to_string(),
+            ]
+            .join("\n"),
+        )
+        .unwrap();
+
+        let session = parse_session_file(&child_path).unwrap();
+
+        assert_eq!(session.meta.parent_id, None);
+        assert!(!session.meta.is_sidechain);
+    }
+
+    #[test]
+    fn extract_messages_uses_pi_compaction_context_order() {
+        let entries: Vec<PiEntry> = [
+            r#"{"type":"message","id":"old-user","parentId":null,"timestamp":"2026-06-10T07:00:00.000Z","message":{"role":"user","content":"old prompt","timestamp":1781074800000}}"#,
+            r#"{"type":"message","id":"old-assistant","parentId":"old-user","timestamp":"2026-06-10T07:00:01.000Z","message":{"role":"assistant","content":[{"type":"text","text":"old answer"}],"provider":"pi-test","model":"mimo-test","usage":{"input":1,"output":1,"cacheRead":0,"cacheWrite":0,"totalTokens":2},"stopReason":"stop","timestamp":1781074801000}}"#,
+            r#"{"type":"message","id":"kept-user","parentId":"old-assistant","timestamp":"2026-06-10T07:00:02.000Z","message":{"role":"user","content":"kept prompt","timestamp":1781074802000}}"#,
+            r#"{"type":"compaction","id":"compact-1","parentId":"kept-user","timestamp":"2026-06-10T07:00:03.000Z","summary":"checkpoint","firstKeptEntryId":"kept-user","tokensBefore":100}"#,
+            r#"{"type":"message","id":"after-user","parentId":"compact-1","timestamp":"2026-06-10T07:00:04.000Z","message":{"role":"user","content":"after compaction","timestamp":1781074804000}}"#,
+        ]
+        .into_iter()
+        .map(|json| serde_json::from_str(json).unwrap())
+        .collect();
+
+        let active_branch = build_active_branch(&entries);
+        let context_branch =
+            build_context_branch(&entries, &active_branch, Path::new("session.jsonl"));
+        let messages = extract_messages(&entries, &context_branch);
+
+        assert_eq!(context_branch, ["compact-1", "kept-user", "after-user"]);
+        assert_eq!(messages.len(), 3);
+        assert_eq!(messages[0].role, MessageRole::System);
+        assert_eq!(messages[0].content, "[Compaction] checkpoint");
+        assert_eq!(messages[1].content, "kept prompt");
+        assert_eq!(messages[2].content, "after compaction");
+    }
+
+    #[test]
+    fn parse_session_file_migrates_legacy_v1_linear_entries() {
+        let tmp = tempfile::tempdir().unwrap();
+        let path = tmp.path().join("legacy.jsonl");
+        std::fs::write(
+            &path,
+            [
+                r#"{"type":"session","id":"legacy-session","timestamp":"2026-06-10T07:00:00.000Z","cwd":"/tmp/project"}"#,
+                r#"{"type":"message","timestamp":"2026-06-10T07:00:01.000Z","message":{"role":"user","content":"old prompt","timestamp":1781074801000}}"#,
+                r#"{"type":"compaction","timestamp":"2026-06-10T07:00:02.000Z","summary":"legacy checkpoint","firstKeptEntryIndex":1,"tokensBefore":12}"#,
+                r#"{"type":"message","timestamp":"2026-06-10T07:00:03.000Z","message":{"role":"user","content":"after legacy compaction","timestamp":1781074803000}}"#,
+            ]
+            .join("\n"),
+        )
+        .unwrap();
+
+        let session = parse_session_file(&path).unwrap();
+
+        assert_eq!(session.meta.id, "legacy-session");
+        assert_eq!(session.messages.len(), 3);
+        assert_eq!(
+            session.messages[0].content,
+            "[Compaction] legacy checkpoint"
+        );
+        assert_eq!(session.messages[1].content, "old prompt");
+        assert_eq!(session.messages[2].content, "after legacy compaction");
     }
 
     #[test]
