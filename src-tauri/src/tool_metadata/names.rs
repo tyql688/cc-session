@@ -45,10 +45,8 @@ pub fn canonical_tool_name(provider: Provider, name: &str) -> String {
         | "SemanticSearch"
         | "grep_search"
         | "search_file_content" => "Grep",
-        "Glob" | "glob" | "file_search" | "ReadFolder" | "list_directory" | "list" | "list_dir" => {
-            "Glob"
-        }
-        "find_by_name" => "Glob",
+        "Glob" | "glob" | "file_search" | "ReadFolder" | "list_directory" | "list" | "list_dir"
+        | "ls" | "find" | "find_by_name" => "Glob",
         "Task" | "task" | "Subagent" | "subagent" | "Agent" | "AgentSwarm" | "agent"
         | "read_agent" | "spawn_agent" | "wait_agent" | "send_input" | "close_agent"
         | "invoke_subagent" | "define_subagent" => "Agent",
@@ -157,6 +155,8 @@ pub(super) fn display_tool_name(raw_name: &str, canonical_name: &str) -> String 
         "install_workspace_dependencies" => "install workspace dependencies".to_string(),
         "codesearch" => "code search".to_string(),
         "skill" => "skill".to_string(),
+        "find" => "find".to_string(),
+        "ls" => "ls".to_string(),
         "list" => "list".to_string(),
         "find_by_name" => "find by name".to_string(),
         _ => canonical_name.to_string(),
@@ -182,5 +182,13 @@ mod tests {
             canonical_tool_name(Provider::Antigravity, "find_by_name"),
             "Glob"
         );
+    }
+
+    #[test]
+    fn maps_pi_find_and_ls_to_glob_without_losing_display_name() {
+        assert_eq!(canonical_tool_name(Provider::Pi, "find"), "Glob");
+        assert_eq!(canonical_tool_name(Provider::Pi, "ls"), "Glob");
+        assert_eq!(super::display_tool_name("find", "Glob"), "find");
+        assert_eq!(super::display_tool_name("ls", "Glob"), "ls");
     }
 }

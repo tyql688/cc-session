@@ -229,6 +229,8 @@ mod tests {
             ("codesearch", "ToolSearch"),
             ("skill", "Skill"),
             ("list", "Glob"),
+            ("ls", "Glob"),
+            ("find", "Glob"),
             ("sql", "SQL"),
         ] {
             let metadata = build_tool_metadata(ToolCallFacts {
