@@ -29,6 +29,7 @@ import {
   extractAgentDescription,
   extractAgentId,
   extractAgentNickname,
+  isAgentToolMessage,
   parseToolJsonObject,
 } from "../../lib/subagent";
 import { parseContent } from "./MarkdownRenderer";
@@ -53,6 +54,28 @@ function openSubagent(
       detail: { description, nickname, agentId, parentSessionId },
     }),
   );
+}
+
+const SUBAGENT_LABEL_LIMIT = 48;
+
+function compactSubagentLabel(value: string): string {
+  const singleLine = value.replace(/\s+/g, " ").trim();
+  if (singleLine.length <= SUBAGENT_LABEL_LIMIT) return singleLine;
+  return `${singleLine.slice(0, SUBAGENT_LABEL_LIMIT - 3)}...`;
+}
+
+function subagentButtonLabel(
+  prompt: string | undefined,
+  agentId: string | undefined,
+  index: number,
+  total: number,
+): string {
+  if (total <= 1) return "↗ Open";
+  const identity =
+    compactSubagentLabel(prompt ?? "") ||
+    compactSubagentLabel(agentId ?? "") ||
+    `#${index + 1}`;
+  return `↗ Open ${identity}`;
 }
 
 function DiffRows(props: { lines: ToolDiffLine[] }) {
@@ -178,7 +201,7 @@ export function ToolMessage(props: {
   const resultHasDiff = () =>
     !!resultMetadata()?.diff || !!resultMetadata()?.patchDiff;
   const showInputDetail = () => !!formatted() && !resultHasDiff();
-  const isAgent = () => name() === "Agent";
+  const isAgent = () => isAgentToolMessage(props.message);
   /** Parsed tool_input/tool_output JSON, memoized so each downstream
    *  extractor reuses the same JSON.parse call. Most tool outputs are
    *  plain text (Bash stdout, file contents, …), so we pre-screen the
@@ -273,7 +296,7 @@ export function ToolMessage(props: {
         </Show>
         <Show
           when={
-            name() === "Agent" &&
+            isAgent() &&
             SUBAGENT_FILE_PROVIDERS.has(props.provider ?? "") &&
             (
               agentChildIds() ??
@@ -313,9 +336,12 @@ export function ToolMessage(props: {
                 <For each={agentPromptTargets()}>
                   {(prompt, i) => {
                     const label = () =>
-                      agentPromptTargets().length > 1
-                        ? `↗ Open #${i() + 1}`
-                        : "↗ Open";
+                      subagentButtonLabel(
+                        prompt,
+                        undefined,
+                        i(),
+                        agentPromptTargets().length,
+                      );
                     return (
                       <button
                         class="msg-tool-subagent-link"
@@ -343,7 +369,12 @@ export function ToolMessage(props: {
                 const prompt = () => agentChildPrompts()[i()] ?? "";
                 const label = () => {
                   const ids = agentChildIds() ?? [];
-                  return ids.length > 1 ? `↗ Open #${i() + 1}` : "↗ Open";
+                  return subagentButtonLabel(
+                    prompt(),
+                    childId,
+                    i(),
+                    ids.length,
+                  );
                 };
                 return (
                   <button

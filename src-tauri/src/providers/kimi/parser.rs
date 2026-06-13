@@ -185,10 +185,14 @@ pub(crate) fn parse_session(path: &Path, index: &SessionIndex) -> Option<ParsedS
             .join("agents")
             .join(&parent_agent_name)
             .join("wire.jsonl");
-        let descriptions = collect_subagent_descriptions(&parent_wire);
-        descriptions
+        state
+            .swarm_items
             .get(&agent_name)
             .cloned()
+            .or_else(|| {
+                let descriptions = collect_subagent_descriptions(&parent_wire);
+                descriptions.get(&agent_name).cloned()
+            })
             .unwrap_or_else(|| session_title(accum.first_user_message.as_deref()))
     } else {
         state
@@ -582,6 +586,41 @@ mod tests {
         );
         let sub = parse_session(&sub_path, &SessionIndex::default()).expect("sub parses");
         assert_eq!(sub.meta.title, "src-tauri/src/providers/kimi/tools.rs");
+    }
+
+    #[test]
+    fn subagent_title_uses_state_swarm_item_when_parent_result_is_unavailable() {
+        let tmp = tempfile::tempdir().unwrap();
+        let session_dir = tmp.path().join("wd_teli_hash").join("session_swarm_state");
+        std::fs::create_dir_all(&session_dir).unwrap();
+        write_state(
+            &session_dir,
+            r#"{
+                "agents": {
+                    "main": {"type":"main","parentAgentId":null},
+                    "agent-2": {
+                        "type":"sub",
+                        "parentAgentId":"main",
+                        "swarmItem":"apps/desktop/src-tauri/tests/db_tests.rs, apps/desktop/src-tauri/tests/export_import_tests.rs, apps/desktop/src-tauri/tests/util_tests.rs"
+                    }
+                }
+            }"#,
+        );
+
+        let sub_path = write_wire(
+            &session_dir,
+            "agent-2",
+            &[
+                r#"{"type":"metadata","protocol_version":"1.0","created_at":1779701197600}"#,
+                r#"{"type":"context.append_message","message":{"role":"user","content":[{"type":"text","text":"你正在 review Teli 项目的源代码。这个 prompt 很长，不应该成为 swarm 子代理标题。"}],"toolCalls":[]}}"#,
+            ],
+        );
+
+        let sub = parse_session(&sub_path, &SessionIndex::default()).expect("sub parses");
+        assert_eq!(
+            sub.meta.title,
+            "apps/desktop/src-tauri/tests/db_tests.rs, apps/desktop/src-tauri/tests/export_import_tests.rs, apps/desktop/src-tauri/tests/util_tests.rs"
+        );
     }
 
     #[test]

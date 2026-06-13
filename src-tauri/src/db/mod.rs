@@ -482,6 +482,34 @@ impl Database {
             ))?;
         }
 
+        // Migration: Kimi AgentSwarm subagents now use state.json's structured
+        // `swarmItem` value as their title source. Existing rows may have been
+        // indexed before the parent swarm result finished, leaving the long
+        // generated prompt as the title. Invalidate Kimi freshness snapshots so
+        // the next scan replays the fixed parser.
+        const KIMI_SWARM_ITEM_VERSION: &str = "state_swarm_item_titles_v1";
+        let current_kimi_swarm_item_version: Option<String> = {
+            let mut stmt = write_conn
+                .prepare("SELECT value FROM meta WHERE key = 'kimi_swarm_item_version'")?;
+            stmt.query_row([], |row| row.get(0)).ok()
+        };
+        if current_kimi_swarm_item_version.as_deref() != Some(KIMI_SWARM_ITEM_VERSION) {
+            let invalidated_rows = write_conn.execute(
+                "UPDATE sessions SET source_mtime = 0 WHERE provider = 'kimi'",
+                [],
+            )?;
+            if invalidated_rows > 0 {
+                log::info!(
+                    "invalidated {invalidated_rows} Kimi source snapshots for AgentSwarm swarmItem titles"
+                );
+            }
+            write_conn.execute_batch(&format!(
+                "INSERT INTO meta (key, value)
+                     VALUES ('kimi_swarm_item_version', '{KIMI_SWARM_ITEM_VERSION}')
+                 ON CONFLICT(key) DO UPDATE SET value = excluded.value;",
+            ))?;
+        }
+
         let supported_provider_keys: Vec<&str> = crate::models::Provider::all()
             .iter()
             .map(|p| p.key())
@@ -658,5 +686,70 @@ mod tests {
         assert_eq!(path_row, (None, 0, 0));
         assert_eq!(id_row, (Some("parent-session-id".to_string()), 1, 0));
         assert_eq!(version, "parent_session_id_v1");
+    }
+
+    #[test]
+    fn open_invalidates_kimi_rows_for_swarm_item_titles() {
+        let dir = tempfile::tempdir().unwrap();
+        {
+            let db = Database::open(dir.path()).unwrap();
+            let conn = db.lock_write().unwrap();
+            conn.execute(
+                "INSERT INTO sessions (
+                    id, provider, title, project_path, project_name,
+                    created_at, updated_at, message_count, file_size_bytes,
+                    source_path, content_text, source_mtime
+                ) VALUES (
+                    'kimi-child', 'kimi', 'long generated prompt', '/tmp/teli', 'teli',
+                    1781076452, 1781081413, 1, 123,
+                    '/tmp/kimi/wire.jsonl', 'hello', 42
+                )",
+                [],
+            )
+            .unwrap();
+            conn.execute(
+                "INSERT INTO sessions (
+                    id, provider, title, project_path, project_name,
+                    created_at, updated_at, message_count, file_size_bytes,
+                    source_path, content_text, source_mtime
+                ) VALUES (
+                    'codex-session', 'codex', 'other', '/tmp/teli', 'teli',
+                    1781076452, 1781081413, 1, 123,
+                    '/tmp/codex/session.jsonl', 'hello', 77
+                )",
+                [],
+            )
+            .unwrap();
+            conn.execute("DELETE FROM meta WHERE key = 'kimi_swarm_item_version'", [])
+                .unwrap();
+        }
+
+        let db = Database::open(dir.path()).unwrap();
+        let conn = db.lock_read().unwrap();
+        let kimi_mtime: i64 = conn
+            .query_row(
+                "SELECT source_mtime FROM sessions WHERE id = 'kimi-child'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        let codex_mtime: i64 = conn
+            .query_row(
+                "SELECT source_mtime FROM sessions WHERE id = 'codex-session'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        let version: String = conn
+            .query_row(
+                "SELECT value FROM meta WHERE key = 'kimi_swarm_item_version'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+
+        assert_eq!(kimi_mtime, 0);
+        assert_eq!(codex_mtime, 77);
+        assert_eq!(version, "state_swarm_item_titles_v1");
     }
 }

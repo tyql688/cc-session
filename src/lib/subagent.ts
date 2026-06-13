@@ -23,7 +23,7 @@ export interface SubagentInfo {
   description?: string;
   /** Resolved agent id (Kimi output line / structured metadata / tool input). */
   agentId?: string;
-  /** Antigravity multi-spawn child conversation ids (one "Open" per entry). */
+  /** Multi-spawn child ids (one "Open" per entry). */
   childIds?: string[];
   /** Positional prompts aligned with childIds (empty string when absent). */
   childPrompts: string[];
@@ -38,6 +38,15 @@ export interface SubagentMatchRequest {
 export interface SubagentMatchCandidate {
   id: string;
   title: string;
+}
+
+export function isAgentToolMessage(
+  message: Pick<Message, "tool_name" | "tool_metadata">,
+): boolean {
+  return (
+    message.tool_name === "Agent" ||
+    message.tool_metadata?.canonical_name === "Agent"
+  );
 }
 
 /** Narrow `structured` metadata to a plain object record (not array/null). */
@@ -132,11 +141,10 @@ export function extractAgentId(
 }
 
 /**
- * Antigravity's `invoke_subagent` tool spawns one or many subagents in a single
- * call; the conversationIds are written by the parser to
+ * Some providers spawn one or many subagents in a single call; the child ids are written to
  * `tool_metadata.structured.childConversationIds`. When this list is present we
  * render one "Open" link per child instead of the single-button path used by
- * Claude/Codex/Kimi.
+ * single-spawn providers.
  */
 export function extractAgentChildIds(
   metadata: ToolMetadata | undefined,
@@ -173,7 +181,7 @@ export function extractAgentChildPrompts(
  * the message and returns derived data with no side effects.
  */
 export function extractSubagentInfo(message: Message): SubagentInfo {
-  if (message.tool_name !== "Agent") {
+  if (!isAgentToolMessage(message)) {
     return { childPrompts: [] };
   }
   const input = parseToolJsonObject(message.tool_input, "tool_input");

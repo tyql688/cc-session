@@ -58,6 +58,20 @@ describe("SessionView message processing", () => {
       content: "",
       timestamp: "2026-04-11T02:25:18.000Z",
     };
+    const swarmTool: Message = {
+      ...baseMessage,
+      role: "tool",
+      tool_name: "AgentSwarm",
+      tool_input: '{"description":"review swarm"}',
+      content: "",
+      timestamp: "2026-04-11T02:25:18.500Z",
+      tool_metadata: {
+        raw_name: "AgentSwarm",
+        canonical_name: "Agent",
+        display_name: "AgentSwarm",
+        category: "agent",
+      },
+    };
     const bashTool: Message = {
       ...baseMessage,
       role: "tool",
@@ -67,25 +81,33 @@ describe("SessionView message processing", () => {
       timestamp: "2026-04-11T02:25:19.000Z",
     };
 
-    expect(processMessages([readTool, agentTool, bashTool])).toEqual([
-      {
-        key: "msg-0-tool-2026-04-11T02:25:17.000Z",
-        type: "message",
-        msg: readTool,
-        searchHaystack: "",
-      },
-      {
-        key: "msg-1-tool-2026-04-11T02:25:18.000Z",
-        type: "message",
-        msg: agentTool,
-        searchHaystack: "",
-      },
-      {
-        key: "msg-2-tool-2026-04-11T02:25:19.000Z",
-        type: "message",
-        msg: bashTool,
-        searchHaystack: "",
-      },
-    ]);
+    expect(processMessages([readTool, agentTool, swarmTool, bashTool])).toEqual(
+      [
+        {
+          key: "msg-0-tool-2026-04-11T02:25:17.000Z",
+          type: "message",
+          msg: readTool,
+          searchHaystack: "",
+        },
+        {
+          key: "msg-1-tool-2026-04-11T02:25:18.000Z",
+          type: "message",
+          msg: agentTool,
+          searchHaystack: "",
+        },
+        {
+          key: "msg-2-tool-2026-04-11T02:25:18.500Z",
+          type: "message",
+          msg: swarmTool,
+          searchHaystack: "",
+        },
+        {
+          key: "msg-3-tool-2026-04-11T02:25:19.000Z",
+          type: "message",
+          msg: bashTool,
+          searchHaystack: "",
+        },
+      ],
+    );
   });
 });

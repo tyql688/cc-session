@@ -1,5 +1,6 @@
 import type { Message, MessageRole } from "../../lib/types";
 import { parseTimestamp, formatTimeOnly } from "../../lib/formatters";
+import { isAgentToolMessage } from "../../lib/subagent";
 
 /// Lowercased haystack used by in-session search. Computed once when the
 /// entry is built so per-keystroke `findNewestMatchingEntryIndex` walks
@@ -30,7 +31,7 @@ function messageHaystack(msg: Message): string {
 }
 
 function isMergeableToolMessage(msg: Message): boolean {
-  return msg.role === "tool" && msg.tool_name !== "Agent";
+  return msg.role === "tool" && !isAgentToolMessage(msg);
 }
 
 export function isRenderableMessage(msg: Message): boolean {

@@ -149,6 +149,8 @@ pub(super) struct StateJson {
     /// Map of agent-name → parent-agent-name (None for `main`).
     /// Used to identify which wire.jsonl is the parent vs. subagent.
     pub(super) agents: HashMap<String, Option<String>>,
+    /// Map of swarm subagent-name → item assigned by AgentSwarm.
+    pub(super) swarm_items: HashMap<String, String>,
 }
 
 impl StateJson {
@@ -190,6 +192,7 @@ impl StateJson {
             .and_then(|v| v.as_str())
             .map(str::to_string);
         let mut agents = HashMap::new();
+        let mut swarm_items = HashMap::new();
         if let Some(map) = value.get("agents").and_then(|v| v.as_object()) {
             for (name, entry) in map {
                 let parent = entry
@@ -198,6 +201,13 @@ impl StateJson {
                     .filter(|s| !s.is_empty())
                     .map(str::to_string);
                 agents.insert(name.clone(), parent);
+                if let Some(item) = entry
+                    .get("swarmItem")
+                    .and_then(|v| v.as_str())
+                    .filter(|s| !s.is_empty())
+                {
+                    swarm_items.insert(name.clone(), item.to_string());
+                }
             }
         }
         Self {
@@ -205,6 +215,7 @@ impl StateJson {
             created_at,
             updated_at,
             agents,
+            swarm_items,
         }
     }
 }

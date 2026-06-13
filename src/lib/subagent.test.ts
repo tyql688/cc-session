@@ -8,6 +8,7 @@ import {
   extractAgentId,
   extractAgentNickname,
   extractSubagentInfo,
+  isAgentToolMessage,
   matchesSubagentSession,
   parseToolJsonObject,
 } from "./subagent";
@@ -36,6 +37,26 @@ describe("subagent file providers", () => {
     expect(SUBAGENT_FILE_PROVIDERS.has("antigravity")).toBe(true);
     // Poll-only providers without per-subagent files are excluded.
     expect(SUBAGENT_FILE_PROVIDERS.has("opencode")).toBe(false);
+  });
+});
+
+describe("isAgentToolMessage", () => {
+  it("treats canonical Agent metadata as an agent tool", () => {
+    expect(
+      isAgentToolMessage({
+        tool_name: "AgentSwarm",
+        tool_metadata: {
+          raw_name: "AgentSwarm",
+          canonical_name: "Agent",
+          display_name: "AgentSwarm",
+          category: "agent",
+        },
+      }),
+    ).toBe(true);
+  });
+
+  it("does not treat ordinary tools as agent tools", () => {
+    expect(isAgentToolMessage({ tool_name: "Read" })).toBe(false);
   });
 });
 
@@ -256,6 +277,30 @@ describe("extractSubagentInfo", () => {
     const info = extractSubagentInfo(agentMessage({ tool_metadata: metadata }));
     expect(info.childIds).toEqual(["conv-1", "conv-2"]);
     expect(info.childPrompts).toEqual(["first task", "second task"]);
+  });
+
+  it("extracts kimi AgentSwarm child ids when tool_name is raw", () => {
+    const metadata: ToolMetadata = {
+      raw_name: "AgentSwarm",
+      canonical_name: "Agent",
+      display_name: "AgentSwarm",
+      category: "agent",
+      structured: {
+        childConversationIds: ["agent-0", "agent-1"],
+        childPrompts: [
+          "apps/desktop/src/App.vue",
+          "packages/core/src/index.ts",
+        ],
+      },
+    };
+    const info = extractSubagentInfo(
+      agentMessage({ tool_name: "AgentSwarm", tool_metadata: metadata }),
+    );
+    expect(info.childIds).toEqual(["agent-0", "agent-1"]);
+    expect(info.childPrompts).toEqual([
+      "apps/desktop/src/App.vue",
+      "packages/core/src/index.ts",
+    ]);
   });
 });
 

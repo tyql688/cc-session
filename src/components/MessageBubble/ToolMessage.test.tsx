@@ -49,6 +49,24 @@ const promptOnlyInvokeMessage: Message = {
   },
 };
 
+const kimiSwarmMessage: Message = {
+  ...agentMessage,
+  tool_name: "AgentSwarm",
+  tool_metadata: {
+    raw_name: "AgentSwarm",
+    canonical_name: "Agent",
+    display_name: "AgentSwarm",
+    category: "agent",
+    structured: {
+      childConversationIds: ["agent-0", "agent-1"],
+      childPrompts: [
+        "apps/desktop/src/App.vue, apps/desktop/src/main.ts",
+        "packages/core/src/index.ts",
+      ],
+    },
+  },
+};
+
 const bashOutputMessage: Message = {
   role: "tool",
   content: "line one\nline two",
@@ -158,6 +176,49 @@ describe("ToolMessage", () => {
       description: "prompt-only child task",
       agentId: undefined,
       parentSessionId: "parent-conversation-1",
+    });
+  });
+
+  it("labels kimi swarm child buttons with prompt identity", () => {
+    let detail:
+      | {
+          description?: string;
+          agentId?: string;
+          parentSessionId?: string;
+        }
+      | undefined;
+    const listener = (event: Event) => {
+      detail = (
+        event as CustomEvent<{
+          description?: string;
+          agentId?: string;
+          parentSessionId?: string;
+        }>
+      ).detail;
+    };
+    window.addEventListener("open-subagent", listener);
+
+    const { getByRole } = render(() => (
+      <ToolMessage
+        message={kimiSwarmMessage}
+        provider="kimi"
+        parentSessionId="session_parent"
+      />
+    ));
+
+    expect(
+      getByRole("button", { name: /Open apps\/desktop\/src\/App\.vue/ }),
+    ).toBeTruthy();
+    const second = getByRole("button", {
+      name: /Open packages\/core\/src\/index\.ts/,
+    });
+    fireEvent.click(second);
+    window.removeEventListener("open-subagent", listener);
+
+    expect(detail).toEqual({
+      description: "packages/core/src/index.ts",
+      agentId: "agent-1",
+      parentSessionId: "session_parent",
     });
   });
 });

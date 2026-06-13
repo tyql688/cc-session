@@ -52,6 +52,10 @@
   margin-left: 8px;
   opacity: 0.85;
   flex-shrink: 0;
+  max-width: min(240px, 30vw);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .msg-tool-subagent-link:hover {
