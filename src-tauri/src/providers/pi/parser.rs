@@ -31,7 +31,7 @@ pub fn parse_session_file(path: &Path) -> Option<ParsedSession> {
     let (input_tokens, output_tokens, cache_read_tokens, cache_write_tokens) =
         extract_token_totals(&entries, &active_branch);
 
-    let created_at = match parse_timestamp(&header.timestamp) {
+    let created_at = match parse_rfc3339_epoch_seconds(&header.timestamp) {
         Some(ts) => ts,
         None => {
             log::warn!(
@@ -42,7 +42,7 @@ pub fn parse_session_file(path: &Path) -> Option<ParsedSession> {
             return None;
         }
     };
-    let updated_at = extract_updated_at(&entries, &active_branch).unwrap_or(created_at);
+    let updated_at = extract_modified_at(&entries, path).unwrap_or(created_at);
 
     let meta = SessionMeta {
         id: header.id.clone(),
@@ -199,7 +199,7 @@ fn extract_messages(entries: &[PiEntry], branch: &[String]) -> Vec<Message> {
                 push_system_message(
                     &mut messages,
                     format!("[Compaction] {}", compaction.summary),
-                    parse_timestamp(&compaction.base.timestamp).map(format_timestamp),
+                    format_rfc3339_timestamp(&compaction.base.timestamp),
                     None,
                 );
             }
@@ -207,7 +207,7 @@ fn extract_messages(entries: &[PiEntry], branch: &[String]) -> Vec<Message> {
                 push_system_message(
                     &mut messages,
                     format!("[Branch Summary] {}", summary.summary),
-                    parse_timestamp(&summary.base.timestamp).map(format_timestamp),
+                    format_rfc3339_timestamp(&summary.base.timestamp),
                     None,
                 );
             }
@@ -216,7 +216,7 @@ fn extract_messages(entries: &[PiEntry], branch: &[String]) -> Vec<Message> {
                 push_system_message(
                     &mut messages,
                     format!("[{}] {}", custom.custom_type, content),
-                    parse_timestamp(&custom.base.timestamp).map(format_timestamp),
+                    format_rfc3339_timestamp(&custom.base.timestamp),
                     None,
                 );
             }
@@ -238,7 +238,7 @@ fn push_agent_messages(
             let content = extract_content_text(&user.content);
             if !content.is_empty() {
                 messages.push(Message {
-                    timestamp: Some(format_timestamp(user.timestamp as i64)),
+                    timestamp: format_millis_timestamp(user.timestamp),
                     ..Message::user(content)
                 });
             }
@@ -258,7 +258,7 @@ fn push_agent_messages(
                 push_system_message(
                     messages,
                     format!("[{}] {}", custom.custom_type, content),
-                    Some(format_timestamp(custom.timestamp as i64)),
+                    format_millis_timestamp(custom.timestamp),
                     None,
                 );
             }
@@ -267,7 +267,7 @@ fn push_agent_messages(
             push_system_message(
                 messages,
                 format!("[Branch Summary] {}", summary.summary),
-                Some(format_timestamp(summary.timestamp as i64)),
+                format_millis_timestamp(summary.timestamp),
                 None,
             );
         }
@@ -275,7 +275,7 @@ fn push_agent_messages(
             push_system_message(
                 messages,
                 format!("[Compaction] {}", compaction.summary),
-                Some(format_timestamp(compaction.timestamp as i64)),
+                format_millis_timestamp(compaction.timestamp),
                 None,
             );
         }
@@ -287,7 +287,7 @@ fn push_assistant_message(
     messages: &mut Vec<Message>,
     call_id_to_idx: &mut HashMap<String, usize>,
 ) {
-    let timestamp = Some(format_timestamp(assistant.timestamp as i64));
+    let timestamp = format_millis_timestamp(assistant.timestamp);
     let mut usage_target_idx: Option<usize> = None;
     let token_usage = assistant.usage.as_ref().map(|u| TokenUsage {
         input_tokens: u.input as u32,
@@ -467,7 +467,7 @@ fn merge_tool_result(
         },
     );
     messages.push(Message {
-        timestamp: Some(format_timestamp(result.timestamp as i64)),
+        timestamp: format_millis_timestamp(result.timestamp),
         tool_name: Some(metadata.canonical_name.clone()),
         tool_metadata: Some(metadata),
         ..Message::new(MessageRole::Tool, content)
@@ -502,7 +502,7 @@ fn push_bash_execution(bash: &PiBashExecutionMessage, messages: &mut Vec<Message
         },
     );
     messages.push(Message {
-        timestamp: Some(format_timestamp(bash.timestamp as i64)),
+        timestamp: format_millis_timestamp(bash.timestamp),
         tool_name: Some(metadata.canonical_name.clone()),
         tool_input: Some(input.to_string()),
         tool_metadata: Some(metadata),
@@ -688,35 +688,41 @@ fn extract_token_totals(entries: &[PiEntry], branch: &[String]) -> (u64, u64, u6
     )
 }
 
-/// Extract updated_at timestamp
-fn extract_updated_at(entries: &[PiEntry], branch: &[String]) -> Option<i64> {
-    let branch_set: HashSet<&str> = branch.iter().map(String::as_str).collect();
+/// Extract the Pi session-list `modified` timestamp as epoch seconds.
+///
+/// Pi derives this from the latest user/assistant message timestamp, not from
+/// the last JSONL entry. Tool results, labels, and model changes do not update
+/// the session-list activity time.
+fn extract_modified_at(entries: &[PiEntry], path: &Path) -> Option<i64> {
+    let mut modified_at = None;
 
-    for entry in entries.iter().rev() {
-        let timestamp = match entry {
-            PiEntry::Message(msg) => {
-                if branch_set.contains(msg.base.id.as_str()) {
-                    Some(&msg.base.timestamp)
-                } else {
-                    None
-                }
-            }
-            PiEntry::ModelChange(mc) => {
-                if branch_set.contains(mc.base.id.as_str()) {
-                    Some(&mc.base.timestamp)
-                } else {
-                    None
-                }
-            }
+    for entry in entries {
+        let PiEntry::Message(message_entry) = entry else {
+            continue;
+        };
+        let timestamp = match &message_entry.message {
+            PiAgentMessage::User(user) => Some(user.timestamp),
+            PiAgentMessage::Assistant(assistant) => Some(assistant.timestamp),
             _ => None,
         };
+        let Some(timestamp) = timestamp else {
+            continue;
+        };
 
-        if let Some(ts) = timestamp {
-            return parse_timestamp(ts);
+        match parse_millis_epoch_seconds(timestamp) {
+            Some(timestamp) => {
+                modified_at =
+                    Some(modified_at.map_or(timestamp, |current: i64| current.max(timestamp)));
+            }
+            None => log::warn!(
+                "Skipping invalid Pi activity timestamp '{}': {}",
+                timestamp,
+                path.display()
+            ),
         }
     }
 
-    None
+    modified_at
 }
 
 /// Get entry ID
@@ -751,18 +757,42 @@ fn get_entry_parent_id(entry: &PiEntry) -> Option<String> {
     }
 }
 
-/// Parse ISO timestamp to Unix milliseconds
-fn parse_timestamp(ts: &str) -> Option<i64> {
+/// Parse ISO timestamp to Unix seconds for SessionMeta fields.
+fn parse_rfc3339_epoch_seconds(ts: &str) -> Option<i64> {
     DateTime::parse_from_rfc3339(ts)
         .ok()
-        .map(|dt| dt.timestamp_millis())
+        .map(|dt| dt.timestamp())
 }
 
-/// Format Unix milliseconds to ISO string
-fn format_timestamp(ts: i64) -> String {
-    DateTime::<Utc>::from_timestamp_millis(ts)
-        .map(|dt| dt.to_rfc3339())
-        .unwrap_or_default()
+fn parse_millis_datetime(timestamp_millis: u64) -> Option<DateTime<Utc>> {
+    let timestamp_millis = i64::try_from(timestamp_millis).ok()?;
+    DateTime::<Utc>::from_timestamp_millis(timestamp_millis)
+}
+
+fn parse_millis_epoch_seconds(timestamp_millis: u64) -> Option<i64> {
+    parse_millis_datetime(timestamp_millis).map(|dt| dt.timestamp())
+}
+
+/// Normalize an entry-level RFC3339 timestamp to a UTC ISO string for messages.
+fn format_rfc3339_timestamp(ts: &str) -> Option<String> {
+    match DateTime::parse_from_rfc3339(ts) {
+        Ok(dt) => Some(dt.with_timezone(&Utc).to_rfc3339()),
+        Err(error) => {
+            log::warn!("Skipping malformed Pi message timestamp '{ts}': {error}");
+            None
+        }
+    }
+}
+
+/// Format a Pi message timestamp. Pi stores message timestamps as Unix milliseconds.
+fn format_millis_timestamp(timestamp_millis: u64) -> Option<String> {
+    match parse_millis_datetime(timestamp_millis) {
+        Some(timestamp) => Some(timestamp.to_rfc3339()),
+        None => {
+            log::warn!("Skipping invalid Pi message timestamp '{timestamp_millis}'");
+            None
+        }
+    }
 }
 
 /// Extract project name from path
@@ -911,6 +941,52 @@ mod tests {
                 .and_then(|metadata| metadata.status.as_deref()),
             Some("error")
         );
+    }
+
+    #[test]
+    fn parse_session_file_stores_meta_timestamps_as_epoch_seconds() {
+        let tmp = tempfile::tempdir().unwrap();
+        let path = tmp.path().join("session.jsonl");
+        std::fs::write(
+            &path,
+            [
+                r#"{"type":"session","version":3,"id":"session-1","timestamp":"2026-06-10T07:00:00.000Z","cwd":"/tmp/project"}"#,
+                r#"{"type":"message","id":"user-1","parentId":null,"timestamp":"2026-06-10T07:00:01.000Z","message":{"role":"user","content":"Hello","timestamp":1781074801000}}"#,
+            ]
+            .join("\n"),
+        )
+        .unwrap();
+
+        let session = parse_session_file(&path).unwrap();
+
+        assert_eq!(session.meta.created_at, 1_781_074_800);
+        assert_eq!(session.meta.updated_at, 1_781_074_801);
+        assert_eq!(
+            session.messages[0].timestamp.as_deref(),
+            Some("2026-06-10T07:00:01+00:00")
+        );
+    }
+
+    #[test]
+    fn parse_session_file_uses_pi_message_activity_for_updated_at() {
+        let tmp = tempfile::tempdir().unwrap();
+        let path = tmp.path().join("session.jsonl");
+        std::fs::write(
+            &path,
+            [
+                r#"{"type":"session","version":3,"id":"session-1","timestamp":"2026-06-10T07:00:00.000Z","cwd":"/tmp/project"}"#,
+                r#"{"type":"message","id":"user-1","parentId":null,"timestamp":"2026-06-10T07:10:00.000Z","message":{"role":"user","content":"Hello","timestamp":1781074801000}}"#,
+                r#"{"type":"message","id":"assistant-1","parentId":"user-1","timestamp":"2026-06-10T07:20:00.000Z","message":{"role":"assistant","content":[{"type":"text","text":"Hi!"}],"provider":"pi-test","model":"mimo-test","usage":{"input":1,"output":1,"cacheRead":0,"cacheWrite":0,"totalTokens":2},"stopReason":"stop","timestamp":1781074802000}}"#,
+                r#"{"type":"message","id":"result-1","parentId":"assistant-1","timestamp":"2026-06-10T07:25:00.000Z","message":{"role":"toolResult","toolCallId":"call-read","toolName":"read","content":[{"type":"text","text":"file body"}],"details":{},"isError":false,"timestamp":1781076300000}}"#,
+                r#"{"type":"model_change","id":"model-1","parentId":"result-1","timestamp":"2026-06-10T07:30:00.000Z","provider":"pi-test","modelId":"other-model"}"#,
+            ]
+            .join("\n"),
+        )
+        .unwrap();
+
+        let session = parse_session_file(&path).unwrap();
+
+        assert_eq!(session.meta.updated_at, 1_781_074_802);
     }
 
     #[test]
