@@ -1,8 +1,13 @@
-import { describe, it, expect } from "vitest";
-import { render } from "@solidjs/testing-library";
+import { afterEach, describe, it, expect, vi } from "vitest";
+import { render, waitFor } from "@solidjs/testing-library";
+import hljs from "highlight.js/lib/core";
 import { CodeBlock } from "./CodeBlock";
 
 describe("CodeBlock", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
   it("renders the provided code text", () => {
     const { container } = render(() => (
       <CodeBlock code="const answer = 42;" language="typescript" />
@@ -29,5 +34,23 @@ describe("CodeBlock", () => {
       <CodeBlock code="x = 1" language="python" />
     ));
     expect(container.querySelector(".code-block-copy")).not.toBeNull();
+  });
+
+  it("reuses cached syntax highlighting for identical code and language", async () => {
+    const highlightSpy = vi.spyOn(hljs, "highlight");
+    const code = `const cacheProbe${Date.now()} = 42;`;
+
+    const first = render(() => <CodeBlock code={code} language="typescript" />);
+    await waitFor(() => expect(highlightSpy).toHaveBeenCalledTimes(1));
+    first.unmount();
+
+    const second = render(() => (
+      <CodeBlock code={code} language="typescript" />
+    ));
+    await waitFor(() =>
+      expect(second.container.querySelector("code")?.textContent).toBe(code),
+    );
+
+    expect(highlightSpy).toHaveBeenCalledTimes(1);
   });
 });

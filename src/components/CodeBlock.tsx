@@ -75,6 +75,55 @@ hljs.registerLanguage("elixir", elixir);
 hljs.registerLanguage("makefile", makefile);
 hljs.registerLanguage("graphql", graphql);
 
+const HIGHLIGHT_CACHE_LIMIT = 128;
+const HIGHLIGHT_CACHE_MAX_CODE_CHARS = 100_000;
+const highlightCache = new Map<string, string>();
+
+function highlightCacheKey(code: string, language: string): string {
+  return `${language}\0${code}`;
+}
+
+function getCachedHighlight(key: string): string | undefined {
+  const cached = highlightCache.get(key);
+  if (cached === undefined) return undefined;
+  // Refresh insertion order so the Map acts as a tiny LRU cache.
+  highlightCache.delete(key);
+  highlightCache.set(key, cached);
+  return cached;
+}
+
+function setCachedHighlight(key: string, value: string): void {
+  highlightCache.set(key, value);
+  while (highlightCache.size > HIGHLIGHT_CACHE_LIMIT) {
+    const oldest = highlightCache.keys().next().value;
+    if (oldest === undefined) break;
+    highlightCache.delete(oldest);
+  }
+}
+
+function highlightCode(code: string, language: string): string | undefined {
+  const key = highlightCacheKey(code, language);
+  const cached = getCachedHighlight(key);
+  if (cached !== undefined) return cached;
+
+  let highlighted: string;
+  if (hljs.getLanguage(language)) {
+    highlighted = hljs.highlight(code, { language }).value;
+  } else {
+    try {
+      highlighted = hljs.highlightAuto(code).value;
+    } catch (error) {
+      console.warn(`Failed to auto-highlight code block (${language}):`, error);
+      return undefined;
+    }
+  }
+
+  if (code.length <= HIGHLIGHT_CACHE_MAX_CODE_CHARS) {
+    setCachedHighlight(key, highlighted);
+  }
+  return highlighted;
+}
+
 export function CodeBlock(props: {
   code: string;
   language?: string;
@@ -92,16 +141,10 @@ export function CodeBlock(props: {
 
     codeRef.textContent = props.code;
     const lang = props.language?.toLowerCase();
-    if (lang && hljs.getLanguage(lang)) {
-      const result = hljs.highlight(props.code, { language: lang });
-      codeRef.innerHTML = result.value;
-    } else if (lang) {
-      try {
-        const result = hljs.highlightAuto(props.code);
-        codeRef.innerHTML = result.value;
-      } catch (error) {
-        console.warn(`Failed to auto-highlight code block (${lang}):`, error);
-        codeRef.textContent = props.code;
+    if (lang) {
+      const highlighted = highlightCode(props.code, lang);
+      if (highlighted !== undefined) {
+        codeRef.innerHTML = highlighted;
       }
     }
 
