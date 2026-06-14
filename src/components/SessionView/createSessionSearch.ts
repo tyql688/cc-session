@@ -22,6 +22,8 @@ export interface CreateSessionSearchOptions {
   sessionId: Accessor<string>;
   /** Load older message windows until the query can be resolved or exhausted. */
   loadUntilSearchMatch: (term: string) => Promise<number | null>;
+  /** Expand the normal render window until the matched entry is present. */
+  revealEntry: (entryIndex: number) => void;
   /** Register the debounce timer for cleanup by the owning component. */
   registerDebounce: (clear: () => void) => void;
 }
@@ -30,7 +32,6 @@ export interface CreateSessionSearchResult {
   sessionSearch: Accessor<string>;
   setSessionSearch: Setter<string>;
   activeSessionSearch: Accessor<string>;
-  searchFocusEntryIndex: Accessor<number | null>;
   searchBarOpen: Accessor<boolean>;
   setSearchBarOpen: Setter<boolean>;
   searchMatchIdx: Accessor<number>;
@@ -52,9 +53,6 @@ export function createSessionSearch(
 ): CreateSessionSearchResult {
   const [sessionSearch, setSessionSearch] = createSignal("");
   const [activeSessionSearch, setActiveSessionSearch] = createSignal("");
-  const [searchFocusEntryIndex, setSearchFocusEntryIndex] = createSignal<
-    number | null
-  >(null);
   const [searchBarOpen, setSearchBarOpen] = createSignal(false);
   const [searchMatchIdx, setSearchMatchIdx] = createSignal(0);
 
@@ -63,24 +61,28 @@ export function createSessionSearch(
   let searchRequestId = 0;
   opts.registerDebounce(() => clearTimeout(sessionSearchDebounce));
 
-  function focusFirstRenderedSearchMatch() {
+  function focusRenderedSearchMatch(entryKey: string | undefined) {
     requestAnimationFrame(() => {
       requestAnimationFrame(() => {
         const messagesRef = opts.getMessagesRef();
         if (!messagesRef) return;
-        // Activate the FIRST mark in visual order (top->bottom) — the same list
-        // Next/Prev cycles and that searchMatchIdx=0 refers to — so the scroll
-        // target, the active highlight, and the navigation cursor all agree on
-        // the top match. (Previously this used querySelector = DOM order, which
-        // under the column-reverse layout is the opposite end, so the highlight
-        // disagreed with where the view scrolled and where Next started.)
-        const first = getMarksInVisualOrder(messagesRef)[0];
-        if (!first) return;
+        const marks = getMarksInVisualOrder(messagesRef);
+        const targetEntry = entryKey
+          ? Array.from(
+              messagesRef.querySelectorAll<HTMLElement>(".session-entry"),
+            ).find((entry) => entry.dataset.entryKey === entryKey)
+          : undefined;
+        const target =
+          (targetEntry && getMarksInVisualOrder(targetEntry)[0]) ?? marks[0];
+        if (!target) return;
+
         messagesRef
           .querySelector("mark.search-active")
           ?.classList.remove("search-active");
-        first.classList.add("search-active");
-        first.scrollIntoView({ behavior: "smooth", block: "center" });
+        target.classList.add("search-active");
+        const targetIndex = marks.indexOf(target);
+        setSearchMatchIdx(targetIndex >= 0 ? targetIndex : 0);
+        target.scrollIntoView({ behavior: "smooth", block: "center" });
       });
     });
   }
@@ -91,7 +93,6 @@ export function createSessionSearch(
     setSearchMatchIdx(0);
     if (!term) {
       setActiveSessionSearch("");
-      setSearchFocusEntryIndex(null);
       return;
     }
 
@@ -104,8 +105,11 @@ export function createSessionSearch(
     if (requestId !== searchRequestId || term !== sessionSearch().trim()) {
       return;
     }
-    setSearchFocusEntryIndex(matchIdx >= 0 ? matchIdx : null);
-    focusFirstRenderedSearchMatch();
+    const targetEntry = matchIdx >= 0 ? opts.filteredEntries()[matchIdx] : null;
+    if (targetEntry) {
+      opts.revealEntry(matchIdx);
+    }
+    focusRenderedSearchMatch(targetEntry?.key);
   }
 
   // Consume a pending session search set by the global SearchOverlay.
@@ -145,7 +149,6 @@ export function createSessionSearch(
     sessionSearch,
     setSessionSearch,
     activeSessionSearch,
-    searchFocusEntryIndex,
     searchBarOpen,
     setSearchBarOpen,
     searchMatchIdx,

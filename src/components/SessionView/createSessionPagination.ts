@@ -3,10 +3,7 @@ import type { Accessor, Setter } from "solid-js";
 import { getSessionMessagesWindow, isLoadCanceledError } from "../../lib/tauri";
 import type { Message, SessionMeta, TokenTotals } from "../../lib/types";
 import type { ProcessedEntry } from "./hooks";
-import {
-  findNewestMatchingEntryIndex,
-  searchWindowBounds,
-} from "./search-utils";
+import { findNewestMatchingEntryIndex } from "./search-utils";
 
 export const BATCH_SIZE = 80;
 export const LOAD_MORE_THRESHOLD = 1;
@@ -23,10 +20,6 @@ export interface CreateSessionPaginationOptions {
   messages: Accessor<Message[]>;
   /** Lazy ref getter — the messages container may not exist yet. */
   getMessagesRef: () => HTMLDivElement | undefined;
-  /** In-session search focus index (drives the search render window). */
-  searchFocusEntryIndex: Accessor<number | null>;
-  /** Active in-session search term (drives the search render window). */
-  activeSessionSearch: Accessor<string>;
   setMessages: Setter<Message[]>;
   setMeta: Setter<SessionMeta>;
   /** Apply fresh token totals onto a meta object. */
@@ -46,6 +39,7 @@ export interface CreateSessionPaginationResult {
   hasMore: Accessor<boolean>;
   loadOlderEntries: () => void;
   loadUntilSearchMatch: (term: string) => Promise<number | null>;
+  revealEntry: (entryIndex: number) => void;
   handleMessagesScroll: (e: Event) => void;
 }
 
@@ -66,17 +60,8 @@ export function createSessionPagination(
   const [visibleCount, setVisibleCount] = createSignal(BATCH_SIZE);
 
   // Reversed for column-reverse layout: newest first in DOM = visually at bottom.
-  // Search keeps the existing render window and expands only enough to reveal
-  // the first match. Rendering every entry on each input stalls large sessions.
   const visibleEntries = createMemo(() => {
     const all = opts.filteredEntries();
-    const focusedIndex = opts.searchFocusEntryIndex();
-    if (opts.activeSessionSearch().trim() && focusedIndex !== null) {
-      const bounds = searchWindowBounds(all.length, focusedIndex);
-      if (bounds) {
-        return all.slice(bounds.start, bounds.end).reverse();
-      }
-    }
     const count = visibleCount();
     const start = count >= all.length ? 0 : all.length - count;
     return all.slice(start).reverse();
@@ -97,6 +82,15 @@ export function createSessionPagination(
   let loadOlderDebounce: ReturnType<typeof setTimeout> | undefined;
   let olderFetchInFlight = false;
   opts.registerDebounce(() => clearTimeout(loadOlderDebounce));
+
+  function revealEntry(entryIndex: number) {
+    const total = opts.filteredEntries().length;
+    if (entryIndex < 0 || entryIndex >= total) return;
+    const requiredCount = total - entryIndex;
+    if (requiredCount > visibleCount()) {
+      setVisibleCount(requiredCount);
+    }
+  }
 
   // Re-pin the scroll position to where the user was looking right
   // before we grew the visible-entries list. In column-reverse, new
@@ -230,6 +224,7 @@ export function createSessionPagination(
     hasMore,
     loadOlderEntries,
     loadUntilSearchMatch,
+    revealEntry,
     handleMessagesScroll,
   };
 }

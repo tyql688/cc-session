@@ -4,7 +4,6 @@ import type { ProcessedEntry } from "./hooks";
 import {
   findNewestMatchingEntryIndex,
   getMarksInVisualOrder,
-  searchWindowBounds,
 } from "./search-utils";
 
 function message(content: string): Message {
@@ -52,11 +51,6 @@ describe("session search utilities", () => {
     ];
 
     expect(findNewestMatchingEntryIndex(entries, "中文")).toBe(2);
-  });
-
-  it("builds a bounded render window around the nearest match", () => {
-    expect(searchWindowBounds(1000, 950)).toEqual({ start: 860, end: 1000 });
-    expect(searchWindowBounds(1000, 100)).toEqual({ start: 80, end: 220 });
   });
 
   it("returns an empty list when the mark container is missing", () => {

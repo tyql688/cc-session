@@ -1,8 +1,10 @@
-import { fireEvent, render, waitFor } from "@solidjs/testing-library";
+import { cleanup, fireEvent, render, waitFor } from "@solidjs/testing-library";
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { Message, SessionMeta } from "../../lib/types";
 import { SESSION_COMMAND_EVENTS } from "../../lib/session-command-events";
+import { processMessages } from "./hooks";
+import { findNewestMatchingEntryIndex } from "./search-utils";
 
 // Minimal synthetic session payloads. The backend is fully mocked: `invoke`
 // dispatches on the Tauri command name so the session-load effect resolves
@@ -43,6 +45,17 @@ const MESSAGES: Message[] = [
     token_usage: null,
   },
 ];
+
+function messageAt(index: number, content = `message ${index}`): Message {
+  return {
+    role: index % 2 === 0 ? "user" : "assistant",
+    content,
+    timestamp: new Date(Date.UTC(2026, 3, 11, 2, 0, index)).toISOString(),
+    tool_name: null,
+    tool_input: null,
+    token_usage: null,
+  };
+}
 
 let openWindowMessages = MESSAGES;
 let openWindowStart = 0;
@@ -103,6 +116,18 @@ import { SessionView } from "./index";
 beforeAll(() => {
   // happy-dom lacks these browser-only APIs that child components touch.
   Element.prototype.scrollIntoView = () => {};
+  Object.defineProperty(HTMLElement.prototype, "scrollHeight", {
+    configurable: true,
+    get() {
+      return this.classList?.contains("session-messages") ? 1000 : 0;
+    },
+  });
+  Object.defineProperty(HTMLElement.prototype, "clientHeight", {
+    configurable: true,
+    get() {
+      return this.classList?.contains("session-messages") ? 500 : 0;
+    },
+  });
   if (!("ResizeObserver" in globalThis)) {
     (globalThis as { ResizeObserver: unknown }).ResizeObserver = class {
       observe() {}
@@ -113,6 +138,7 @@ beforeAll(() => {
 });
 
 beforeEach(() => {
+  cleanup();
   openWindowMessages = MESSAGES;
   openWindowStart = 0;
   totalMessages = MESSAGES.length;
@@ -199,6 +225,79 @@ describe("SessionView smoke", () => {
         document.querySelector(".msg-row-user mark.search-highlight")
           ?.textContent,
       ).toBe("我发的旧内容"),
+    );
+  });
+
+  it("keeps normal upward scrolling after search reveals an older loaded match", async () => {
+    const manyMessages = Array.from({ length: 120 }, (_, index) =>
+      messageAt(
+        index,
+        index === 0
+          ? "oldest still above"
+          : index === 10
+            ? "target after search"
+            : `message ${index}`,
+      ),
+    );
+    expect(
+      findNewestMatchingEntryIndex(
+        processMessages(manyMessages),
+        "target after search",
+      ),
+    ).toBe(10);
+    openWindowMessages = manyMessages;
+    totalMessages = manyMessages.length;
+
+    const { findByText, queryByText } = render(() => (
+      <SessionView
+        session={{
+          id: META.id,
+          provider: "claude",
+          title: META.title,
+          project_name: "smoke",
+          is_sidechain: false,
+          source_path: META.source_path,
+          project_path: META.project_path,
+        }}
+        active={true}
+        onRefreshTree={() => {}}
+        onCloseTab={() => {}}
+      />
+    ));
+
+    expect(await findByText("message 119")).toBeInTheDocument();
+    expect(queryByText("target after search")).not.toBeInTheDocument();
+    expect(queryByText("oldest still above")).not.toBeInTheDocument();
+
+    document.dispatchEvent(
+      new CustomEvent(SESSION_COMMAND_EVENTS.sessionSearch),
+    );
+    const input = await waitFor(() => {
+      const el = document.querySelector<HTMLInputElement>(
+        ".session-search-input",
+      );
+      expect(el).not.toBeNull();
+      return el!;
+    });
+
+    fireEvent.input(input, { target: { value: "target after search" } });
+
+    await waitFor(() =>
+      expect(
+        document.querySelector(".session-entry mark.search-highlight")
+          ?.textContent,
+      ).toBe("target after search"),
+    );
+    expect(queryByText("oldest still above")).not.toBeInTheDocument();
+
+    const messagesEl =
+      document.querySelector<HTMLDivElement>(".session-messages");
+    expect(messagesEl).not.toBeNull();
+    messagesEl!.scrollTop = -500;
+    fireEvent.scroll(messagesEl!);
+
+    await waitFor(() =>
+      expect(queryByText("oldest still above")).toBeInTheDocument(),
     );
   });
 });

@@ -1,8 +1,6 @@
 import type { ProcessedEntry } from "./hooks";
 
 export const SESSION_SEARCH_DEBOUNCE_MS = 180;
-export const SEARCH_CONTEXT_ENTRIES = 20;
-export const SEARCH_WINDOW_ENTRIES = 140;
 
 export function normalizeSessionSearch(term: string): string {
   return term.trim().toLocaleLowerCase();
@@ -62,19 +60,4 @@ export function getMarksInVisualOrder(
   });
 
   return marks;
-}
-
-export function searchWindowBounds(
-  entriesLength: number,
-  matchIndex: number,
-): { start: number; end: number } | null {
-  if (matchIndex < 0 || matchIndex >= entriesLength) {
-    return null;
-  }
-  const windowSize = Math.min(entriesLength, SEARCH_WINDOW_ENTRIES);
-  let start = Math.max(0, matchIndex - SEARCH_CONTEXT_ENTRIES);
-  if (start + windowSize > entriesLength) {
-    start = Math.max(0, entriesLength - windowSize);
-  }
-  return { start, end: start + windowSize };
 }

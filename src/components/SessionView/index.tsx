@@ -78,8 +78,6 @@ export function SessionView(props: {
   let loadOlderDebounce: (() => void) | undefined;
   let sessionSearchDebounce: (() => void) | undefined;
   let prevSessionId: string | null = null;
-  let loadUntilSearchMatchRef: (term: string) => Promise<number | null> =
-    async () => null;
 
   function withTokenTotals(
     metaData: SessionMeta,
@@ -98,29 +96,6 @@ export function SessionView(props: {
   const { hiddenRoles, roleCounts, filteredEntries, toggleRole } =
     createRoleFilter(processedEntries);
 
-  // In-session search slice: query/active/focus signals + the pending-consume
-  // and debounce effects. The displayed match total comes from the rendered
-  // `<mark>` count inside SessionSearch (same source as Next/Prev navigation).
-  const {
-    sessionSearch,
-    setSessionSearch,
-    activeSessionSearch,
-    searchFocusEntryIndex,
-    searchBarOpen,
-    setSearchBarOpen,
-    searchMatchIdx,
-    setSearchMatchIdx,
-  } = createSessionSearch({
-    filteredEntries,
-    getMessagesRef: () => messagesRef,
-    loading,
-    sessionId: () => props.session.id,
-    loadUntilSearchMatch: (term) => loadUntilSearchMatchRef(term),
-    registerDebounce: (clear) => {
-      sessionSearchDebounce = clear;
-    },
-  });
-
   // Windowed-loading slice: visibleCount/windowStart/totalMessages signals,
   // visibleEntries/hasMore memos, and the scroll-driven older-page fetch.
   const {
@@ -131,15 +106,14 @@ export function SessionView(props: {
     visibleEntries,
     hasMore,
     loadOlderEntries,
-    loadUntilSearchMatch: loadUntilSearchMatchImpl,
+    loadUntilSearchMatch,
+    revealEntry,
     handleMessagesScroll,
   } = createSessionPagination({
     sessionId: () => props.session.id,
     filteredEntries,
     messages,
     getMessagesRef: () => messagesRef,
-    searchFocusEntryIndex,
-    activeSessionSearch,
     setMessages,
     setMeta,
     withTokenTotals,
@@ -147,7 +121,29 @@ export function SessionView(props: {
       loadOlderDebounce = clear;
     },
   });
-  loadUntilSearchMatchRef = loadUntilSearchMatchImpl;
+
+  // In-session search slice: query/active signals + the pending-consume
+  // and debounce effects. Search reveals entries through normal pagination;
+  // it does not replace the session's scroll window.
+  const {
+    sessionSearch,
+    setSessionSearch,
+    activeSessionSearch,
+    searchBarOpen,
+    setSearchBarOpen,
+    searchMatchIdx,
+    setSearchMatchIdx,
+  } = createSessionSearch({
+    filteredEntries,
+    getMessagesRef: () => messagesRef,
+    loading,
+    sessionId: () => props.session.id,
+    loadUntilSearchMatch,
+    revealEntry,
+    registerDebounce: (clear) => {
+      sessionSearchDebounce = clear;
+    },
+  });
 
   createEffect(
     on(
