@@ -102,6 +102,70 @@ pub struct McpToolMetadata {
     pub display: String,
 }
 
+#[derive(Debug, Clone, Copy, Default, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "snake_case")]
+pub enum RawOutputPolicy {
+    #[default]
+    Keep,
+    SuppressTerminal,
+    SuppressPatchWhenDiffPresent,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct ToolPresentation {
+    pub icon: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub input_detail: Option<ToolDetail>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub result_detail: Option<ToolDetail>,
+    #[serde(default)]
+    pub raw_output_policy: RawOutputPolicy,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct ToolDetail {
+    pub lines: Vec<ToolLine>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub diff: Option<ToolInlineDiff>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub patch_diff: Option<Vec<ToolDiffLine>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub persisted_output_path: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct ToolLine {
+    pub label: String,
+    pub value: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct ToolInlineDiff {
+    pub old: String,
+    pub new: String,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "lowercase")]
+pub enum ToolDiffLineType {
+    Context,
+    Add,
+    Remove,
+    Skip,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct ToolDiffLine {
+    #[serde(rename = "type")]
+    pub kind: ToolDiffLineType,
+    pub old_line: Option<u32>,
+    pub new_line: Option<u32>,
+    pub text: String,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct ToolMetadata {
     pub raw_name: String,
@@ -120,6 +184,8 @@ pub struct ToolMetadata {
     pub result_kind: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub structured: Option<Value>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub presentation: Option<ToolPresentation>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

@@ -70,6 +70,21 @@ describe("tools/names", () => {
     expect(toolIcon("StructuredOutput")).toBe("📊");
   });
 
+  it("prefers presentation icons from metadata", () => {
+    expect(
+      toolIcon("raw_tool", {
+        raw_name: "raw_tool",
+        canonical_name: "Unknown",
+        display_name: "Unknown",
+        category: "unknown",
+        presentation: {
+          icon: "★",
+          rawOutputPolicy: "keep",
+        },
+      }),
+    ).toBe("★");
+  });
+
   it("summarizes Kimi-specific tool fallbacks", () => {
     expect(toolIcon("ReadMediaFile")).toBe("🖼️");
     expect(toolIcon("TaskOutput")).toBe("📋");
@@ -246,79 +261,60 @@ describe("tools/input", () => {
 });
 
 describe("tools/result", () => {
-  it("formats bash output as stdout", () => {
+  it("returns Rust presentation result detail", () => {
     const detail = formatToolResultMetadata({
       raw_name: "bash",
       canonical_name: "Bash",
       display_name: "Bash",
       category: "shell",
       status: "success",
-      structured: {
-        output: "hello from pi",
+      presentation: {
+        icon: "💻",
+        rawOutputPolicy: "suppress_terminal",
+        resultDetail: {
+          lines: [
+            { label: "status", value: "success" },
+            { label: "stdout", value: "hello from pi" },
+          ],
+        },
       },
     });
 
-    expect(detail?.lines).toContainEqual({
-      label: "status",
-      value: "success",
-    });
-    expect(detail?.lines).toContainEqual({
-      label: "stdout",
-      value: "hello from pi",
+    expect(detail).toEqual({
+      lines: [
+        { label: "status", value: "success" },
+        { label: "stdout", value: "hello from pi" },
+      ],
     });
   });
 
-  it("formats structured edit results as a diff", () => {
+  it("keeps full diff presentation from metadata", () => {
     const detail = formatToolResultMetadata({
       raw_name: "Edit",
       canonical_name: "Edit",
       display_name: "Edit",
       category: "file",
       status: "success",
-      structured: {
-        file_path: "/tmp/App.tsx",
-        old_string: "old",
-        new_string: "new",
+      presentation: {
+        icon: "✏️",
+        rawOutputPolicy: "suppress_patch_when_diff_present",
+        resultDetail: {
+          lines: [{ label: "file", value: "/tmp/App.tsx" }],
+          patchDiff: Array.from({ length: 220 }, (_, index) => ({
+            type: index % 2 === 0 ? "add" : "remove",
+            oldLine: null,
+            newLine: index + 1,
+            text: `line ${index}`,
+          })),
+        },
       },
     });
 
-    expect(detail?.lines).toContainEqual({
-      label: "file",
-      value: "/tmp/App.tsx",
-    });
-    expect(detail?.diff).toEqual({ old: "old", new: "new" });
+    expect(detail?.patchDiff).toHaveLength(220);
+    expect(detail?.patchDiff?.some((line) => line.type === "skip")).toBe(false);
   });
 
-  it("formats Claude structuredPatch results as patch diff rows", () => {
-    const detail = formatToolResultMetadata({
-      raw_name: "Edit",
-      canonical_name: "Edit",
-      display_name: "Edit",
-      category: "file",
-      status: "success",
-      structured: {
-        filePath: "/tmp/App.tsx",
-        structuredPatch: [
-          {
-            oldStart: 4,
-            oldLines: 2,
-            newStart: 4,
-            newLines: 2,
-            lines: [" const same = true;", "-old", "+new"],
-          },
-        ],
-      },
-    });
-
-    expect(detail?.patchDiff?.map((line) => line.type)).toEqual([
-      "skip",
-      "context",
-      "remove",
-      "add",
-    ]);
-  });
-
-  it("formats task status changes without object stringification", () => {
+  it("does not synthesize legacy structured results without presentation", () => {
     const detail = formatToolResultMetadata({
       raw_name: "TaskUpdate",
       canonical_name: "TaskUpdate",
@@ -331,230 +327,6 @@ describe("tools/result", () => {
       },
     });
 
-    expect(detail?.lines).toContainEqual({
-      label: "statusChange",
-      value: "in_progress → completed",
-    });
-    expect(detail?.lines.some((line) => line.value === "[object Object]")).toBe(
-      false,
-    );
-  });
-
-  it("formats recently observed task result shapes", () => {
-    const taskOutput = formatToolResultMetadata({
-      raw_name: "TaskOutput",
-      canonical_name: "TaskOutput",
-      display_name: "task output",
-      category: "task",
-      status: "success",
-      result_kind: "task_status",
-      structured: {
-        retrieval_status: "completed",
-        task: {
-          task_id: "task-123",
-          status: "completed",
-          task_type: "analysis",
-          description: "scan tools",
-          output: "new tools found",
-        },
-      },
-    });
-
-    expect(taskOutput?.lines).toContainEqual({
-      label: "task",
-      value: "task-123",
-    });
-    expect(taskOutput?.lines).toContainEqual({
-      label: "output",
-      value: "new tools found",
-    });
-
-    const taskList = formatToolResultMetadata({
-      raw_name: "TaskList",
-      canonical_name: "TaskList",
-      display_name: "task list",
-      category: "task",
-      status: "success",
-      result_kind: "task_status",
-      structured: {
-        tasks: [
-          { id: "1", subject: "scan Claude" },
-          { id: "2", subject: "scan Codex" },
-        ],
-      },
-    });
-
-    expect(taskList?.lines).toContainEqual({ label: "tasks", value: "2" });
-    expect(taskList?.lines).toContainEqual({
-      label: "preview",
-      value: "scan Claude\nscan Codex",
-    });
-  });
-
-  it("formats recently observed web and interaction results", () => {
-    const webSearch = formatToolResultMetadata({
-      raw_name: "WebSearch",
-      canonical_name: "WebSearch",
-      display_name: "web search",
-      category: "web",
-      status: "success",
-      result_kind: "web_result",
-      structured: {
-        query: "ccsession tools",
-        searchCount: 1,
-        durationSeconds: 0.25,
-        results: [{ title: "result" }],
-      },
-    });
-
-    expect(webSearch?.lines).toContainEqual({
-      label: "results",
-      value: "1",
-    });
-    expect(webSearch?.lines).toContainEqual({
-      label: "duration",
-      value: "0.25s",
-    });
-
-    const question = formatToolResultMetadata({
-      raw_name: "AskUserQuestion",
-      canonical_name: "AskUserQuestion",
-      display_name: "ask user",
-      category: "interaction",
-      status: "success",
-      result_kind: "interaction_result",
-      structured: {
-        questions: [{ question: "Ship it?" }],
-        answers: { "Ship it?": "yes" },
-      },
-    });
-
-    expect(question?.lines).toContainEqual({
-      label: "questions",
-      value: "1",
-    });
-    expect(question?.lines).toContainEqual({
-      label: "answers",
-      value: "Ship it?: yes",
-    });
-  });
-
-  it("formats workflow and scalar tool outputs", () => {
-    const workflow = formatToolResultMetadata({
-      raw_name: "Workflow",
-      canonical_name: "Workflow",
-      display_name: "workflow",
-      category: "tool",
-      status: "success",
-      result_kind: "tool_output",
-      structured: {
-        workflowName: "audit",
-        status: "completed",
-        summary: "all checks passed",
-        transcriptDir: "/Users/alice/workflows/wf_1",
-      },
-    });
-
-    expect(workflow?.lines).toContainEqual({
-      label: "summary",
-      value: "all checks passed",
-    });
-    expect(workflow?.lines).toContainEqual({
-      label: "transcriptDir",
-      value: "/Users/alice/workflows/wf_1",
-    });
-
-    const sendMessage = formatToolResultMetadata({
-      raw_name: "SendMessage",
-      canonical_name: "SendMessage",
-      display_name: "send message",
-      category: "agent",
-      status: "success",
-      result_kind: "tool_output",
-      structured: {
-        output: "sent",
-      },
-    });
-
-    expect(sendMessage?.lines).toContainEqual({
-      label: "output",
-      value: "sent",
-    });
-  });
-
-  it("formats image generation and dynamic tool metadata", () => {
-    const imageDetail = formatToolResultMetadata({
-      raw_name: "image_generation_call",
-      canonical_name: "ImageGeneration",
-      display_name: "image generation",
-      category: "media",
-      status: "completed",
-      result_kind: "image",
-      structured: {
-        savedPath: "/Users/alice/.codex/generated_images/ig_1.png",
-        revisedPrompt: "make an icon",
-      },
-    });
-
-    expect(toolIcon("ImageGeneration")).toBe("🖼️");
-    expect(imageDetail?.lines).toContainEqual({
-      label: "savedPath",
-      value: "~/.codex/generated_images/ig_1.png",
-    });
-
-    const dynamicDetail = formatToolResultMetadata({
-      raw_name: "load_workspace_dependencies",
-      canonical_name: "DynamicTool",
-      display_name: "load workspace dependencies",
-      category: "tool",
-      status: "success",
-      structured: {
-        tool: "load_workspace_dependencies",
-        success: true,
-        content: "Workspace dependencies are available",
-      },
-    });
-
-    expect(toolIcon("DynamicTool")).toBe("🧩");
-    expect(dynamicDetail?.lines).toContainEqual({
-      label: "tool",
-      value: "load_workspace_dependencies",
-    });
-    expect(dynamicDetail?.lines).toContainEqual({
-      label: "result",
-      value: "Workspace dependencies are available",
-    });
-  });
-
-  it("keeps Kimi tool call display metadata in result details", () => {
-    const detail = formatToolResultMetadata({
-      raw_name: "Bash",
-      canonical_name: "Bash",
-      display_name: "Bash",
-      category: "shell",
-      status: "success",
-      structured: {
-        callDescription: "Run pwd",
-        callDisplay: {
-          kind: "bash",
-          cwd: "/Users/alice/project",
-          command: "pwd",
-        },
-        output: "hello world",
-      },
-    });
-
-    expect(detail?.lines).toContainEqual({
-      label: "description",
-      value: "Run pwd",
-    });
-    expect(detail?.lines).toContainEqual({
-      label: "cwd",
-      value: "/Users/alice/project",
-    });
-    expect(detail?.lines).toContainEqual({
-      label: "stdout",
-      value: "hello world",
-    });
+    expect(detail).toBeNull();
   });
 });

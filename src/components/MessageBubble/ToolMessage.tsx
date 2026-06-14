@@ -272,6 +272,13 @@ export function ToolMessage(props: {
   }
 
   const suppressRawOutput = () => {
+    const policy = props.message.tool_metadata?.presentation?.rawOutputPolicy;
+    if (policy === "suppress_terminal") return !!resultMetadata();
+    if (policy === "suppress_patch_when_diff_present") {
+      return !!resultMetadata() && resultHasDiff();
+    }
+    if (policy === "keep") return false;
+
     const kind = props.message.tool_metadata?.result_kind;
     return (
       !!resultMetadata() &&

@@ -4,23 +4,6 @@ use chrono::DateTime;
 
 pub const NO_PROJECT: &str = "(No Project)";
 
-/// Maximum size (in bytes) of the searchable `content_text` payload stored
-/// per session. The FTS5 trigram index reads from this column; raising the
-/// cap trades DB size (the trigram index is ~3x the indexed text) for recall.
-///
-/// 1 MiB covers full long sessions. A measured 1256-message session produced
-/// ~570 KiB of indexable dialogue+tool+thinking text, so at the old 64 KiB cap
-/// anything past the first ~64 KiB (the bulk of a long conversation) was
-/// silently unsearchable in global search — only in-session search, which has
-/// no cap, could find it. At 1 MiB the whole conversation is indexed with
-/// headroom; only truly enormous sessions still truncate.
-///
-/// Changing this only affects sessions that get reparsed: live/changed files
-/// reindex via the watcher, and existing unchanged files refresh on a manual
-/// "Rebuild Index" (the indexer's (size, mtime) short-circuit skips unchanged
-/// files otherwise). The FTS `AFTER UPDATE` trigger refreshes the index then.
-pub const FTS_CONTENT_LIMIT: usize = 1024 * 1024;
-
 /// Nearest ancestor directory named `subagents`, if any. Identifies a file
 /// as a subagent transcript regardless of how deeply the agent is nested
 /// (plain Task subagents sit directly in `subagents/`, Workflow agents
@@ -198,14 +181,6 @@ fn strip_image_markers(text: &str) -> String {
     result
 }
 
-pub fn truncate_to_bytes(input: &str, max_bytes: usize) -> String {
-    if input.len() > max_bytes {
-        input[..input.floor_char_boundary(max_bytes)].to_string()
-    } else {
-        input.to_string()
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -288,27 +263,6 @@ mod tests {
         let input = "你好世界测试"; // 6 chars, 18 bytes
         let result = truncate_with_ellipsis(input, 4);
         assert_eq!(result, "你好世界...");
-    }
-
-    // --- truncate_to_bytes ---
-
-    #[test]
-    fn truncate_bytes_ascii_within_limit() {
-        assert_eq!(truncate_to_bytes("hello", 10), "hello");
-    }
-
-    #[test]
-    fn truncate_bytes_ascii_beyond_limit() {
-        let result = truncate_to_bytes("hello world", 5);
-        assert_eq!(result, "hello");
-    }
-
-    #[test]
-    fn truncate_bytes_multibyte_at_char_boundary() {
-        let input = "你好世界"; // each char is 3 bytes = 12 bytes total
-        let result = truncate_to_bytes(input, 7);
-        // 7 bytes: floor_char_boundary → 6 bytes = 2 chars
-        assert_eq!(result, "你好");
     }
 
     // --- session_title ---

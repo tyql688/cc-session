@@ -153,6 +153,7 @@ fn test_render_session_html_uses_tool_metadata() {
                     "oldString": "old",
                     "newString": "new"
                 })),
+                presentation: None,
             }),
         ),
         tool_message(
@@ -173,6 +174,7 @@ fn test_render_session_html_uses_tool_metadata() {
                 }),
                 result_kind: Some("mcp".to_string()),
                 structured: Some(json!({"list":[{"type":"text","text":"snapshot"}]})),
+                presentation: None,
             }),
         ),
         tool_message(
@@ -198,6 +200,7 @@ fn test_render_session_html_uses_tool_metadata() {
                         "lines": [" context", "-old", "+new"]
                     }]
                 })),
+                presentation: None,
             }),
         ),
         tool_message_with_content(
@@ -221,6 +224,7 @@ fn test_render_session_html_uses_tool_metadata() {
                         "to": "completed"
                     }
                 })),
+                presentation: None,
             }),
         ),
     ]);

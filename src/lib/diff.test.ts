@@ -30,17 +30,17 @@ describe("buildToolLineDiff", () => {
     ]);
   });
 
-  it("collapses very large diffs", () => {
+  it("keeps very large diffs complete", () => {
     const oldText = Array.from({ length: 220 }, (_, i) => `old ${i}`).join(
       "\n",
     );
     const newText = Array.from({ length: 220 }, (_, i) => `new ${i}`).join(
       "\n",
     );
-    const lines = buildToolLineDiff(oldText, newText, 25);
+    const lines = buildToolLineDiff(oldText, newText);
 
-    expect(lines.length).toBe(25);
-    expect(lines.some((line) => line.type === "skip")).toBe(true);
+    expect(lines.length).toBe(440);
+    expect(lines.some((line) => line.type === "skip")).toBe(false);
   });
 });
 

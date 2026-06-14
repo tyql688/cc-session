@@ -63,14 +63,11 @@ pub fn parse_session_file(path: &Path) -> Option<ParsedSession> {
         cache_write_tokens,
     };
 
-    let content_text = crate::provider_utils::truncate_to_bytes(
-        &messages
-            .iter()
-            .map(|m| m.content.as_str())
-            .collect::<Vec<_>>()
-            .join("\n"),
-        crate::provider_utils::FTS_CONTENT_LIMIT,
-    );
+    let content_text = messages
+        .iter()
+        .map(|m| m.content.as_str())
+        .collect::<Vec<_>>()
+        .join("\n");
     Some(ParsedSession {
         meta,
         messages,

@@ -93,6 +93,67 @@ describe("ToolMessage", () => {
     );
   });
 
+  it("uses presentation raw output policy to suppress terminal output", () => {
+    const { container } = render(() => (
+      <ToolMessage
+        message={{
+          ...bashOutputMessage,
+          tool_metadata: {
+            raw_name: "Bash",
+            canonical_name: "Bash",
+            display_name: "Bash",
+            category: "shell",
+            presentation: {
+              icon: "💻",
+              rawOutputPolicy: "suppress_terminal",
+              resultDetail: {
+                lines: [{ label: "stdout", value: "line one\nline two" }],
+              },
+            },
+          },
+        }}
+      />
+    ));
+
+    const header = container.querySelector(".msg-tool-header");
+    if (!header) throw new Error("expected tool header");
+    fireEvent.click(header);
+
+    expect(container.querySelector(".msg-tool-result-detail")).not.toBeNull();
+    expect(container.querySelector(".msg-tool-output")).toBeNull();
+  });
+
+  it("does not suppress ordinary output when presentation policy is keep", () => {
+    const { container } = render(() => (
+      <ToolMessage
+        message={{
+          ...bashOutputMessage,
+          tool_metadata: {
+            raw_name: "CustomTool",
+            canonical_name: "CustomTool",
+            display_name: "CustomTool",
+            category: "unknown",
+            presentation: {
+              icon: "⚙",
+              rawOutputPolicy: "keep",
+              resultDetail: {
+                lines: [{ label: "status", value: "success" }],
+              },
+            },
+          },
+        }}
+      />
+    ));
+
+    const header = container.querySelector(".msg-tool-header");
+    if (!header) throw new Error("expected tool header");
+    fireEvent.click(header);
+
+    expect(container.querySelector(".msg-tool-output pre")?.textContent).toBe(
+      "line one\nline two",
+    );
+  });
+
   it("includes the source parent session id when opening an antigravity child", () => {
     let detail:
       | {

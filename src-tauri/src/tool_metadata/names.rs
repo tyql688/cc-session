@@ -1,214 +1,19 @@
 use crate::models::{McpToolMetadata, Provider};
 
 pub fn parse_mcp_tool_name(name: &str) -> Option<McpToolMetadata> {
-    let rest = name.strip_prefix("mcp__")?;
-    let (server, tool) = rest.split_once("__")?;
-    Some(McpToolMetadata {
-        server: server.to_string(),
-        tool: tool.to_string(),
-        display: tool.replace('_', " "),
-    })
+    super::registry::parse_mcp_tool_name(name)
 }
 
 pub fn canonical_tool_name(provider: Provider, name: &str) -> String {
-    if provider == Provider::Antigravity && (name.contains("Agent") || name.contains("agent")) {
-        return "Agent".to_string();
-    }
-
-    match name {
-        "Shell" | "shell" | "bash" | "exec_command" | "shell_command" | "run_shell_command"
-        | "run_in_terminal" | "write_stdin" | "Monitor" | "LocalShellCall" | "run_command"
-        | "AwaitShell" => "Bash",
-        "Read" | "read" | "ReadFile" | "read_file" | "view" | "view_file" => "Read",
-        "read_mcp_resource" => "ListMcpResourcesTool",
-        "Write" | "write" | "WriteFile" | "write_file" | "create" | "write_to_file" => "Write",
-        "Edit"
-        | "edit"
-        | "edit_file"
-        | "replace"
-        | "StrReplace"
-        | "str_replace"
-        | "StrReplaceFile"
-        | "ApplyPatch"
-        | "Apply_patch"
-        | "MultiEdit"
-        | "str_replace_editor"
-        | "apply_patch"
-        | "EditNotebook"
-        | "replace_file_content"
-        | "multi_replace_file_content" => "Edit",
-        "Delete" | "delete" => "Delete",
-        "Grep"
-        | "grep"
-        | "rg"
-        | "Search"
-        | "SemanticSearch"
-        | "grep_search"
-        | "search_file_content" => "Grep",
-        "Glob" | "glob" | "file_search" | "ReadFolder" | "list_directory" | "list" | "list_dir"
-        | "ls" | "find" | "find_by_name" => "Glob",
-        "Task" | "task" | "Subagent" | "subagent" | "Agent" | "AgentSwarm" | "agent"
-        | "read_agent" | "spawn_agent" | "wait_agent" | "send_input" | "close_agent"
-        | "invoke_subagent" | "define_subagent" => "Agent",
-        "send_message" | "SendMessage" => "SendMessage",
-        "followup_task" => "FollowupTask",
-        "list_agents" => "ListAgents",
-        "TaskCreate" => "TaskCreate",
-        "TaskUpdate" => "TaskUpdate",
-        "TaskList" => "TaskList",
-        "TaskOutput" => "TaskOutput",
-        "TaskStop" => "TaskStop",
-        "Workflow" => "Workflow",
-        "StructuredOutput" => "StructuredOutput",
-        "update_plan" | "TodoWrite" | "TodoList" | "todo" | "todowrite" | "Enter Plan Mode"
-        | "EnterPlanMode" | "ExitPlanMode" | "enter_plan_mode" | "exit_plan_mode"
-        | "manage_task" => "Plan",
-        "request_user_input" | "ask_user" | "question" | "AskUserQuestion" => "AskUserQuestion",
-        "request_permissions" | "ask_permission" | "list_permissions" => "RequestPermissions",
-        "ScheduleWakeup" | "schedule" => "ScheduleWakeup",
-        "ReadLints" => "Lint",
-        "web_fetch" | "webfetch" | "WebFetch" | "FetchURL" | "read_url_content" => "WebFetch",
-        "web_search" | "web_search_call" | "websearch" | "WebSearch" | "search_web" => "WebSearch",
-        "image_generation_call" | "image_generation_end" => "ImageGeneration",
-        "dynamic_tool_call"
-        | "dynamic_tool_call_request"
-        | "dynamic_tool_call_response"
-        | "load_workspace_dependencies"
-        | "install_workspace_dependencies" => "DynamicTool",
-        "js" | "js_add_node_module_dir" | "js_reset" => "JavaScript",
-        "view_image" => "ReadMediaFile",
-        "get_app_state"
-        | "list_apps"
-        | "click"
-        | "press_key"
-        | "scroll"
-        | "drag"
-        | "type_text"
-        | "set_value"
-        | "select_text"
-        | "perform_secondary_action" => "ComputerUse",
-        "create_goal" => "CreateGoal",
-        "get_goal" => "GetGoal",
-        "set_goal_budget" => "SetGoalBudget",
-        "update_goal" => "UpdateGoal",
-        "codesearch" | "ToolSearch" => "ToolSearch",
-        "list_mcp_resources" | "list_mcp_resource_templates" => "ListMcpResourcesTool",
-        "skill" | "Skill" => "Skill",
-        "sql" | "SQL" => "SQL",
-        other => other,
-    }
-    .to_string()
+    super::registry::canonical_name(provider, name)
 }
 
 pub(super) fn tool_category(canonical_name: &str, raw_name: &str) -> String {
-    if raw_name.starts_with("mcp__") || raw_name.starts_with("chat-") {
-        return "mcp".to_string();
-    }
-
-    match canonical_name {
-        "Bash" => "shell",
-        "Read" | "Write" | "Edit" | "Delete" => "file",
-        "Grep" | "Glob" | "ToolSearch" | "ListMcpResourcesTool" => "search",
-        "Agent" | "SendMessage" | "ListAgents" => "agent",
-        "TaskCreate" | "TaskUpdate" | "TaskList" | "TaskOutput" | "TaskStop" => "task",
-        "FollowupTask" => "task",
-        "WebSearch" | "WebFetch" => "web",
-        "ImageGeneration" | "ReadMediaFile" => "media",
-        "DynamicTool" | "JavaScript" | "ComputerUse" | "Workflow" | "StructuredOutput" => "tool",
-        "Skill" => "skill",
-        "CronCreate" | "CronList" | "CronDelete" | "ScheduleWakeup" => "cron",
-        "CreateGoal" | "GetGoal" | "SetGoalBudget" | "UpdateGoal" => "goal",
-        "Plan" => "plan",
-        "AskUserQuestion" | "RequestPermissions" => "interaction",
-        "SQL" => "database",
-        _ => "unknown",
-    }
-    .to_string()
+    super::registry::category_for(canonical_name, raw_name)
 }
 
 pub(super) fn display_tool_name(raw_name: &str, canonical_name: &str) -> String {
-    if let Some(mcp) = parse_mcp_tool_name(raw_name) {
-        return mcp.display;
-    }
-    match raw_name {
-        "write_stdin" => "write stdin".to_string(),
-        "Monitor" => "monitor".to_string(),
-        "ScheduleWakeup" => "schedule wakeup".to_string(),
-        "SendMessage" => "send message".to_string(),
-        "update_plan" => "update plan".to_string(),
-        "request_user_input" => "request user input".to_string(),
-        "request_permissions" => "request permissions".to_string(),
-        "apply_patch" => "apply patch".to_string(),
-        "AgentSwarm" => "agent swarm".to_string(),
-        "spawn_agent" => "spawn agent".to_string(),
-        "wait_agent" => "wait agent".to_string(),
-        "send_input" => "send input".to_string(),
-        "close_agent" => "close agent".to_string(),
-        "send_message" => "send message".to_string(),
-        "followup_task" => "followup task".to_string(),
-        "list_agents" => "list agents".to_string(),
-        "list_mcp_resources" => "list mcp resources".to_string(),
-        "list_mcp_resource_templates" => "list mcp resource templates".to_string(),
-        "read_mcp_resource" => "read mcp resource".to_string(),
-        "todowrite" => "todo write".to_string(),
-        "TodoList" => "todo list".to_string(),
-        "question" => "question".to_string(),
-        "TaskCreate" => "task create".to_string(),
-        "TaskUpdate" => "task update".to_string(),
-        "TaskList" => "task list".to_string(),
-        "TaskOutput" => "task output".to_string(),
-        "TaskStop" => "task stop".to_string(),
-        "Workflow" => "workflow".to_string(),
-        "StructuredOutput" => "structured output".to_string(),
-        "ToolSearch" => "tool search".to_string(),
-        "CronCreate" => "cron create".to_string(),
-        "CronList" => "cron list".to_string(),
-        "CronDelete" => "cron delete".to_string(),
-        "ReadMediaFile" => "read media file".to_string(),
-        "view_image" => "view image".to_string(),
-        "FetchURL" => "fetch URL".to_string(),
-        "WebFetch" => "web fetch".to_string(),
-        "WebSearch" => "web search".to_string(),
-        "AskUserQuestion" => "ask user".to_string(),
-        "EnterPlanMode" => "enter plan mode".to_string(),
-        "ExitPlanMode" => "exit plan mode".to_string(),
-        "CreateGoal" => "create goal".to_string(),
-        "GetGoal" => "get goal".to_string(),
-        "SetGoalBudget" => "set goal budget".to_string(),
-        "UpdateGoal" => "update goal".to_string(),
-        "webfetch" => "web fetch".to_string(),
-        "websearch" => "web search".to_string(),
-        "image_generation_call" | "image_generation_end" => "image generation".to_string(),
-        "dynamic_tool_call" | "dynamic_tool_call_request" | "dynamic_tool_call_response" => {
-            "dynamic tool".to_string()
-        }
-        "load_workspace_dependencies" => "load workspace dependencies".to_string(),
-        "install_workspace_dependencies" => "install workspace dependencies".to_string(),
-        "js" => "node repl".to_string(),
-        "js_add_node_module_dir" => "add node module dir".to_string(),
-        "js_reset" => "reset node repl".to_string(),
-        "get_app_state" => "get app state".to_string(),
-        "list_apps" => "list apps".to_string(),
-        "click" => "click".to_string(),
-        "scroll" => "scroll".to_string(),
-        "drag" => "drag".to_string(),
-        "press_key" => "press key".to_string(),
-        "type_text" => "type text".to_string(),
-        "set_value" => "set value".to_string(),
-        "select_text" => "select text".to_string(),
-        "perform_secondary_action" => "perform secondary action".to_string(),
-        "create_goal" => "create goal".to_string(),
-        "get_goal" => "get goal".to_string(),
-        "set_goal_budget" => "set goal budget".to_string(),
-        "update_goal" => "update goal".to_string(),
-        "codesearch" => "code search".to_string(),
-        "skill" => "skill".to_string(),
-        "find" => "find".to_string(),
-        "ls" => "ls".to_string(),
-        "list" => "list".to_string(),
-        "find_by_name" => "find by name".to_string(),
-        _ => canonical_name.to_string(),
-    }
+    super::registry::display_name(raw_name, canonical_name)
 }
 
 #[cfg(test)]
@@ -238,5 +43,26 @@ mod tests {
         assert_eq!(canonical_tool_name(Provider::Pi, "ls"), "Glob");
         assert_eq!(super::display_tool_name("find", "Glob"), "find");
         assert_eq!(super::display_tool_name("ls", "Glob"), "ls");
+    }
+
+    #[test]
+    fn maps_recent_provider_tool_aliases_through_registry() {
+        assert_eq!(
+            canonical_tool_name(Provider::Claude, "TaskOutput"),
+            "TaskOutput"
+        );
+        assert_eq!(
+            canonical_tool_name(Provider::Kimi, "ReadMediaFile"),
+            "ReadMediaFile"
+        );
+        assert_eq!(canonical_tool_name(Provider::Codex, "js"), "JavaScript");
+        assert_eq!(
+            canonical_tool_name(Provider::CcMirror, "load_workspace_dependencies"),
+            "DynamicTool"
+        );
+        assert_eq!(
+            canonical_tool_name(Provider::Antigravity, "invoke_subagent"),
+            "Agent"
+        );
     }
 }

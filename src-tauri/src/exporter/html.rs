@@ -350,8 +350,11 @@ pub fn render(detail: &SessionDetail) -> String {
                 let result_has_diff =
                     result_detail.contains("tool-line-diff") || result_detail.contains("tool-diff");
                 if has_input {
-                    let input_detail =
-                        render_tool_detail(name, msg.tool_input.as_deref().unwrap_or(""));
+                    let input_detail = super::tool_html::render_tool_input_detail_for_message(
+                        metadata,
+                        name,
+                        msg.tool_input.as_deref().unwrap_or(""),
+                    );
                     if !result_has_diff {
                         detail_html.push_str(&input_detail);
                     }

@@ -10,8 +10,7 @@ use serde_json::Value;
 use crate::models::{Message, Provider, SessionMeta};
 use crate::provider::{ParsedSession, UsageEvent};
 use crate::provider_utils::{
-    is_system_content, parse_rfc3339_timestamp, project_name_from_path, session_title,
-    truncate_to_bytes, FTS_CONTENT_LIMIT, NO_PROJECT,
+    is_system_content, parse_rfc3339_timestamp, project_name_from_path, session_title, NO_PROJECT,
 };
 
 use super::tools::*;
@@ -419,8 +418,7 @@ impl CodexProvider {
 
         let updated_at = parse_rfc3339_timestamp(last_timestamp.as_deref());
 
-        let full_content = content_parts.join("\n");
-        let content_text = truncate_to_bytes(&full_content, FTS_CONTENT_LIMIT);
+        let content_text = content_parts.join("\n");
 
         let meta = SessionMeta {
             id: session_id,

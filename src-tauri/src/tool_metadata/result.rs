@@ -1,45 +1,21 @@
 use serde_json::{json, Map, Value};
 
-use super::names::canonical_tool_name;
-use super::summary::compact_string;
 use super::ToolResultFacts;
-use crate::models::Provider;
 use crate::provider_utils::shorten_home_path;
 
-pub(super) fn compact_json_value(value: &Value, depth: usize) -> Value {
-    if depth > 3 {
-        return match value {
-            Value::String(s) => Value::String(compact_string(s, 4_000)),
-            Value::Number(_) | Value::Bool(_) | Value::Null => value.clone(),
-            _ => json!("<nested>"),
-        };
-    }
+pub(super) fn normalize_json_value(value: &Value) -> Value {
     match value {
-        Value::String(s) => Value::String(compact_string(s, 4_000)),
-        Value::Array(arr) => Value::Array(
-            arr.iter()
-                .take(25)
-                .map(|item| compact_json_value(item, depth + 1))
-                .collect(),
-        ),
+        Value::Array(arr) => Value::Array(arr.iter().map(normalize_json_value).collect()),
         Value::Object(obj) => {
             let mut next = Map::new();
             for (key, value) in obj {
-                if should_omit_large_field(key, value) {
-                    next.insert(key.clone(), json!("<omitted>"));
-                    continue;
-                }
-                if key == "structuredPatch" {
-                    next.insert(key.clone(), compact_structured_patch(value));
-                    continue;
-                }
                 if key == "filePath" || key == "file_path" || key == "path" {
                     if let Some(path) = value.as_str() {
                         next.insert(key.clone(), json!(shorten_home_path(path)));
                         continue;
                     }
                 }
-                next.insert(key.clone(), compact_json_value(value, depth + 1));
+                next.insert(key.clone(), normalize_json_value(value));
             }
             Value::Object(next)
         }
@@ -47,65 +23,16 @@ pub(super) fn compact_json_value(value: &Value, depth: usize) -> Value {
     }
 }
 
-fn should_omit_large_field(key: &str, value: &Value) -> bool {
-    match key {
-        "originalFile" | "base64" | "b64_json" => true,
-        "data" | "image" => value.as_str().is_some_and(is_inline_base64_image),
-        _ => false,
-    }
-}
-
-fn is_inline_base64_image(value: &str) -> bool {
-    let value = value.trim_start();
-    value.starts_with("data:image/") && value.contains(";base64,")
-}
-
-fn compact_structured_patch(value: &Value) -> Value {
-    let Some(hunks) = value.as_array() else {
-        return compact_json_value(value, 0);
-    };
-
-    Value::Array(
-        hunks
-            .iter()
-            .take(25)
-            .map(|hunk| {
-                let Some(obj) = hunk.as_object() else {
-                    return compact_json_value(hunk, 0);
-                };
-                let mut next = Map::new();
-                for (key, value) in obj {
-                    if key == "lines" {
-                        let lines = value
-                            .as_array()
-                            .map(|lines| {
-                                lines
-                                    .iter()
-                                    .take(250)
-                                    .map(|line| {
-                                        line.as_str()
-                                            .map(|line| json!(compact_string(line, 4_000)))
-                                            .unwrap_or_else(|| compact_json_value(line, 0))
-                                    })
-                                    .collect::<Vec<_>>()
-                            })
-                            .unwrap_or_default();
-                        next.insert(key.clone(), Value::Array(lines));
-                    } else {
-                        next.insert(key.clone(), compact_json_value(value, 0));
-                    }
-                }
-                Value::Object(next)
-            })
-            .collect(),
-    )
-}
-
-pub(super) fn result_kind_for_tool(raw_name: &str, result: Option<&Value>) -> Option<String> {
-    if raw_name.starts_with("mcp__") {
+pub(super) fn result_kind_for_tool(
+    canonical_name: &str,
+    category: &str,
+    raw_name: &str,
+    result: Option<&Value>,
+) -> Option<String> {
+    if category == "mcp" || raw_name.starts_with("mcp__") {
         return Some("mcp".to_string());
     }
-    if canonical_tool_name(Provider::Codex, raw_name) == "ImageGeneration" {
+    if canonical_name == "ImageGeneration" {
         return Some("image".to_string());
     }
     let result = result?;
@@ -113,7 +40,6 @@ pub(super) fn result_kind_for_tool(raw_name: &str, result: Option<&Value>) -> Op
         return Some("persisted_output".to_string());
     }
 
-    let canonical_name = canonical_tool_name(Provider::Claude, raw_name);
     if has_patch_result(result)
         || (result.get("oldString").is_some() && result.get("newString").is_some())
         || (result.get("old_string").is_some() && result.get("new_string").is_some())
@@ -142,29 +68,26 @@ pub(super) fn result_kind_for_tool(raw_name: &str, result: Option<&Value>) -> Op
     if canonical_name == "ToolSearch" {
         return Some("search_result".to_string());
     }
-    if matches!(canonical_name.as_str(), "WebSearch" | "WebFetch") {
+    if matches!(canonical_name, "WebSearch" | "WebFetch") {
         return Some("web_result".to_string());
     }
-    if matches!(
-        canonical_name.as_str(),
-        "AskUserQuestion" | "RequestPermissions"
-    ) {
+    if matches!(canonical_name, "AskUserQuestion" | "RequestPermissions") {
         return Some("interaction_result".to_string());
     }
     if matches!(
-        canonical_name.as_str(),
+        canonical_name,
         "ScheduleWakeup" | "CronCreate" | "CronList" | "CronDelete"
     ) {
         return Some("schedule_result".to_string());
     }
     if matches!(
-        canonical_name.as_str(),
+        canonical_name,
         "CreateGoal" | "GetGoal" | "SetGoalBudget" | "UpdateGoal"
     ) {
         return Some("goal_status".to_string());
     }
     if matches!(
-        canonical_name.as_str(),
+        canonical_name,
         "DynamicTool"
             | "JavaScript"
             | "ComputerUse"

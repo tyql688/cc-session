@@ -65,6 +65,39 @@ export interface McpToolMetadata {
   display: string;
 }
 
+export type RawOutputPolicy =
+  | "keep"
+  | "suppress_terminal"
+  | "suppress_patch_when_diff_present";
+
+export type ToolDiffLineType = "context" | "add" | "remove" | "skip";
+
+export interface ToolDiffLine {
+  type: ToolDiffLineType;
+  oldLine: number | null;
+  newLine: number | null;
+  text: string;
+}
+
+export interface ToolLine {
+  label: string;
+  value: string;
+}
+
+export interface ToolDetail {
+  lines: ToolLine[];
+  diff?: { old: string; new: string };
+  patchDiff?: ToolDiffLine[];
+  persistedOutputPath?: string;
+}
+
+export interface ToolPresentation {
+  icon: string;
+  inputDetail?: ToolDetail;
+  resultDetail?: ToolDetail;
+  rawOutputPolicy: RawOutputPolicy;
+}
+
 export interface ToolMetadata {
   raw_name: string;
   canonical_name: string;
@@ -76,6 +109,7 @@ export interface ToolMetadata {
   mcp?: McpToolMetadata;
   result_kind?: string;
   structured?: unknown;
+  presentation?: ToolPresentation;
 }
 
 export interface Message {

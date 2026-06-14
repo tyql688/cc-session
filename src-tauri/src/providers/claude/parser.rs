@@ -11,7 +11,6 @@ use crate::models::{Message, Provider};
 use crate::provider::ParsedSession;
 use crate::provider_utils::{
     parse_rfc3339_timestamp, project_name_from_path, session_title, subagents_ancestor,
-    truncate_to_bytes, FTS_CONTENT_LIMIT,
 };
 
 mod content;
@@ -460,8 +459,7 @@ pub fn parse_session_file(path: &PathBuf) -> Option<ParsedSession> {
 
     let updated_at = parse_rfc3339_timestamp(last_timestamp.as_deref());
 
-    let full_content = state.content_parts.join("\n");
-    let content_text = truncate_to_bytes(&full_content, FTS_CONTENT_LIMIT);
+    let content_text = state.content_parts.join("\n");
 
     let title = custom_title
         .or(ai_title)
@@ -787,7 +785,7 @@ mod tests {
                 .as_ref()
                 .and_then(|value| value.get("originalFile"))
                 .and_then(|value| value.as_str()),
-            Some("<omitted>")
+            Some("very large")
         );
     }
 

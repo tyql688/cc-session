@@ -23,9 +23,7 @@ use serde_json::Value;
 
 use crate::models::{Message, MessageRole, Provider, SessionMeta};
 use crate::provider::ParsedSession;
-use crate::provider_utils::{
-    project_name_from_path, session_title, truncate_to_bytes, FTS_CONTENT_LIMIT,
-};
+use crate::provider_utils::{project_name_from_path, session_title};
 use crate::services::tail_reader::open_tail_reader;
 use crate::tool_metadata::{build_tool_metadata, ToolCallFacts};
 
@@ -471,7 +469,7 @@ fn build_fts_content(messages: &[Message]) -> String {
         })
         .map(|m| m.content.clone())
         .collect();
-    truncate_to_bytes(&parts.join("\n"), FTS_CONTENT_LIMIT)
+    parts.join("\n")
 }
 
 /// Subagent transcripts under `<sessionId>/subagents/` produce one

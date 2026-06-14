@@ -3,7 +3,8 @@ use std::collections::BTreeMap;
 use serde_json::{json, Map, Value};
 
 use super::names::{canonical_tool_name, display_tool_name, parse_mcp_tool_name, tool_category};
-use super::result::{compact_json_value, normalized_status, result_kind_for_tool};
+use super::presentation::refresh_tool_presentation;
+use super::result::{normalize_json_value, normalized_status, result_kind_for_tool};
 use super::summary::input_summary;
 use crate::models::{Provider, ToolMetadata};
 
@@ -34,7 +35,7 @@ pub fn build_tool_metadata(call: ToolCallFacts<'_>) -> ToolMetadata {
         ids.insert("assistant_id".to_string(), id.to_string());
     }
 
-    ToolMetadata {
+    let mut metadata = ToolMetadata {
         raw_name: call.raw_name.to_string(),
         canonical_name: canonical_name.clone(),
         display_name,
@@ -45,7 +46,10 @@ pub fn build_tool_metadata(call: ToolCallFacts<'_>) -> ToolMetadata {
         mcp: parse_mcp_tool_name(call.raw_name),
         result_kind: None,
         structured: None,
-    }
+        presentation: None,
+    };
+    refresh_tool_presentation(&mut metadata, call.input);
+    metadata
 }
 
 pub fn attach_call_metadata<I>(
@@ -81,24 +85,30 @@ pub fn attach_call_metadata<I>(
         }
         if let Some(display) = display {
             obj.entry("callDisplay".to_string())
-                .or_insert_with(|| compact_json_value(display, 0));
+                .or_insert_with(|| normalize_json_value(display));
         }
     }
     metadata.structured = Some(structured);
+    refresh_tool_presentation(metadata, None);
 }
 
 pub fn enrich_tool_metadata(metadata: &mut ToolMetadata, result: ToolResultFacts<'_>) {
     metadata.status = normalized_status(ToolResultFacts { ..result });
-    metadata.result_kind = result_kind_for_tool(&metadata.raw_name, result.raw_result)
-        .or_else(|| metadata.result_kind.clone());
+    metadata.result_kind = result_kind_for_tool(
+        &metadata.canonical_name,
+        &metadata.category,
+        &metadata.raw_name,
+        result.raw_result,
+    )
+    .or_else(|| metadata.result_kind.clone());
     let existing_structured = metadata.structured.take();
     let result_structured = result.raw_result.map(|value| {
-        let mut compact = compact_json_value(value, 0);
-        if !compact.is_object() {
-            compact = json!({ "output": compact });
+        let mut normalized = normalize_json_value(value);
+        if !normalized.is_object() {
+            normalized = json!({ "output": normalized });
         }
-        normalize_structured_result(&mut compact);
-        compact
+        normalize_structured_result(&mut normalized);
+        normalized
     });
     metadata.structured = merge_structured(existing_structured, result_structured);
     if let Some(path) = result.artifact_path {
@@ -117,6 +127,7 @@ pub fn enrich_tool_metadata(metadata: &mut ToolMetadata, result: ToolResultFacts
         }
         metadata.structured = Some(structured);
     }
+    refresh_tool_presentation(metadata, None);
 }
 
 fn merge_structured(existing: Option<Value>, result: Option<Value>) -> Option<Value> {
@@ -482,7 +493,7 @@ mod tests {
     }
 
     #[test]
-    fn summarizes_new_tool_aliases_and_omits_large_media_fields() {
+    fn summarizes_new_tool_aliases_and_preserves_media_fields() {
         let wakeup = build_tool_metadata(ToolCallFacts {
             provider: Provider::Claude,
             raw_name: "ScheduleWakeup",
@@ -542,7 +553,7 @@ mod tests {
                 .as_ref()
                 .and_then(|value| value.get("base64"))
                 .and_then(|value| value.as_str()),
-            Some("<omitted>")
+            Some("long image payload")
         );
         assert_eq!(
             dynamic
@@ -559,7 +570,7 @@ mod tests {
                 .as_ref()
                 .and_then(|value| value.get("image"))
                 .and_then(|value| value.as_str()),
-            Some("<omitted>")
+            Some("data:image/png;base64,long image payload")
         );
     }
 
@@ -781,7 +792,7 @@ mod tests {
     }
 
     #[test]
-    fn compacts_large_structured_results() {
+    fn preserves_large_structured_results() {
         let mut metadata = build_tool_metadata(ToolCallFacts {
             provider: Provider::Claude,
             raw_name: "Edit",
@@ -823,7 +834,7 @@ mod tests {
                 .as_ref()
                 .and_then(|value| value.get("originalFile"))
                 .and_then(|value| value.as_str()),
-            Some("<omitted>")
+            Some("very large")
         );
         assert_eq!(
             metadata

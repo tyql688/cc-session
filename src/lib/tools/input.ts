@@ -59,6 +59,9 @@ function buildPatchFromAntigravityChunks(
 
 /** Format tool input for expanded view — structured, not raw JSON. */
 export function formatToolInput(message: Message): ToolDetail | null {
+  const presentationDetail = message.tool_metadata?.presentation?.inputDetail;
+  if (presentationDetail) return presentationDetail;
+
   const name = message.tool_name || "";
   const inputJson = message.tool_input;
   if (!inputJson) return null;
@@ -208,8 +211,7 @@ export function formatToolInput(message: Message): ToolDetail | null {
         return {
           lines: Object.entries(obj)
             .filter(([, v]) => typeof v === "string" || typeof v === "number")
-            .map(([k, v]) => toolLine(k, v))
-            .slice(0, 8),
+            .map(([k, v]) => toolLine(k, v)),
         };
     }
   } catch (error) {

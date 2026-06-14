@@ -11,7 +11,7 @@ use crate::provider::{
     ChildPlan, DeletionPlan, FileAction, LoadedSession, ParsedSession, ProviderError,
     SessionProvider,
 };
-use crate::provider_utils::{session_title, truncate_to_bytes, FTS_CONTENT_LIMIT};
+use crate::provider_utils::session_title;
 
 pub struct Descriptor;
 impl crate::provider::ProviderDescriptor for Descriptor {
@@ -373,7 +373,7 @@ impl SessionProvider for OpenCodeProvider {
                                 ..Message::assistant(String::new())
                             })
                             .collect(),
-                        content_text: truncate_to_bytes(&content_text, FTS_CONTENT_LIMIT),
+                        content_text,
                         parse_warning_count: 0,
                         child_session_ids: Vec::new(),
                         usage_events: Vec::new(),

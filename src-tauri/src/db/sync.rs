@@ -4,7 +4,6 @@ use rusqlite::{params, Connection};
 
 use crate::models::{Message, MessageRole, Provider, SessionMeta};
 use crate::provider::ParsedSession;
-use crate::provider_utils::{truncate_to_bytes, FTS_CONTENT_LIMIT};
 
 use super::Database;
 
@@ -26,7 +25,7 @@ fn indexable_content_text(messages: &[Message], fallback: &str) -> String {
         return fallback.to_string();
     }
 
-    truncate_to_bytes(&parts.join("\n"), FTS_CONTENT_LIMIT)
+    parts.join("\n")
 }
 
 pub use crate::provider::TokenStatRow;
@@ -1096,13 +1095,11 @@ mod tests {
     }
 
     #[test]
-    fn indexable_content_retains_dialogue_past_the_old_64kib_cap() {
+    fn indexable_content_retains_complete_dialogue() {
         use crate::models::{Message, MessageRole};
 
-        // ~100 KiB of dialogue with a unique marker near the end — past the old
-        // 64 KiB cap but well within the 1 MiB limit. Before the cap was raised
-        // this marker (like a phrase deep in a long real session) was truncated
-        // out of the index, so global search could not find it.
+        // Long dialogue with a unique marker near the end. Global search should
+        // index the full message text, not a capped prefix.
         let filler = "搜索内容 ".repeat(8000);
         let marker = "悬停飞出标记";
         let messages = vec![Message {
@@ -1126,6 +1123,6 @@ mod tests {
             text.contains(marker),
             "a marker past the old cap must be indexable for global search"
         );
-        assert!(text.len() <= super::FTS_CONTENT_LIMIT);
+        assert_eq!(text.len(), filler.len() + marker.len());
     }
 }

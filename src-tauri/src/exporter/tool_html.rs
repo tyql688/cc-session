@@ -1,7 +1,7 @@
 use serde_json::Value;
 use similar::{ChangeTag, TextDiff};
 
-use crate::models::ToolMetadata;
+use crate::models::{RawOutputPolicy, ToolDetail, ToolDiffLine, ToolDiffLineType, ToolMetadata};
 use crate::provider_utils::shorten_home_path;
 
 fn html_escape(s: &str) -> String {
@@ -103,6 +103,62 @@ fn render_diff_line(kind: &str, text: &str) -> String {
     )
 }
 
+fn is_pre_label(label: &str, value: &str) -> bool {
+    value.contains('\n')
+        || matches!(
+            label,
+            "$" | "command"
+                | "content"
+                | "output"
+                | "stdout"
+                | "stderr"
+                | "error"
+                | "result"
+                | "raw"
+        )
+}
+
+fn render_presentation_diff_line(line: &ToolDiffLine) -> String {
+    let kind = match line.kind {
+        ToolDiffLineType::Add => "add",
+        ToolDiffLineType::Remove => "remove",
+        ToolDiffLineType::Skip => "skip",
+        ToolDiffLineType::Context => "context",
+    };
+    render_diff_line(kind, &line.text)
+}
+
+fn render_patch_diff_lines(lines: &[ToolDiffLine]) -> String {
+    if lines.is_empty() {
+        return String::new();
+    }
+
+    let mut html = String::from(r#"<div class="tool-line-diff">"#);
+    for line in lines {
+        html.push_str(&render_presentation_diff_line(line));
+    }
+    html.push_str("</div>");
+    html
+}
+
+fn render_tool_presentation_detail(detail: &ToolDetail) -> String {
+    let mut html = String::new();
+    for line in &detail.lines {
+        if is_pre_label(&line.label, &line.value) {
+            html.push_str(&render_pre_field(&line.label, &line.value));
+        } else {
+            html.push_str(&render_field(&line.label, &line.value));
+        }
+    }
+    if let Some(diff) = &detail.diff {
+        html.push_str(&render_line_diff(&diff.old, &diff.new));
+    }
+    if let Some(patch_diff) = &detail.patch_diff {
+        html.push_str(&render_patch_diff_lines(patch_diff));
+    }
+    html
+}
+
 pub(crate) fn render_line_diff(old: &str, new: &str) -> String {
     let diff = TextDiff::from_lines(old, new);
     let mut html = String::from(r#"<div class="tool-line-diff">"#);
@@ -199,9 +255,15 @@ fn render_structured_patch_diff(structured_patch: &Value) -> String {
     }
 }
 
-pub(crate) fn tool_icon(name: &str, metadata: Option<&ToolMetadata>) -> &'static str {
+pub(crate) fn tool_icon(name: &str, metadata: Option<&ToolMetadata>) -> String {
+    if let Some(icon) = metadata
+        .and_then(|metadata| metadata.presentation.as_ref())
+        .map(|presentation| presentation.icon.clone())
+    {
+        return icon;
+    }
     if metadata.is_some_and(|m| m.category == "mcp") || name.starts_with("mcp__") {
-        return "🔌";
+        return "🔌".to_string();
     }
     match metadata.map(|m| m.canonical_name.as_str()).unwrap_or(name) {
         "Read" => "📄",
@@ -230,6 +292,7 @@ pub(crate) fn tool_icon(name: &str, metadata: Option<&ToolMetadata>) -> &'static
         "ListMcpResourcesTool" => "🔌",
         _ => "⚙",
     }
+    .to_string()
 }
 
 pub(crate) fn tool_display_name<'a>(name: &'a str, metadata: Option<&'a ToolMetadata>) -> &'a str {
@@ -558,17 +621,27 @@ pub(crate) fn render_tool_input_detail(tool_name: &str, tool_input: &str) -> Str
             }
         }
         _ => {
-            for (k, v) in obj
-                .iter()
-                .filter_map(|(k, v)| v.as_str().map(|s| (k, s)))
-                .take(3)
-            {
+            for (k, v) in obj.iter().filter_map(|(k, v)| v.as_str().map(|s| (k, s))) {
                 html.push_str(&render_field(k, v));
             }
         }
     }
 
     html
+}
+
+pub(crate) fn render_tool_input_detail_for_message(
+    metadata: Option<&ToolMetadata>,
+    tool_name: &str,
+    tool_input: &str,
+) -> String {
+    if let Some(detail) = metadata
+        .and_then(|metadata| metadata.presentation.as_ref())
+        .and_then(|presentation| presentation.input_detail.as_ref())
+    {
+        return render_tool_presentation_detail(detail);
+    }
+    render_tool_input_detail(tool_name, tool_input)
 }
 
 fn structured_record(metadata: &ToolMetadata) -> Option<&serde_json::Map<String, Value>> {
@@ -597,6 +670,13 @@ pub(crate) fn render_tool_result_detail(metadata: Option<&ToolMetadata>) -> Stri
     let Some(metadata) = metadata else {
         return String::new();
     };
+    if let Some(detail) = metadata
+        .presentation
+        .as_ref()
+        .and_then(|presentation| presentation.result_detail.as_ref())
+    {
+        return render_tool_presentation_detail(detail);
+    }
     let Some(structured) = structured_record(metadata) else {
         return String::new();
     };
@@ -831,6 +911,17 @@ fn value_to_short_string(value: &Value) -> String {
 }
 
 pub(crate) fn suppress_raw_output(metadata: Option<&ToolMetadata>, result_has_diff: bool) -> bool {
+    if let Some(policy) = metadata
+        .and_then(|metadata| metadata.presentation.as_ref())
+        .map(|presentation| &presentation.raw_output_policy)
+    {
+        return match policy {
+            RawOutputPolicy::SuppressTerminal => true,
+            RawOutputPolicy::SuppressPatchWhenDiffPresent => result_has_diff,
+            RawOutputPolicy::Keep => false,
+        };
+    }
+
     match metadata.and_then(|m| m.result_kind.as_deref()) {
         Some("terminal_output") => true,
         Some("file_patch") => result_has_diff,
@@ -845,7 +936,7 @@ pub(crate) fn should_skip_tool(name: &str, metadata: Option<&ToolMetadata>) -> b
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::models::ToolMetadata;
+    use crate::models::{RawOutputPolicy, ToolDetail, ToolLine, ToolMetadata, ToolPresentation};
     use serde_json::json;
 
     fn metadata(canonical: &str, category: &str) -> ToolMetadata {
@@ -860,6 +951,7 @@ mod tests {
             mcp: None,
             result_kind: None,
             structured: None,
+            presentation: None,
         }
     }
 
@@ -1106,6 +1198,29 @@ mod tests {
             render_tool_result_detail(Some(&metadata("Bash", "shell"))),
             ""
         );
+    }
+
+    #[test]
+    fn render_tool_result_detail_prefers_presentation_without_structured() {
+        let mut md = metadata("Bash", "shell");
+        md.presentation = Some(ToolPresentation {
+            icon: "💻".to_string(),
+            input_detail: None,
+            result_detail: Some(ToolDetail {
+                lines: vec![ToolLine {
+                    label: "stdout".to_string(),
+                    value: "hello from presentation".to_string(),
+                }],
+                diff: None,
+                patch_diff: None,
+                persisted_output_path: None,
+            }),
+            raw_output_policy: RawOutputPolicy::SuppressTerminal,
+        });
+
+        let html = render_tool_result_detail(Some(&md));
+        assert!(html.contains("hello from presentation"));
+        assert!(suppress_raw_output(Some(&md), false));
     }
 
     #[test]

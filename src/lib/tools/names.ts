@@ -68,6 +68,7 @@ export function toolDisplayName(name: string, metadata?: ToolMetadata): string {
 }
 
 export function toolIcon(name: string, metadata?: ToolMetadata): string {
+  if (metadata?.presentation?.icon) return metadata.presentation.icon;
   if (metadata?.category === "mcp" || name.startsWith("mcp__")) {
     return TOOL_ICONS.mcp;
   }

@@ -30,9 +30,7 @@ use serde_json::Value;
 
 use crate::models::{Message, Provider, SessionMeta};
 use crate::provider::ParsedSession;
-use crate::provider_utils::{
-    project_name_from_path, session_title, truncate_to_bytes, FTS_CONTENT_LIMIT, NO_PROJECT,
-};
+use crate::provider_utils::{project_name_from_path, session_title, NO_PROJECT};
 use crate::services::tail_reader::open_tail_reader;
 
 use dispatch::{dispatch_line, ScanAccum};
@@ -224,8 +222,7 @@ pub(crate) fn parse_session(path: &Path, index: &SessionIndex) -> Option<ParsedS
         return None;
     };
 
-    let full_content = accum.content_parts.join("\n");
-    let content_text = truncate_to_bytes(&full_content, FTS_CONTENT_LIMIT);
+    let content_text = accum.content_parts.join("\n");
 
     let parent_id = if is_subagent {
         // Direct parent: the agent named in state.json.parentAgentId.

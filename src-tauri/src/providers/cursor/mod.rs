@@ -214,21 +214,17 @@ impl CursorProvider {
         let updated_at = created_at;
         let source_mtime = created_at;
 
-        use crate::provider_utils::{truncate_to_bytes, FTS_CONTENT_LIMIT};
-        let content_text = truncate_to_bytes(
-            &messages
-                .iter()
-                .filter(|m| {
-                    matches!(
-                        m.role,
-                        crate::models::MessageRole::User | crate::models::MessageRole::Assistant
-                    ) && !m.content.is_empty()
-                })
-                .map(|m| m.content.clone())
-                .collect::<Vec<_>>()
-                .join("\n"),
-            FTS_CONTENT_LIMIT,
-        );
+        let content_text = messages
+            .iter()
+            .filter(|m| {
+                matches!(
+                    m.role,
+                    crate::models::MessageRole::User | crate::models::MessageRole::Assistant
+                ) && !m.content.is_empty()
+            })
+            .map(|m| m.content.clone())
+            .collect::<Vec<_>>()
+            .join("\n");
         let message_count = messages.len() as u32;
 
         Some(ParsedSession {

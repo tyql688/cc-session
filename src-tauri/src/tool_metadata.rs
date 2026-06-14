@@ -1,5 +1,7 @@
 mod build;
 mod names;
+mod presentation;
+mod registry;
 mod result;
 mod summary;
 
