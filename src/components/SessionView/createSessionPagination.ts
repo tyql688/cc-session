@@ -3,7 +3,7 @@ import type { Accessor, Setter } from "solid-js";
 import { getSessionMessagesWindow, isLoadCanceledError } from "../../lib/tauri";
 import type { Message, SessionMeta, TokenTotals } from "../../lib/types";
 import type { ProcessedEntry } from "./hooks";
-import { findNewestMatchingEntryIndex } from "./search-utils";
+import { findFirstMatchingEntryIndex } from "./search-utils";
 
 export const BATCH_SIZE = 80;
 export const LOAD_MORE_THRESHOLD = 1;
@@ -38,7 +38,7 @@ export interface CreateSessionPaginationResult {
   visibleEntries: Accessor<ProcessedEntry[]>;
   hasMore: Accessor<boolean>;
   loadOlderEntries: () => void;
-  loadUntilSearchMatch: (term: string) => Promise<number | null>;
+  resolveCompleteSearchMatch: (term: string) => Promise<number | null>;
   revealEntry: (entryIndex: number) => void;
   handleMessagesScroll: (e: Event) => void;
 }
@@ -152,6 +152,30 @@ export function createSessionPagination(
     }
   }
 
+  async function loadAllOlderEntriesForSearch(): Promise<boolean> {
+    if (olderFetchInFlight) return false;
+    const start = windowStart();
+    if (start <= 0) return true;
+
+    const sessionId = opts.sessionId();
+    olderFetchInFlight = true;
+    try {
+      const older = await getSessionMessagesWindow(sessionId, 0, start);
+      if (sessionId !== opts.sessionId()) return false;
+      opts.setMeta((prev) => opts.withTokenTotals(prev, older.token_totals));
+      opts.setMessages((prev) => [...older.messages, ...prev]);
+      setWindowStart(older.start);
+      setTotalMessages(older.total);
+      return older.start === 0;
+    } catch (e) {
+      if (isLoadCanceledError(e)) return false;
+      console.warn("load complete session for search failed:", e);
+      return false;
+    } finally {
+      olderFetchInFlight = false;
+    }
+  }
+
   function loadOlderEntries() {
     const messagesRef = opts.getMessagesRef();
     if (!messagesRef || !hasMore()) return;
@@ -169,21 +193,19 @@ export function createSessionPagination(
     }
   }
 
-  async function loadUntilSearchMatch(term: string): Promise<number | null> {
-    let matchIndex = findNewestMatchingEntryIndex(opts.filteredEntries(), term);
-    if (matchIndex >= 0) return matchIndex;
-
-    while (windowStart() > 0) {
-      const loaded = await loadOlderTail({
-        revealLoadedEntries: false,
-        pinScroll: false,
-      });
-      if (!loaded) break;
-      matchIndex = findNewestMatchingEntryIndex(opts.filteredEntries(), term);
-      if (matchIndex >= 0) return matchIndex;
+  async function resolveCompleteSearchMatch(
+    term: string,
+  ): Promise<number | null> {
+    if (windowStart() > 0) {
+      const loadedCompleteWindow = await loadAllOlderEntriesForSearch();
+      if (!loadedCompleteWindow) return null;
     }
 
-    return null;
+    const matchIndex = findFirstMatchingEntryIndex(
+      opts.filteredEntries(),
+      term,
+    );
+    return matchIndex >= 0 ? matchIndex : null;
   }
 
   function handleMessagesScroll(e: Event) {
@@ -223,7 +245,7 @@ export function createSessionPagination(
     visibleEntries,
     hasMore,
     loadOlderEntries,
-    loadUntilSearchMatch,
+    resolveCompleteSearchMatch,
     revealEntry,
     handleMessagesScroll,
   };

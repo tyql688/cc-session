@@ -106,7 +106,7 @@ export function SessionView(props: {
     visibleEntries,
     hasMore,
     loadOlderEntries,
-    loadUntilSearchMatch,
+    resolveCompleteSearchMatch,
     revealEntry,
     handleMessagesScroll,
   } = createSessionPagination({
@@ -138,7 +138,7 @@ export function SessionView(props: {
     getMessagesRef: () => messagesRef,
     loading,
     sessionId: () => props.session.id,
-    loadUntilSearchMatch,
+    resolveCompleteSearchMatch,
     revealEntry,
     registerDebounce: (clear) => {
       sessionSearchDebounce = clear;

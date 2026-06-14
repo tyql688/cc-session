@@ -17,14 +17,14 @@ export function entryMatchesSearch(
   return entry.searchHaystack.includes(normalizedTerm);
 }
 
-export function findNewestMatchingEntryIndex(
+export function findFirstMatchingEntryIndex(
   entries: ProcessedEntry[],
   term: string,
 ): number {
   const normalizedTerm = normalizeSessionSearch(term);
   if (!normalizedTerm) return -1;
 
-  for (let i = entries.length - 1; i >= 0; i--) {
+  for (let i = 0; i < entries.length; i++) {
     if (entryMatchesSearch(entries[i], normalizedTerm)) {
       return i;
     }

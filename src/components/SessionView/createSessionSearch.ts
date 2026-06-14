@@ -7,7 +7,6 @@ import {
 import type { ProcessedEntry } from "./hooks";
 import {
   SESSION_SEARCH_DEBOUNCE_MS,
-  findNewestMatchingEntryIndex,
   getMarksInVisualOrder,
 } from "./search-utils";
 
@@ -20,8 +19,8 @@ export interface CreateSessionSearchOptions {
   loading: Accessor<boolean>;
   /** The current session id (matched against a pending global search). */
   sessionId: Accessor<string>;
-  /** Load older message windows until the query can be resolved or exhausted. */
-  loadUntilSearchMatch: (term: string) => Promise<number | null>;
+  /** Load the complete searchable window and return the first matching entry. */
+  resolveCompleteSearchMatch: (term: string) => Promise<number | null>;
   /** Expand the normal render window until the matched entry is present. */
   revealEntry: (entryIndex: number) => void;
   /** Register the debounce timer for cleanup by the owning component. */
@@ -96,12 +95,7 @@ export function createSessionSearch(
       return;
     }
 
-    const entries = opts.filteredEntries();
-    let matchIdx = findNewestMatchingEntryIndex(entries, term);
-    setActiveSessionSearch(term);
-    if (matchIdx < 0) {
-      matchIdx = (await opts.loadUntilSearchMatch(term)) ?? -1;
-    }
+    const matchIdx = (await opts.resolveCompleteSearchMatch(term)) ?? -1;
     if (requestId !== searchRequestId || term !== sessionSearch().trim()) {
       return;
     }
@@ -109,6 +103,7 @@ export function createSessionSearch(
     if (targetEntry) {
       opts.revealEntry(matchIdx);
     }
+    setActiveSessionSearch(term);
     focusRenderedSearchMatch(targetEntry?.key);
   }
 
