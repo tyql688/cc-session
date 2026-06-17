@@ -87,6 +87,13 @@ describe("extractAgentNickname", () => {
     expect(extractAgentNickname({ nickname: "Faraday" })).toBe("Faraday");
   });
 
+  it("returns Claude teammate names and strips session suffixes", () => {
+    expect(extractAgentNickname({ name: "ws_nte2_v2" })).toBe("ws_nte2_v2");
+    expect(
+      extractAgentNickname({ teammate_id: "ws_nte2_v2@session-1111" }),
+    ).toBe("ws_nte2_v2");
+  });
+
   it("returns undefined when nickname is absent or non-string", () => {
     expect(extractAgentNickname(undefined)).toBeUndefined();
     expect(extractAgentNickname({})).toBeUndefined();
@@ -263,6 +270,28 @@ describe("extractSubagentInfo", () => {
     expect(info.description).toBe("explore the repo");
   });
 
+  it("extracts Claude teammate spawn name and agent id", () => {
+    const metadata: ToolMetadata = {
+      raw_name: "Agent",
+      canonical_name: "Agent",
+      display_name: "Agent",
+      category: "agent",
+      structured: { agentId: "ws_nte2_v2@session-1111" },
+    };
+    const info = extractSubagentInfo(
+      agentMessage({
+        content: JSON.stringify({
+          status: "teammate_spawned",
+          name: "ws_nte2_v2",
+          agent_id: "ws_nte2_v2@session-1111",
+        }),
+        tool_metadata: metadata,
+      }),
+    );
+    expect(info.nickname).toBe("ws_nte2_v2");
+    expect(info.agentId).toBe("ws_nte2_v2@session-1111");
+  });
+
   it("extracts antigravity multi-child ids + aligned prompts", () => {
     const metadata: ToolMetadata = {
       raw_name: "invoke_subagent",
@@ -328,6 +357,26 @@ describe("matchesSubagentSession", () => {
         { id: "parent-1:agent-0", title: "child task" },
         "parent-1",
         { agentId: "agent-0" },
+      ),
+    ).toBe(true);
+  });
+
+  it("matches Claude teammate aliases against agentType child titles", () => {
+    expect(
+      matchesSubagentSession(
+        { id: "agent-a1111111111111111", title: "ws_nte2_v2" },
+        "parent-1",
+        { agentId: "ws_nte2_v2@session-1111" },
+      ),
+    ).toBe(true);
+  });
+
+  it("matches raw Claude child ids to agent-prefixed session ids", () => {
+    expect(
+      matchesSubagentSession(
+        { id: "parent-1:agent-a1111111111111111", title: "child task" },
+        "parent-1",
+        { agentId: "a1111111111111111" },
       ),
     ).toBe(true);
   });

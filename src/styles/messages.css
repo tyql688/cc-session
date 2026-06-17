@@ -63,6 +63,12 @@
   border-top-left-radius: 6px;
 }
 
+.msg-bubble.msg-bubble-command {
+  background: var(--msg-command-bg);
+  border-color: var(--msg-command-border);
+  box-shadow: var(--msg-command-shadow);
+}
+
 .msg-text {
   margin: 0;
   color: var(--text-primary);

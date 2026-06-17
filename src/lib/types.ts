@@ -51,6 +51,7 @@ export interface SessionRef {
 }
 
 export type MessageRole = "user" | "assistant" | "tool" | "system";
+export type MessageKind = "command_input" | "command_output";
 
 export interface TokenUsage {
   input_tokens: number;
@@ -114,6 +115,7 @@ export interface ToolMetadata {
 
 export interface Message {
   role: MessageRole;
+  message_kind?: MessageKind;
   content: string;
   timestamp: string | null;
   tool_name: string | null;

@@ -1,7 +1,14 @@
 //! Small string-cleaning helpers for Claude system/local-command lines:
-//! ANSI stripping, tag extraction, and the `[local_command]` formatter.
+//! ANSI stripping, tag extraction, and command input/output extraction.
 
-pub(super) fn format_local_command_text(raw: &str) -> Option<String> {
+use crate::models::MessageKind;
+
+pub(super) struct LocalCommandText {
+    pub(super) kind: MessageKind,
+    pub(super) content: String,
+}
+
+pub(super) fn format_local_command_text(raw: &str) -> Option<LocalCommandText> {
     let trimmed = raw.trim_start();
     if !trimmed.starts_with("<command-name>")
         && !trimmed.starts_with("<command-message>")
@@ -18,14 +25,27 @@ pub(super) fn format_local_command_text(raw: &str) -> Option<String> {
             .filter(|part| !part.is_empty())
             .collect::<Vec<_>>()
             .join(" ");
-        return Some(format!("[local_command] {detail}"));
+        return Some(LocalCommandText {
+            kind: MessageKind::CommandInput,
+            content: detail,
+        });
+    }
+
+    if let Some(command) = extract_tag_text(raw, "command-message").filter(|s| !s.is_empty()) {
+        return Some(LocalCommandText {
+            kind: MessageKind::CommandInput,
+            content: command,
+        });
     }
 
     let stdout = extract_tag_text(raw, "local-command-stdout")
         .or_else(|| extract_tag_text(raw, "local-command-stderr"))
         .map(|value| clean_system_text(&value))
         .filter(|s| !s.is_empty())?;
-    Some(format!("[local_command] {stdout}"))
+    Some(LocalCommandText {
+        kind: MessageKind::CommandOutput,
+        content: stdout,
+    })
 }
 
 fn extract_tag_text(raw: &str, tag: &str) -> Option<String> {

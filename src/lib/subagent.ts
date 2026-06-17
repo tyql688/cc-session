@@ -89,7 +89,14 @@ export function parseToolJsonObject(
 export function extractAgentNickname(
   output: Record<string, unknown> | undefined,
 ): string | undefined {
-  return typeof output?.nickname === "string" ? output.nickname : undefined;
+  if (typeof output?.nickname === "string") return output.nickname;
+  for (const key of ["name", "teammate_id"]) {
+    const value = output?.[key];
+    if (typeof value === "string" && value.length > 0) {
+      return stripAgentSessionSuffix(value);
+    }
+  }
+  return undefined;
 }
 
 /** Full description from Agent tool input (not truncated, for subagent matching).
@@ -199,19 +206,41 @@ function stripTitleTruncation(value: string): string {
   return value.trim().replace(/(\.\.\.|…)$/, "");
 }
 
+function stripAgentSessionSuffix(value: string): string {
+  const marker = "@session-";
+  const index = value.indexOf(marker);
+  return index > 0 ? value.slice(0, index) : value;
+}
+
+function agentIdAliases(agentId: string): string[] {
+  const trimmed = agentId.trim();
+  const withoutSession = stripAgentSessionSuffix(trimmed);
+  const withoutAgentPrefix = withoutSession.startsWith("agent-")
+    ? withoutSession.slice("agent-".length)
+    : withoutSession;
+  return [...new Set([trimmed, withoutSession, withoutAgentPrefix])].filter(
+    (value) => value.length > 0,
+  );
+}
+
 export function matchesSubagentSession(
   candidate: SubagentMatchCandidate,
   parentId: string,
   request: SubagentMatchRequest,
 ): boolean {
   const agentId = request.agentId?.trim();
-  if (
-    agentId &&
-    (candidate.id === agentId ||
-      candidate.id === `agent-${agentId}` ||
-      candidate.id === `${parentId}:${agentId}`)
-  ) {
-    return true;
+  if (agentId) {
+    for (const alias of agentIdAliases(agentId)) {
+      if (
+        candidate.id === alias ||
+        candidate.id === `agent-${alias}` ||
+        candidate.id === `${parentId}:${alias}` ||
+        candidate.id === `${parentId}:agent-${alias}` ||
+        candidate.title === alias
+      ) {
+        return true;
+      }
+    }
   }
 
   const nickname = request.nickname?.trim();

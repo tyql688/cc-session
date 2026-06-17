@@ -1046,6 +1046,7 @@ mod tests {
         ) -> Message {
             Message {
                 role,
+                message_kind: None,
                 content: content.to_string(),
                 timestamp: None,
                 tool_name: tool_name.map(str::to_string),
@@ -1104,6 +1105,7 @@ mod tests {
         let marker = "悬停飞出标记";
         let messages = vec![Message {
             role: MessageRole::Assistant,
+            message_kind: None,
             content: format!("{filler}{marker}"),
             timestamp: None,
             tool_name: None,

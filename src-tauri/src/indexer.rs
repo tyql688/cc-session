@@ -540,6 +540,7 @@ mod tests {
     fn usage_message(hash: &str) -> Message {
         Message {
             role: MessageRole::Assistant,
+            message_kind: None,
             content: String::new(),
             timestamp: Some("2026-04-09T12:00:00Z".into()),
             tool_name: None,
@@ -651,6 +652,7 @@ mod tests {
             Some("claude-opus-4-6"),
             vec![Message {
                 role: MessageRole::Assistant,
+                message_kind: None,
                 content: String::new(),
                 timestamp: Some("2026-04-09T12:00:00Z".into()),
                 tool_name: None,
@@ -672,6 +674,7 @@ mod tests {
             Some("gpt-5.4"),
             vec![Message {
                 role: MessageRole::Assistant,
+                message_kind: None,
                 content: String::new(),
                 timestamp: None,
                 tool_name: None,
@@ -694,6 +697,7 @@ mod tests {
             vec![
                 Message {
                     role: MessageRole::Assistant,
+                    message_kind: None,
                     content: String::new(),
                     timestamp: Some("2026-04-09T12:00:00Z".into()),
                     tool_name: None,
@@ -705,6 +709,7 @@ mod tests {
                 },
                 Message {
                     role: MessageRole::Tool,
+                    message_kind: None,
                     content: String::new(),
                     timestamp: Some("2026-04-09T12:00:01Z".into()),
                     tool_name: Some("Bash".into()),
@@ -734,6 +739,7 @@ mod tests {
             Some("claude-opus-4-6"),
             vec![Message {
                 role: MessageRole::Assistant,
+                message_kind: None,
                 content: String::new(),
                 timestamp: Some(ts.into()),
                 tool_name: None,
@@ -754,6 +760,7 @@ mod tests {
     fn compute_token_stats_dedups_same_usage_hash_across_sessions() {
         let make_message = || Message {
             role: MessageRole::Assistant,
+            message_kind: None,
             content: String::new(),
             timestamp: Some("2026-04-09T12:00:00Z".into()),
             tool_name: None,
@@ -783,6 +790,7 @@ mod tests {
         // largest entry is its final total.
         let make_message = |output: u32| Message {
             role: MessageRole::Assistant,
+            message_kind: None,
             content: String::new(),
             timestamp: Some("2026-06-07T12:00:00Z".into()),
             tool_name: None,
@@ -815,6 +823,7 @@ mod tests {
             Some("<synthetic>"),
             vec![Message {
                 role: MessageRole::Assistant,
+                message_kind: None,
                 content: String::new(),
                 timestamp: Some("2026-04-09T12:00:00Z".into()),
                 tool_name: None,

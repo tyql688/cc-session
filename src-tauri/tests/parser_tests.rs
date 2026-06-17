@@ -3,7 +3,7 @@ use std::path::PathBuf;
 
 use tempfile::TempDir;
 
-use cc_session_lib::models::{Message, MessageRole, Provider};
+use cc_session_lib::models::{Message, MessageKind, MessageRole, Provider};
 use cc_session_lib::provider::SessionProvider;
 use cc_session_lib::providers::antigravity::AntigravityProvider;
 use cc_session_lib::providers::claude::ClaudeProvider;
@@ -330,22 +330,48 @@ fn claude_displays_local_command_and_informational_system_messages() {
         "\n"
     ));
 
+    let user_contents: Vec<&str> = session
+        .messages
+        .iter()
+        .filter(|m| m.role == MessageRole::User)
+        .map(|m| m.content.as_str())
+        .collect();
+    assert!(
+        user_contents.contains(&"/model"),
+        "slash command should be visible as a user command message: {:?}",
+        user_contents
+    );
+    assert!(
+        session.messages.iter().any(|m| {
+            m.role == MessageRole::User && m.message_kind == Some(MessageKind::CommandInput)
+        }),
+        "slash command should be tagged as command input"
+    );
+
+    let assistant_contents: Vec<&str> = session
+        .messages
+        .iter()
+        .filter(|m| m.role == MessageRole::Assistant)
+        .map(|m| m.content.as_str())
+        .collect();
+    assert!(
+        assistant_contents.contains(&"Kept model as Opus 4.6"),
+        "local command output should be visible and ANSI-stripped: {:?}",
+        assistant_contents
+    );
+    assert!(
+        session.messages.iter().any(|m| {
+            m.role == MessageRole::Assistant && m.message_kind == Some(MessageKind::CommandOutput)
+        }),
+        "local command output should be tagged as command output"
+    );
+
     let system_contents: Vec<&str> = session
         .messages
         .iter()
         .filter(|m| m.role == MessageRole::System)
         .map(|m| m.content.as_str())
         .collect();
-    assert!(
-        system_contents.contains(&"[local_command] /model"),
-        "slash command should be visible as a system message: {:?}",
-        system_contents
-    );
-    assert!(
-        system_contents.contains(&"[local_command] Kept model as Opus 4.6"),
-        "local command output should be visible and ANSI-stripped: {:?}",
-        system_contents
-    );
     assert!(
         system_contents.contains(
             &"[informational] Auto mode lets Claude handle permission prompts automatically."

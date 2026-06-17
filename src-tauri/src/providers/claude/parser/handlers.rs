@@ -4,7 +4,7 @@
 
 use serde_json::Value;
 
-use crate::models::{Message, MessageRole, Provider, TokenUsage};
+use crate::models::{Message, MessageKind, MessageRole, Provider, TokenUsage};
 use crate::provider_utils::is_system_content;
 use crate::tool_metadata::{
     build_tool_metadata, canonical_tool_name, enrich_tool_metadata, ToolCallFacts,
@@ -18,7 +18,7 @@ use super::content::{
     extract_message_content, extract_token_usage, extract_tool_result_content,
     is_tool_result_message, tool_result_facts, unique_hash_from_entry,
 };
-use super::text_clean::format_local_command_text;
+use super::text_clean::{format_local_command_text, LocalCommandText};
 use super::{ParseState, PendingToolResult, ScanAccum};
 
 pub(super) fn preserves_pending_user_message(line_type: &str) -> bool {
@@ -175,9 +175,9 @@ pub(super) fn handle_user_message(
     if text.trim().is_empty() {
         return;
     }
-    if let Some(content) = format_local_command_text(&text) {
+    if let Some(command) = format_local_command_text(&text) {
         flush_pending(state);
-        append_system_message(state, content, timestamp);
+        append_local_command_message(state, command, timestamp);
         return;
     }
     let is_meta = entry
@@ -624,14 +624,15 @@ pub(super) fn handle_system_message(
             .map(|content| format!("[scheduled_task_fire] {content}"))
             .unwrap_or_else(|| "[scheduled_task_fire]".to_string()),
         "local_command" => {
-            let Some(content) = entry
+            let Some(command) = entry
                 .get("content")
                 .and_then(|v| v.as_str())
                 .and_then(format_local_command_text)
             else {
                 return;
             };
-            content
+            append_local_command_message(state, command, timestamp);
+            return;
         }
         "informational" => {
             let Some(content) = entry
@@ -654,6 +655,21 @@ fn append_system_message(state: &mut ParseState, content: String, timestamp: Opt
     state.messages.push(Message {
         timestamp,
         ..Message::system(content)
+    });
+}
+
+fn append_local_command_message(
+    state: &mut ParseState,
+    command: LocalCommandText,
+    timestamp: Option<String>,
+) {
+    let message = match command.kind {
+        MessageKind::CommandInput => Message::command_input(command.content),
+        MessageKind::CommandOutput => Message::command_output(command.content),
+    };
+    state.messages.push(Message {
+        timestamp,
+        ..message
     });
 }
 

@@ -66,6 +66,8 @@ const SYSTEM_SUBTYPE_CONFIG: Record<
   },
 };
 
+const LEGACY_LOCAL_COMMAND_PREFIX = "[local_command]";
+
 function SystemMessage(props: { content: string }) {
   const { t } = useI18n();
   const match = props.content.match(/^\[(\w+)\]\s*(.*)/s);
@@ -128,6 +130,23 @@ export function MessageBubble(props: {
     return systemMarkers.some((marker) => c.includes(marker));
   };
 
+  const hasLegacyLocalCommandPrefix = () =>
+    props.message.content.trimStart().startsWith(LEGACY_LOCAL_COMMAND_PREFIX);
+
+  const isCommandMessage = () =>
+    props.message.message_kind === "command_input" ||
+    props.message.message_kind === "command_output" ||
+    ((props.message.role === "user" || props.message.role === "assistant") &&
+      hasLegacyLocalCommandPrefix());
+
+  const displayContent = createMemo(() => {
+    if (!hasLegacyLocalCommandPrefix()) return props.message.content;
+    return props.message.content
+      .trimStart()
+      .slice(LEGACY_LOCAL_COMMAND_PREFIX.length)
+      .trimStart();
+  });
+
   const rendersMarkdown = () =>
     props.message.role !== "tool" &&
     props.message.role !== "system" &&
@@ -135,7 +154,7 @@ export function MessageBubble(props: {
     !isSystemContent();
 
   const copyText = createMemo(() =>
-    rendersMarkdown() ? sanitizeMessageForClipboard(props.message.content) : "",
+    rendersMarkdown() ? sanitizeMessageForClipboard(displayContent()) : "",
   );
   // Split the markdown parse (expensive, content-only) from the render
   // (highlight-dependent). Keying the parse on content alone means committing a
@@ -143,7 +162,7 @@ export function MessageBubble(props: {
   // of every visible bubble — the prior jank source.
   const parsedMarkdown = createMemo(() => {
     if (!rendersMarkdown()) return null;
-    return parseMarkdownDocument(props.message.content);
+    return parseMarkdownDocument(displayContent());
   });
   const markdownContent = createMemo(() => {
     const parsed = parsedMarkdown();
@@ -202,10 +221,12 @@ export function MessageBubble(props: {
                 <UserIcon />
               </Show>
             </div>
-            <div class={`msg-bubble msg-bubble-${props.message.role}`}>
+            <div
+              class={`msg-bubble msg-bubble-${props.message.role}${isCommandMessage() ? " msg-bubble-command" : ""}`}
+            >
               {markdownContent()}
               <CopyMessageButton
-                content={props.message.content}
+                content={displayContent()}
                 copyText={copyText()}
               />
               <Show when={msgTs()}>

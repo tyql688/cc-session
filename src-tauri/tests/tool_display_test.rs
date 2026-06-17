@@ -98,6 +98,7 @@ fn tool_message_with_content(
 ) -> Message {
     Message {
         role: MessageRole::Tool,
+        message_kind: None,
         content: content.to_string(),
         timestamp: None,
         tool_name: Some(name.to_string()),
@@ -112,6 +113,7 @@ fn tool_message_with_content(
 fn assistant_message(content: &str) -> Message {
     Message {
         role: MessageRole::Assistant,
+        message_kind: None,
         content: content.to_string(),
         timestamp: Some("2026-04-11T02:25:16.628Z".to_string()),
         tool_name: None,

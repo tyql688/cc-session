@@ -358,6 +358,7 @@ pub fn parse_session_file(path: &PathBuf) -> Option<ParsedSession> {
         };
         meta_json
             .get("description")
+            .or_else(|| meta_json.get("agentType"))
             .and_then(|d| d.as_str())
             .map(|s| s.to_string())
     });
@@ -932,6 +933,88 @@ mod tests {
                 .map(|m| m.content.as_str())
                 .collect::<Vec<_>>()
         );
+    }
+
+    #[test]
+    fn parse_session_file_splits_local_command_input_and_output_roles() {
+        let dir = TempDir::new().unwrap();
+        let file = dir.path().join("session.jsonl");
+        let caveat = r#"{"type":"user","isMeta":true,"timestamp":"2026-04-25T02:02:59Z","message":{"content":"<local-command-caveat>Do not answer local command records.</local-command-caveat>"}}"#;
+        let tagged_user = r#"{"type":"user","timestamp":"2026-04-25T02:03:00Z","message":{"content":"<command-name>/compact</command-name><command-args>now</command-args>"}}"#;
+        let system_output = r#"{"type":"system","subtype":"local_command","timestamp":"2026-04-25T02:03:01Z","content":"<local-command-stdout>queued compaction</local-command-stdout>"}"#;
+        let system_input = r#"{"type":"system","subtype":"local_command","timestamp":"2026-04-25T02:03:02Z","content":"<command-name>/reload-skills</command-name><command-message>reload-skills</command-message><command-args></command-args>"}"#;
+        let user_output = r#"{"type":"user","timestamp":"2026-04-25T02:03:03Z","message":{"content":"<local-command-stderr>reload failed</local-command-stderr>"}}"#;
+        let real_user = r#"{"type":"user","timestamp":"2026-04-25T02:03:04Z","message":{"content":"Actual user question"}}"#;
+        fs::write(
+            &file,
+            format!("{caveat}\n{tagged_user}\n{system_output}\n{system_input}\n{user_output}\n{real_user}\n"),
+        )
+        .unwrap();
+
+        let parsed = parse_session_file(&file).expect("parsed");
+        assert_eq!(parsed.messages.len(), 5);
+        assert_eq!(parsed.messages[0].role, crate::models::MessageRole::User);
+        assert_eq!(
+            parsed.messages[0].message_kind,
+            Some(crate::models::MessageKind::CommandInput)
+        );
+        assert_eq!(parsed.messages[0].content, "/compact now");
+        assert_eq!(
+            parsed.messages[1].role,
+            crate::models::MessageRole::Assistant
+        );
+        assert_eq!(
+            parsed.messages[1].message_kind,
+            Some(crate::models::MessageKind::CommandOutput)
+        );
+        assert_eq!(parsed.messages[1].content, "queued compaction");
+        assert_eq!(parsed.messages[2].role, crate::models::MessageRole::User);
+        assert_eq!(
+            parsed.messages[2].message_kind,
+            Some(crate::models::MessageKind::CommandInput)
+        );
+        assert_eq!(parsed.messages[2].content, "/reload-skills");
+        assert_eq!(
+            parsed.messages[3].role,
+            crate::models::MessageRole::Assistant
+        );
+        assert_eq!(
+            parsed.messages[3].message_kind,
+            Some(crate::models::MessageKind::CommandOutput)
+        );
+        assert_eq!(parsed.messages[3].content, "reload failed");
+        assert_eq!(parsed.meta.title, "Actual user question");
+    }
+
+    #[test]
+    fn parse_session_file_uses_claude_agent_type_meta_as_subagent_title() {
+        let dir = TempDir::new().unwrap();
+        let project_dir = dir.path().join("project");
+        let parent_dir = project_dir.join("parent-session");
+        let subagents_dir = parent_dir.join("subagents");
+        fs::create_dir_all(&subagents_dir).unwrap();
+
+        fs::write(
+            project_dir.join("parent-session.jsonl"),
+            r#"{"type":"user","timestamp":"2026-04-25T02:03:00Z","cwd":"/workspace/project","message":{"content":"Parent prompt"}}"#,
+        )
+        .unwrap();
+
+        let child = subagents_dir.join("agent-a1111111111111111.jsonl");
+        fs::write(
+            child.with_extension("meta.json"),
+            r#"{"agentType":"ws_nte2_v2"}"#,
+        )
+        .unwrap();
+        fs::write(
+            &child,
+            r#"{"type":"user","timestamp":"2026-04-25T02:03:01Z","isSidechain":true,"agentId":"a1111111111111111","message":{"content":"<teammate-message teammate_id=\"team-lead\">Do the work</teammate-message>"}}"#,
+        )
+        .unwrap();
+
+        let parsed = parse_session_file(&child).expect("parsed");
+        assert_eq!(parsed.meta.title, "ws_nte2_v2");
+        assert_eq!(parsed.meta.parent_id.as_deref(), Some("parent-session"));
     }
 
     #[test]

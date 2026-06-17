@@ -69,6 +69,13 @@ pub enum MessageRole {
     System,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum MessageKind {
+    CommandInput,
+    CommandOutput,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TokenUsage {
     pub input_tokens: u32,
@@ -191,6 +198,8 @@ pub struct ToolMetadata {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Message {
     pub role: MessageRole,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub message_kind: Option<MessageKind>,
     pub content: String,
     pub timestamp: Option<String>,
     pub tool_name: Option<String>,
@@ -220,6 +229,7 @@ impl Message {
     pub fn new(role: MessageRole, content: impl Into<String>) -> Self {
         Self {
             role,
+            message_kind: None,
             content: content.into(),
             timestamp: None,
             tool_name: None,
@@ -241,6 +251,20 @@ impl Message {
 
     pub fn system(content: impl Into<String>) -> Self {
         Self::new(MessageRole::System, content)
+    }
+
+    pub fn command_input(content: impl Into<String>) -> Self {
+        Self {
+            message_kind: Some(MessageKind::CommandInput),
+            ..Self::user(content)
+        }
+    }
+
+    pub fn command_output(content: impl Into<String>) -> Self {
+        Self {
+            message_kind: Some(MessageKind::CommandOutput),
+            ..Self::assistant(content)
+        }
     }
 }
 
@@ -324,6 +348,7 @@ mod tests {
     ) -> Message {
         Message {
             role: MessageRole::Assistant,
+            message_kind: None,
             content: String::new(),
             timestamp: timestamp.map(str::to_string),
             tool_name: None,

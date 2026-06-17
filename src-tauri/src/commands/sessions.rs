@@ -390,6 +390,17 @@ pub async fn get_child_sessions(
             .get_child_sessions(&parent_id)
             .context("failed to load child sessions")?;
         hydrate_variant_names(&mut sessions);
+        for session in &mut sessions {
+            if session.provider != Provider::Claude
+                || !session.is_sidechain
+                || session.title != "Untitled"
+            {
+                continue;
+            }
+            if let Some(title) = subagent_meta_title(&session.source_path) {
+                session.title = title;
+            }
+        }
         Ok(sessions)
     })
     .await
@@ -660,6 +671,39 @@ fn hydrate_variant_names(sessions: &mut [SessionMeta]) {
     crate::providers::cc_mirror::hydrate_variant_names(sessions);
 }
 
+fn subagent_meta_title(source_path: &str) -> Option<String> {
+    let meta_path = Path::new(source_path).with_extension("meta.json");
+    if !meta_path.exists() {
+        return None;
+    }
+    let content = match std::fs::read_to_string(&meta_path) {
+        Ok(content) => content,
+        Err(error) => {
+            log::warn!(
+                "failed to read Claude subagent meta '{}': {error}",
+                meta_path.display()
+            );
+            return None;
+        }
+    };
+    let json: serde_json::Value = match serde_json::from_str(&content) {
+        Ok(json) => json,
+        Err(error) => {
+            log::warn!(
+                "failed to parse Claude subagent meta '{}': {error}",
+                meta_path.display()
+            );
+            return None;
+        }
+    };
+    json.get("description")
+        .or_else(|| json.get("agentType"))
+        .and_then(|value| value.as_str())
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(str::to_string)
+}
+
 pub(super) fn load_messages_from_provider(
     provider: &Provider,
     session_id: &str,
@@ -707,7 +751,8 @@ fn load_messages_from_provider_or_canceled(
 #[cfg(test)]
 mod tests {
     use super::{
-        build_session_messages_window, canceled_error, session_window_bounds, CANCEL_ERROR,
+        build_session_messages_window, canceled_error, session_window_bounds, subagent_meta_title,
+        CANCEL_ERROR,
     };
     use crate::error::CommandError;
     use crate::models::{Message, TokenTotals};
@@ -750,5 +795,21 @@ mod tests {
         assert_eq!(window.messages.len(), 2);
         assert_eq!(window.messages[0].content, "message 3");
         assert_eq!(window.parse_warning_count, 2);
+    }
+
+    #[test]
+    fn subagent_meta_title_reads_agent_type_when_description_is_absent() {
+        let dir = tempfile::TempDir::new().unwrap();
+        let source = dir.path().join("agent-a1111111111111111.jsonl");
+        std::fs::write(
+            source.with_extension("meta.json"),
+            r#"{"agentType":"ws_nte2_v2"}"#,
+        )
+        .unwrap();
+
+        assert_eq!(
+            subagent_meta_title(source.to_str().unwrap()),
+            Some("ws_nte2_v2".to_string())
+        );
     }
 }

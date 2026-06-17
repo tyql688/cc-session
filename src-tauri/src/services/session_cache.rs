@@ -162,6 +162,7 @@ mod tests {
         (0..n)
             .map(|i| Message {
                 role: crate::models::MessageRole::User,
+                message_kind: None,
                 content: format!("msg {i}"),
                 timestamp: None,
                 tool_name: None,

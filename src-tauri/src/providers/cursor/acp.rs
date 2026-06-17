@@ -255,6 +255,7 @@ fn translate_envelope(
             }
             messages.push(Message {
                 role: MessageRole::User,
+                message_kind: None,
                 content: text,
                 timestamp: None,
                 tool_name: None,
@@ -291,6 +292,7 @@ fn translate_envelope(
                 }
                 messages.push(Message {
                     role: MessageRole::System,
+                    message_kind: None,
                     content: format!("[thinking]\n{trimmed}"),
                     timestamp: None,
                     tool_name: None,
@@ -320,6 +322,7 @@ fn translate_envelope(
             if !visible.is_empty() {
                 messages.push(Message {
                     role: MessageRole::Assistant,
+                    message_kind: None,
                     content: visible,
                     timestamp: None,
                     tool_name: None,
@@ -412,6 +415,7 @@ fn push_tool_call_acp(
     }
     messages.push(Message {
         role: MessageRole::Tool,
+        message_kind: None,
         content: String::new(),
         timestamp: None,
         tool_name: Some(display_name),
@@ -495,6 +499,7 @@ fn merge_tool_result_acp(
     }
     messages.push(Message {
         role: MessageRole::Tool,
+        message_kind: None,
         content: body,
         timestamp: None,
         tool_name: None,

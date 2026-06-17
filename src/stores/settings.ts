@@ -28,12 +28,41 @@ const VALID_PROVIDERS: Provider[] = [
   "cc-mirror",
 ];
 
+function readStorage(key: string): string | null {
+  if (
+    typeof localStorage === "undefined" ||
+    typeof localStorage.getItem !== "function"
+  ) {
+    return null;
+  }
+  try {
+    return localStorage.getItem(key);
+  } catch (error) {
+    console.error(`Failed to read localStorage key ${key}:`, error);
+    return null;
+  }
+}
+
+function writeStorage(key: string, value: string): void {
+  if (
+    typeof localStorage === "undefined" ||
+    typeof localStorage.setItem !== "function"
+  ) {
+    return;
+  }
+  try {
+    localStorage.setItem(key, value);
+  } catch (error) {
+    console.error(`Failed to write localStorage key ${key}:`, error);
+  }
+}
+
 function parseStoredStringArray<T extends string>(
   storageKey: string,
   label: string,
   isValid: (value: string) => value is T,
 ): { value: T[]; error: string | null } {
-  const raw = localStorage.getItem(storageKey);
+  const raw = readStorage(storageKey);
   if (raw === null) {
     return { value: [], error: null };
   }
@@ -54,7 +83,7 @@ function parseStoredStringArray<T extends string>(
     const value = parsed.filter(isValid) as T[];
     if (value.length !== parsed.length) {
       console.warn(`Removed unsupported ${label} entries from localStorage`);
-      localStorage.setItem(storageKey, JSON.stringify(value));
+      writeStorage(storageKey, JSON.stringify(value));
     }
 
     return { value, error: null };
@@ -65,9 +94,7 @@ function parseStoredStringArray<T extends string>(
   }
 }
 
-const storedTerminal = localStorage.getItem(
-  "cc-session-terminal",
-) as TerminalApp | null;
+const storedTerminal = readStorage("cc-session-terminal") as TerminalApp | null;
 
 const [terminalApp, setTerminalAppSignal] = createSignal<TerminalApp>(
   storedTerminal || "terminal",
@@ -94,7 +121,7 @@ if (!storedTerminal) {
       ];
       if (valid.includes(detected as TerminalApp)) {
         setTerminalAppSignal(detected as TerminalApp);
-        localStorage.setItem("cc-session-terminal", detected);
+        writeStorage("cc-session-terminal", detected);
       }
     })
     .catch((error) => {
@@ -104,7 +131,7 @@ if (!storedTerminal) {
 
 export function setTerminalApp(t: TerminalApp) {
   setTerminalAppSignal(t);
-  localStorage.setItem("cc-session-terminal", t);
+  writeStorage("cc-session-terminal", t);
 }
 
 export { terminalApp };
@@ -129,7 +156,7 @@ export function toggleProvider(id: Provider) {
       ? prev.filter((p) => p !== id)
       : [...prev, id];
     setDisabledProvidersError(null);
-    localStorage.setItem("cc-session-disabled-providers", JSON.stringify(next));
+    writeStorage("cc-session-disabled-providers", JSON.stringify(next));
     return next;
   });
 }
@@ -138,24 +165,24 @@ export { disabledProviders, disabledProvidersError };
 
 // Time grouping toggle
 const [timeGrouping, setTimeGroupingSignal] = createSignal<boolean>(
-  localStorage.getItem("cc-session-time-grouping") !== "false",
+  readStorage("cc-session-time-grouping") !== "false",
 );
 
 export function setTimeGrouping(v: boolean) {
   setTimeGroupingSignal(v);
-  localStorage.setItem("cc-session-time-grouping", String(v));
+  writeStorage("cc-session-time-grouping", String(v));
 }
 
 export { timeGrouping };
 
 // Show subagents toggle (default on)
 const [showOrphans, setShowOrphansSignal] = createSignal<boolean>(
-  localStorage.getItem("cc-session-show-orphans") !== "false",
+  readStorage("cc-session-show-orphans") !== "false",
 );
 
 export function setShowOrphans(v: boolean) {
   setShowOrphansSignal(v);
-  localStorage.setItem("cc-session-show-orphans", String(v));
+  writeStorage("cc-session-show-orphans", String(v));
 }
 
 export { showOrphans };
@@ -179,7 +206,7 @@ export function addBlockedFolder(path: string) {
     if (prev.includes(path)) return prev;
     const next = [...prev, path];
     setBlockedFoldersError(null);
-    localStorage.setItem("cc-session-blocked-folders", JSON.stringify(next));
+    writeStorage("cc-session-blocked-folders", JSON.stringify(next));
     return next;
   });
 }
@@ -188,7 +215,7 @@ export function removeBlockedFolder(path: string) {
   setBlockedFoldersSignal((prev) => {
     const next = prev.filter((p) => p !== path);
     setBlockedFoldersError(null);
-    localStorage.setItem("cc-session-blocked-folders", JSON.stringify(next));
+    writeStorage("cc-session-blocked-folders", JSON.stringify(next));
     return next;
   });
 }

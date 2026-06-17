@@ -129,6 +129,7 @@ mod tests {
     fn msg(content: &str) -> Message {
         Message {
             role: MessageRole::Assistant,
+            message_kind: None,
             content: content.to_string(),
             timestamp: None,
             tool_name: None,

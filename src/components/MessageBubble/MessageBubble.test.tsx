@@ -40,6 +40,35 @@ describe("MessageBubble", () => {
     expect(parseMarkdownDocumentMock).toHaveBeenCalledWith("**hello**");
   });
 
+  it("renders command input as a distinct user bubble", () => {
+    const { container } = render(() => (
+      <MessageBubble
+        message={message({
+          message_kind: "command_input",
+          content: "/compact now",
+        })}
+      />
+    ));
+
+    expect(container.querySelector(".msg-bubble-command")).toBeTruthy();
+    expect(parseMarkdownDocumentMock).toHaveBeenCalledWith("/compact now");
+  });
+
+  it("renders command output as a distinct assistant bubble", () => {
+    const { container } = render(() => (
+      <MessageBubble
+        message={message({
+          role: "assistant",
+          message_kind: "command_output",
+          content: "Reloaded skills",
+        })}
+      />
+    ));
+
+    expect(container.querySelector(".msg-bubble-command")).toBeTruthy();
+    expect(parseMarkdownDocumentMock).toHaveBeenCalledWith("Reloaded skills");
+  });
+
   it("does not parse markdown for tool messages", () => {
     render(() => (
       <MessageBubble

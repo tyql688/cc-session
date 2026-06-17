@@ -97,6 +97,13 @@
   --msg-user-table-row-hover: rgba(0, 122, 255, 0.04);
   --msg-bubble-shadow: 0 8px 24px rgba(15, 23, 42, 0.04);
   --msg-user-shadow: 0 8px 20px rgba(0, 122, 255, 0.08);
+  --msg-command-bg: linear-gradient(
+    135deg,
+    rgba(16, 185, 129, 0.12),
+    rgba(5, 150, 105, 0.08)
+  );
+  --msg-command-border: rgba(16, 185, 129, 0.24);
+  --msg-command-shadow: 0 8px 20px rgba(16, 185, 129, 0.08);
   --msg-assistant-bg: #f5f6f8;
   --msg-assistant-border: #e5e7eb;
   --code-token-default: #24292e;
@@ -215,6 +222,13 @@
   --msg-user-table-row-hover: rgba(255, 255, 255, 0.06);
   --msg-bubble-shadow: 0 12px 30px rgba(0, 0, 0, 0.22);
   --msg-user-shadow: 0 12px 28px rgba(10, 132, 255, 0.14);
+  --msg-command-bg: linear-gradient(
+    135deg,
+    rgba(52, 211, 153, 0.16),
+    rgba(16, 185, 129, 0.08)
+  );
+  --msg-command-border: rgba(52, 211, 153, 0.28);
+  --msg-command-shadow: 0 12px 28px rgba(16, 185, 129, 0.12);
   --msg-assistant-bg: #27292f;
   --msg-assistant-border: rgba(255, 255, 255, 0.1);
   --code-token-default: #adbac7;
