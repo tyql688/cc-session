@@ -25,7 +25,7 @@
 
 ## Why CC Session?
 
-Claude Code, Codex, Antigravity, Kimi Code, Cursor CLI, and more all store their session data locally — but each in its own format, in its own folder, with no way to look back. **CC Session brings every provider together in one fast, native app:** read full conversation histories, search across all of them at once, export clean archives, and jump straight back into any session in your terminal.
+Claude Code, Codex, Antigravity, Kimi Code, Cursor CLI, Pi, and more all store their session data locally — but each in its own format, in its own folder, with no way to look back. **CC Session brings every provider together in one fast, native app:** read full conversation histories, search across all of them at once, export clean archives, and jump straight back into any session in your terminal.
 
 > 💡 **One window for every local coding session** — no more digging through `~/.claude`, `~/.codex`, and a dozen other folders.
 
@@ -61,6 +61,7 @@ Track exactly what you're spending across every provider — daily cost trends, 
 | **Cursor CLI** | JSONL + SQLite | FS | `cursor agent --resume` |
 | **OpenCode** | SQLite | Poll | `opencode -s` |
 | **CC-Mirror** | JSONL | FS | per-variant |
+| **Pi** | JSONL | FS | `pi --session` |
 
 Across providers, CC Session parses messages, tool calls, thinking/reasoning blocks, token usage, inline images, Markdown, Mermaid diagrams, and KaTeX math wherever the source format supports them — including subagent/child sessions.
 

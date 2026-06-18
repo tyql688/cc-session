@@ -25,7 +25,7 @@
 
 ## 为什么需要 CC Session？
 
-Claude Code、Codex、Antigravity、Kimi Code、Cursor CLI 等工具都把会话数据存在本地 —— 但各有各的格式、各自的目录，回头查找全无门路。**CC Session 把所有 provider 汇到一个原生快应用里：** 阅读完整对话历史、一次性跨工具搜索、导出干净的归档，并直接在终端里恢复任意会话。
+Claude Code、Codex、Antigravity、Kimi Code、Cursor CLI、Pi 等工具都把会话数据存在本地 —— 但各有各的格式、各自的目录，回头查找全无门路。**CC Session 把所有 provider 汇到一个原生快应用里：** 阅读完整对话历史、一次性跨工具搜索、导出干净的归档，并直接在终端里恢复任意会话。
 
 > 💡 **所有本地编程会话，一个窗口搞定** —— 不用再翻 `~/.claude`、`~/.codex` 和一堆其它目录。
 
@@ -61,6 +61,7 @@ Claude Code、Codex、Antigravity、Kimi Code、Cursor CLI 等工具都把会话
 | **Cursor CLI** | JSONL + SQLite | FS | `cursor agent --resume` |
 | **OpenCode** | SQLite | 轮询 | `opencode -s` |
 | **CC-Mirror** | JSONL | FS | 按变体 |
+| **Pi** | JSONL | FS | `pi --session` |
 
 跨工具统一解析：消息、工具调用（含输入/输出）、思考/推理块、Token 用量、内嵌图片，以及源格式支持时的 Markdown、Mermaid 图表和 KaTeX 数学公式 —— 含子代理/子会话。
 

@@ -125,9 +125,10 @@ Metadata via Bridge pattern: `Provider` enum → `ProviderDescriptor` (zero-size
 | Cursor CLI  | `~/.cursor/projects/<key>/agent-transcripts/<id>/<id>.jsonl` (CLI) + `~/.cursor/acp-sessions/<id>/store.db` (ACP) | JSONL + SQLite | FS |
 | OpenCode    | `~/.local/share/opencode/opencode.db`  | SQLite | Poll  |
 | CC-Mirror   | `~/.cc-mirror/{variant}/config/projects/**/*.jsonl` | JSONL | FS |
+| Pi          | `~/.pi/agent/sessions/*/*.jsonl`       | JSONL  | FS    |
 
 Tool names mapped to canonical set per provider: {Bash, Edit, Read, Write, Glob, Grep, Agent, Plan}.
-Resume: Claude `--resume`, Codex `resume`, Antigravity `agy --conversation <id>`, Kimi `--session`, Cursor `agent --resume=<id>`, OpenCode `-s`.
+Resume: Claude `--resume`, Codex `resume`, Antigravity `agy --conversation <id>`, Kimi `--session`, Cursor `agent --resume=<id>`, OpenCode `-s`, Pi `--session <id>`.
 
 ## Testing
 
@@ -142,7 +143,7 @@ Resume: Claude `--resume`, Codex `resume`, Antigravity `agy --conversation <id>`
 - **Images**: `[Image: source: ...]` in content; persistent cache at `app_data_dir/images/{sha256}.ext`; `read_image_base64` reads from cache when original is deleted
 - **Tool merge**: `call_id` pairs tool calls with results into single tool message
 - **Tool metadata**: Rust `build_tool_metadata` + `enrich_tool_metadata` attaches summary, structured result, status, and result_kind to each tool call
-- **Subagents**: `parent_id` links children; "Open" button for providers with separate files (Claude, Codex, Kimi, CC-Mirror, Antigravity). Antigravity links children via UUID scan over parent transcript content (`db/sync.rs::find_uuids`).
+- **Subagents**: `parent_id` links children; "Open" button for providers with separate files (Claude, Codex, Kimi, CC-Mirror, Antigravity). Antigravity links children via UUID scan over parent transcript content (`db/sync.rs::find_uuids`). Pi child sessions resolve `parentSession` file paths by reading the parent JSONL header id.
 - **Provider snapshots**: backend derives provider label/color/order/watch strategy/path info; frontend consumes via `providerSnapshots` store
 - **Trash**: `TrashMeta.parent_id` cascades restore/delete; `is_session_dir()` prevents shared dir deletion
 - **Immutable state**: All Solid.js store updates use spread (`{ ...prev, field: newValue }`). Never mutate in place.
@@ -158,6 +159,7 @@ Resume: Claude `--resume`, Codex `resume`, Antigravity `agy --conversation <id>`
 - **Kimi**: kimi-code 0.1.1+ uses two coexisting wire formats — **migrated** (only `metadata` + `context.append_message` lines, role=user/assistant/tool with `content[]`+`toolCalls[]`, NO per-line `time`) and **native** (`context.append_loop_event` carrying `content.part`/`tool.call`/`tool.result`/`step.*` plus `usage.record`, per-line `time` in epoch ms). Project path comes from `~/.kimi-code/session_index.jsonl` (`sessionId`/`sessionDir` → `workDir`). Subagents are SEPARATE files (`agents/agent-N/wire.jsonl`) linked via `state.json.agents[].parentAgentId`; subagent session id = `<parent-dir>:<agent-name>`. Resume command requires the full prefixed dir name (`session_<uuid>` or `ses_<uuid>`) — bare UUIDs return "Session not found"; resume for subagents falls back to the parent. Image parts use `imageUrl` (camelCase) in native format and `image_url` (snake_case) in migrated.
 - **Cursor**: THREE kinds of sessions live under `~/.cursor/`: (1) CLI (`agent` binary), (2) IDE (Composer), and (3) ACP (third-party editors via Agent Client Protocol). CLI + IDE share the `~/.cursor/projects/<key>/agent-transcripts/<id>/<id>.jsonl` layout — we filter with `~/.cursor/chats/<md5>/<id>/store.db` as a whitelist (only IDs with a store.db are CLI; the rest are IDE and dropped). ACP sessions live separately at `~/.cursor/acp-sessions/<id>/{meta.json, store.db}` with **no JSONL on disk** — every chat message is JSON-encoded inside the store.db's content-addressed blobs, reachable by recursively walking the root protobuf blob's `0A 20 <hash>` length-prefixed references. Both CLI and ACP store.db files share the same recovery pipeline for workspace path (`<user_info>` blob), model alias (`meta.lastUsedModel`, default → "Auto"), and inline pasted images (hex-encoded JPEG/PNG in user-blob `content[].image.hex`, dumped to the shared image cache and substituted into `[Image #N]` placeholders). Subagents (`Task`/`Subagent` tool spawns) live at `<sessionId>/subagents/<subagentId>.jsonl` and title themselves from the parent's tool_use `description` matched by `prompt`. `<user_query>` strips, `<image_files>` rewrites to `[Image: source: <path>]`, `<think>…</think>` promotes to `MessageRole::System` with `[thinking]` prefix, `[REDACTED]` placeholders are dropped. Tool arg keys (`path`, `old_str`, `glob_pattern`) canonicalise to `file_path`/`old_string`/`pattern`. ACP messages use slightly different part names than JSONL CLI: `tool-call`/`toolName`/`toolCallId`/`args` (vs `tool_use`/`name`/`id`/`input`), `tool-result` (vs folded into next assistant turn), and `redacted-reasoning` parts that we silently drop. **Token usage is NOT persisted by Cursor** — neither JSONL nor store.db nor any side channel. Usage fields remain 0.
 - **CC-Mirror**: Multi-variant under `~/.cc-mirror/`, sanitized variant names.
+- **Pi**: Header `timestamp` is RFC3339 and becomes `created_at`; message timestamps are Unix milliseconds. `updated_at` must match Pi's session-list `modified` semantics: latest user/assistant message timestamp only, not tool result/model/label timestamps and not file mtime. Branch state follows the active parent chain; compaction uses `firstKeptEntryId`/legacy `firstKeptEntryIndex` to trim context. `parentSession` may be a JSONL file path, so resolve it to the parent header id and clear stale parent links on reparse.
 - **Antigravity**: Steps stream (`USER_INPUT`, `PLANNER_RESPONSE`, tool result). Workspace path comes from `~/.gemini/antigravity-cli/history.jsonl` (`conversationId → workspace`). Subagent linkage isn't in the file — derived from UUID scan during DB upsert, so child sessions inherit `project_path` / `parent_id` only after the parent has been indexed.
 - **compact_string**: Rust `compact_string(s, limit)` truncates with `…` suffix. Do NOT use truncated summaries for matching/comparison — always extract full values from source JSON.
 - **Session ID vs agentId**: Claude subagent files are `agent-{id}.jsonl`, so session ID = `agent-{id}` but tool result `agentId` = `{id}` (no prefix). Always match both forms.
@@ -166,7 +168,7 @@ Resume: Claude `--resume`, Codex `resume`, Antigravity `agy --conversation <id>`
 
 - Commits: conventional commits (`feat:`, `fix:`, `refactor:`, `chore:`, `test:`, `docs:`). One logical change per commit.
 - i18n: all user-facing strings via `t()`. No literal English in JSX.
-- Colors: Claude `#d97757`, Codex `#10b981`, Antigravity `#4f46e5`, OpenCode `#06b6d4`, Kimi `#1783ff`, Cursor `#3b82f6`, CC-Mirror `#f472b6`.
+- Colors: Claude `#d97757`, Codex `#10b981`, Antigravity `#4f46e5`, OpenCode `#06b6d4`, Kimi `#1783ff`, Cursor `#3b82f6`, CC-Mirror `#f472b6`, Pi `#000000` light / `#ffffff` dark.
 
 ## Code Standards
 
