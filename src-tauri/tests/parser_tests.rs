@@ -4,7 +4,7 @@ use std::path::PathBuf;
 use tempfile::TempDir;
 
 use cc_session_lib::models::{Message, MessageKind, MessageRole, Provider};
-use cc_session_lib::provider::SessionProvider;
+use cc_session_lib::provider::{SessionProvider, SourceState};
 use cc_session_lib::providers::antigravity::AntigravityProvider;
 use cc_session_lib::providers::claude::ClaudeProvider;
 use cc_session_lib::providers::codex::CodexProvider;
@@ -1610,6 +1610,107 @@ fn opencode_parses_session_meta() {
     assert_eq!(meta.created_at, 1705321200);
     // time_updated ms → epoch seconds
     assert_eq!(meta.updated_at, 1705324800);
+    assert!(meta.file_size_bytes > 0);
+    assert!(
+        sessions[0].source_mtime > 0,
+        "OpenCode source mtime must be recorded for incremental polling"
+    );
+}
+
+#[test]
+fn opencode_incremental_scan_skips_unchanged_database() {
+    let (_dir, db_path) = create_opencode_test_db();
+    let provider = OpenCodeProvider::with_db_path(db_path.clone());
+
+    let sessions = provider.scan_all().expect("scan_all must succeed");
+    assert_eq!(sessions.len(), 1);
+    let known = std::collections::HashMap::from([(
+        db_path.to_string_lossy().to_string(),
+        SourceState {
+            size: sessions[0].meta.file_size_bytes,
+            mtime: sessions[0].source_mtime,
+        },
+    )]);
+
+    let outcome = provider
+        .scan_incremental(&known)
+        .expect("scan_incremental must succeed");
+
+    assert!(outcome.parsed.is_empty());
+    assert_eq!(
+        outcome.unchanged_source_paths,
+        vec![db_path.to_string_lossy().to_string()]
+    );
+}
+
+#[test]
+fn opencode_incremental_scan_ignores_empty_wal_mtime() {
+    let (_dir, db_path) = create_opencode_test_db();
+    let provider = OpenCodeProvider::with_db_path(db_path.clone());
+
+    let sessions = provider.scan_all().expect("scan_all must succeed");
+    let known = std::collections::HashMap::from([(
+        db_path.to_string_lossy().to_string(),
+        SourceState {
+            size: sessions[0].meta.file_size_bytes,
+            mtime: sessions[0].source_mtime,
+        },
+    )]);
+
+    fs::write(format!("{}-wal", db_path.to_string_lossy()), b"")
+        .expect("empty WAL marker must be written");
+
+    let outcome = provider
+        .scan_incremental(&known)
+        .expect("scan_incremental must succeed");
+
+    assert!(outcome.parsed.is_empty());
+    assert_eq!(
+        outcome.unchanged_source_paths,
+        vec![db_path.to_string_lossy().to_string()]
+    );
+}
+
+#[test]
+fn opencode_incremental_scan_reparses_changed_database() {
+    let (_dir, db_path) = create_opencode_test_db();
+    let provider = OpenCodeProvider::with_db_path(db_path.clone());
+
+    let sessions = provider.scan_all().expect("initial scan must succeed");
+    let known = std::collections::HashMap::from([(
+        db_path.to_string_lossy().to_string(),
+        SourceState {
+            size: sessions[0].meta.file_size_bytes,
+            mtime: sessions[0].source_mtime,
+        },
+    )]);
+
+    {
+        use rusqlite::{params, Connection};
+        let conn = Connection::open(&db_path).expect("open test db");
+        conn.execute(
+            "INSERT INTO session
+                 (id, title, directory, project_id, parent_id, time_created, time_updated)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+            params![
+                "session-oc-0002",
+                "Changed OpenCode Session",
+                "/home/user/my-opencode-project",
+                "proj-001",
+                Option::<String>::None,
+                1705324900000_i64,
+                1705324900000_i64,
+            ],
+        )
+        .expect("insert changed session");
+    }
+
+    let outcome = provider
+        .scan_incremental(&known)
+        .expect("changed scan must succeed");
+
+    assert_eq!(outcome.parsed.len(), 2);
+    assert!(outcome.unchanged_source_paths.is_empty());
 }
 
 #[test]

@@ -9,10 +9,12 @@ use super::UsageEvent;
 /// needs to be re-parsed on the next scan. Mirrors what the `sessions`
 /// table stores per-row in `(file_size_bytes, source_mtime)`.
 ///
-/// `mtime` is epoch seconds (i64) — matches `SystemTime → UNIX_EPOCH`
-/// duration and survives JSON / SQLite roundtrips without precision
-/// loss for the resolution we care about (sub-second changes always
-/// also bump file size on append-only JSONL).
+/// For JSONL providers, `mtime` is epoch seconds (i64) — matches
+/// `SystemTime → UNIX_EPOCH` duration and survives JSON / SQLite
+/// roundtrips without precision loss for the resolution we care about
+/// (sub-second changes always also bump file size on append-only JSONL).
+/// DB-backed providers may store a provider-specific freshness value in
+/// the same slot when they need tighter resolution.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct SourceState {
     pub size: u64,
@@ -102,11 +104,12 @@ pub struct ParsedSession {
     /// own `compute_token_stats` override; empty for providers whose token
     /// counts are attached to messages directly.
     pub usage_events: Vec<UsageEvent>,
-    /// Last-modified epoch seconds of the source file at parse time.
+    /// Provider freshness value for the source at parse time.
     /// 0 means "unknown" — the indexer treats that as "always reparse".
-    /// Used together with `meta.file_size_bytes` to short-circuit
-    /// unchanged files in `scan_incremental`. Not exposed to the
-    /// frontend; never read outside the indexer / sync layer.
+    /// JSONL providers store epoch seconds; DB-backed providers may store a
+    /// tighter-resolution value. Used together with `meta.file_size_bytes` to
+    /// short-circuit unchanged sources in `scan_incremental`. Not exposed to
+    /// the frontend; never read outside the indexer / sync layer.
     pub source_mtime: i64,
 }
 

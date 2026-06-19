@@ -2,14 +2,15 @@ mod parser;
 
 use parser::{build_assistant_messages, build_user_messages, ms_to_rfc3339};
 
-use std::path::PathBuf;
+use std::collections::HashMap;
+use std::path::{Path, PathBuf};
 
 use rusqlite::{params, Connection};
 
 use crate::models::{Message, Provider, SessionMeta};
 use crate::provider::{
-    ChildPlan, DeletionPlan, FileAction, LoadedSession, ParsedSession, ProviderError,
-    SessionProvider,
+    ChildPlan, DeletionPlan, FileAction, LoadedSession, ParsedSession, ProviderError, ScanOutcome,
+    SessionProvider, SourceState,
 };
 use crate::provider_utils::session_title;
 
@@ -77,12 +78,58 @@ impl OpenCodeProvider {
             &self.db_path,
             rusqlite::OpenFlags::SQLITE_OPEN_READ_WRITE | rusqlite::OpenFlags::SQLITE_OPEN_NO_MUTEX,
         )?;
-        // Ensure WAL reads see latest committed data
-        let _ = conn.pragma_update(None, "journal_mode", "wal");
         // Prevent accidental writes to external database
         let _ = conn.pragma_update(None, "query_only", "ON");
         Ok(conn)
     }
+
+    fn db_state(&self) -> Result<SourceState, ProviderError> {
+        opencode_db_state(&self.db_path)
+    }
+}
+
+fn file_state(path: &Path) -> Result<SourceState, ProviderError> {
+    let metadata = std::fs::metadata(path)?;
+    let mtime = metadata
+        .modified()?
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_err(|error| {
+            ProviderError::Parse(format!(
+                "OpenCode database mtime is before UNIX epoch for '{}': {error}",
+                path.display()
+            ))
+        })
+        .and_then(|duration| {
+            i64::try_from(duration.as_nanos()).map_err(|error| {
+                ProviderError::Parse(format!(
+                    "OpenCode database mtime is too large for '{}': {error}",
+                    path.display()
+                ))
+            })
+        })?;
+    Ok(SourceState {
+        size: metadata.len(),
+        mtime,
+    })
+}
+
+fn opencode_db_state(db_path: &Path) -> Result<SourceState, ProviderError> {
+    let db_state = file_state(db_path)?;
+    let wal_path = PathBuf::from(format!("{}-wal", db_path.to_string_lossy()));
+    let wal_state = match file_state(&wal_path) {
+        // Opening SQLite can touch an empty WAL without changing visible data.
+        Ok(state) if state.size == 0 => SourceState { size: 0, mtime: 0 },
+        Ok(state) => state,
+        Err(ProviderError::Io(error)) if error.kind() == std::io::ErrorKind::NotFound => {
+            SourceState { size: 0, mtime: 0 }
+        }
+        Err(error) => return Err(error),
+    };
+
+    Ok(SourceState {
+        size: db_state.size.saturating_add(wal_state.size),
+        mtime: db_state.mtime.max(wal_state.mtime),
+    })
 }
 
 impl SessionProvider for OpenCodeProvider {
@@ -102,6 +149,7 @@ impl SessionProvider for OpenCodeProvider {
         if !self.db_path.exists() {
             return Ok(Vec::new());
         }
+        let db_state = self.db_state()?;
         let conn = self.open_db()?;
 
         // Batch: message counts per session (avoids N+1)
@@ -350,7 +398,7 @@ impl SessionProvider for OpenCodeProvider {
                             created_at: time_created / 1000,
                             updated_at: time_updated / 1000,
                             message_count: msg_count,
-                            file_size_bytes: 0,
+                            file_size_bytes: db_state.size,
                             source_path: self.db_path.to_string_lossy().to_string(),
                             is_sidechain,
                             variant_name: None,
@@ -377,13 +425,38 @@ impl SessionProvider for OpenCodeProvider {
                         parse_warning_count: 0,
                         child_session_ids: Vec::new(),
                         usage_events: Vec::new(),
-                        source_mtime: 0,
+                        source_mtime: db_state.mtime,
                     }
                 },
             )
             .collect();
 
         Ok(sessions)
+    }
+
+    fn scan_incremental(
+        &self,
+        known: &HashMap<String, SourceState>,
+    ) -> Result<ScanOutcome, ProviderError> {
+        if !self.db_path.exists() {
+            return Ok(ScanOutcome::default());
+        }
+
+        let source_path = self.db_path.to_string_lossy().to_string();
+        let current = self.db_state()?;
+        if let Some(previous) = known.get(&source_path) {
+            if *previous == current {
+                return Ok(ScanOutcome {
+                    parsed: Vec::new(),
+                    unchanged_source_paths: vec![source_path],
+                });
+            }
+        }
+
+        Ok(ScanOutcome {
+            parsed: self.scan_all()?,
+            unchanged_source_paths: Vec::new(),
+        })
     }
 
     fn load_messages(

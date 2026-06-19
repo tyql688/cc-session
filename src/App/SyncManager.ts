@@ -124,8 +124,10 @@ export function createSyncManager(callbacks: SyncCallbacks) {
 
     syncInFlight = true;
     try {
-      await reindexProviders(providers);
-      await refreshTree();
+      const indexedCount = await reindexProviders(providers);
+      if (indexedCount > 0) {
+        await refreshTree();
+      }
     } catch (e) {
       // Polling failures are transient — log for diagnosis, don't toast
       console.debug("poll sync failed:", e);

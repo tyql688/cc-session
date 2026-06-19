@@ -103,7 +103,13 @@ impl Indexer {
             total += self.commit_provider_work(work, aggressive, &image_service)?;
         }
 
-        self.store_refresh_timestamps(filter.is_none(), now_millis)?;
+        let full_reindex = filter.is_none();
+        let parsed_any_session = total > 0;
+        self.store_refresh_timestamps(
+            full_reindex,
+            full_reindex || parsed_any_session,
+            now_millis,
+        )?;
 
         let elapsed = start.elapsed();
         log::info!(
@@ -240,12 +246,16 @@ impl Indexer {
     fn store_refresh_timestamps(
         &self,
         store_last_index_time: bool,
+        store_usage_refreshed_at: bool,
         now_millis: i64,
     ) -> ServiceResult<()> {
         if store_last_index_time {
             self.db
                 .set_meta("last_index_time", &now_millis.to_string())
                 .map_err(|e| ServiceError::StoreLastIndexTime(e.to_string()))?;
+        }
+        if !store_usage_refreshed_at {
+            return Ok(());
         }
         self.db
             .set_meta("usage_last_refreshed_at", &chrono::Utc::now().to_rfc3339())
