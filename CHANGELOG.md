@@ -7,6 +7,13 @@ versioned with [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.5.3] - 2026-06-22
+
+### Fixed
+
+- OpenCode no longer keeps a CPU core busy while idle: background polling skips re-reading and re-indexing the session database when nothing has changed (#19)
+- OpenCode sessions no longer show the whole database size as their file size; it now reads as unknown instead of repeating the same misleading value on every session (df62aaf)
+
 ## [0.5.0] - 2026-06-10
 
 ### Added
