@@ -80,9 +80,9 @@ pub trait SessionProvider: Send + Sync {
     ///
     /// Default implementation parses everything (matches `scan_all`) —
     /// providers whose data lives in per-session files override this to
-    /// take advantage of the snapshot. Providers backed by a single
-    /// database file (OpenCode) inherit the default since per-file
-    /// mtime is meaningless for them.
+    /// take advantage of the snapshot. OpenCode (single SQLite file) also
+    /// overrides it, comparing a combined main-db + non-empty-WAL
+    /// `(size, mtime)` so idle polls short-circuit without reparsing.
     fn scan_incremental(
         &self,
         _known: &HashMap<String, SourceState>,

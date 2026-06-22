@@ -14,7 +14,10 @@ use super::UsageEvent;
 /// roundtrips without precision loss for the resolution we care about
 /// (sub-second changes always also bump file size on append-only JSONL).
 /// DB-backed providers may store a provider-specific freshness value in
-/// the same slot when they need tighter resolution.
+/// the same slot when they need tighter resolution (OpenCode stores
+/// nanoseconds + the whole-DB size). Each such provider only ever compares
+/// the value it wrote — via its own `scan_incremental`, never the
+/// seconds-based `source_state_matches` helper — so the units never mix.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct SourceState {
     pub size: u64,
