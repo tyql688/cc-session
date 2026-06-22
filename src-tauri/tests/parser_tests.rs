@@ -1713,6 +1713,96 @@ fn opencode_incremental_scan_reparses_changed_database() {
     assert!(outcome.unchanged_source_paths.is_empty());
 }
 
+/// The mechanism the incremental fix actually exists for: a real OpenCode write
+/// lands in the `-wal` file first (the main `opencode.db` is untouched until a
+/// checkpoint). A held-open writer with autocheckpoint disabled reproduces that,
+/// so `scan_incremental` must detect the WAL-only growth via the combined
+/// (main + non-empty-WAL) `(size, mtime)`. The other incremental tests run
+/// against a rollback-journal DB and never exercise this path.
+#[test]
+fn opencode_incremental_scan_detects_wal_only_append() {
+    use rusqlite::{params, Connection};
+
+    let (_dir, db_path) = create_opencode_test_db();
+    let provider = OpenCodeProvider::with_db_path(db_path.clone());
+
+    // Switch the DB to WAL mode and keep the writer open with autocheckpoint
+    // disabled, so appended rows stay in `<db>-wal` and are never folded back
+    // into the main file for the duration of the test.
+    let writer = Connection::open(&db_path).expect("open writer");
+    writer
+        .pragma_update(None, "journal_mode", "wal")
+        .expect("enable WAL");
+    writer
+        .pragma_update(None, "wal_autocheckpoint", 0)
+        .expect("disable autocheckpoint");
+
+    let insert_session = |conn: &Connection, id: &str, ts: i64| {
+        conn.execute(
+            "INSERT INTO session
+                 (id, title, directory, project_id, parent_id, time_created, time_updated)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+            params![
+                id,
+                "WAL session",
+                "/home/user/my-opencode-project",
+                "proj-001",
+                Option::<String>::None,
+                ts,
+                ts,
+            ],
+        )
+        .expect("insert session");
+    };
+
+    // Establish a non-empty WAL baseline, so freshness is computed against a
+    // populated `-wal` exactly like a long-running OpenCode process.
+    insert_session(&writer, "session-oc-wal-base", 1705324900000);
+    let wal_path = PathBuf::from(format!("{}-wal", db_path.to_string_lossy()));
+    assert!(
+        fs::metadata(&wal_path).map(|m| m.len()).unwrap_or(0) > 0,
+        "writer must leave a non-empty WAL"
+    );
+
+    let baseline = provider.scan_all().expect("baseline scan must succeed");
+    assert_eq!(baseline.len(), 2, "original + WAL-baseline session");
+    let known = std::collections::HashMap::from([(
+        db_path.to_string_lossy().to_string(),
+        SourceState {
+            size: baseline[0].meta.file_size_bytes,
+            mtime: baseline[0].source_mtime,
+        },
+    )]);
+
+    // No write since the baseline → unchanged, even though the WAL is non-empty
+    // and a writer is still attached.
+    let unchanged = provider
+        .scan_incremental(&known)
+        .expect("scan_incremental must succeed");
+    assert!(
+        unchanged.parsed.is_empty(),
+        "a stable non-empty WAL must read as unchanged"
+    );
+    assert_eq!(
+        unchanged.unchanged_source_paths,
+        vec![db_path.to_string_lossy().to_string()]
+    );
+
+    // A fresh append lands only in the WAL (no checkpoint) → must be detected.
+    insert_session(&writer, "session-oc-wal-append", 1705325000000);
+    let changed = provider
+        .scan_incremental(&known)
+        .expect("scan_incremental must succeed");
+    assert_eq!(
+        changed.parsed.len(),
+        3,
+        "WAL-only append must be detected and reparsed"
+    );
+    assert!(changed.unchanged_source_paths.is_empty());
+
+    drop(writer);
+}
+
 #[test]
 fn opencode_parses_message_count() {
     let (_dir, db_path) = create_opencode_test_db();
