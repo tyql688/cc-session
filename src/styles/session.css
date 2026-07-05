@@ -268,7 +268,13 @@
   flex-direction: column;
   justify-content: center;
   gap: 2px;
+  overflow-y: auto;
+  scrollbar-width: none;
   pointer-events: auto;
+}
+
+.timeline-minimap-strip::-webkit-scrollbar {
+  display: none;
 }
 
 .timeline-minimap-row {
