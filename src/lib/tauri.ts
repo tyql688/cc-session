@@ -109,33 +109,136 @@ export async function invokeWithFallback<T, D = T>(
   }
 }
 
+type CommandSpec<Args, Result> = {
+  args: Args;
+  result: Result;
+};
+
+type BackendCommandMap = {
+  reindex: CommandSpec<undefined, number>;
+  reindex_providers: CommandSpec<
+    { providers: string[]; aggressive: boolean },
+    number
+  >;
+  sync_sources: CommandSpec<{ paths: string[] }, number>;
+  get_tree: CommandSpec<undefined, TreeNode[]>;
+  get_session_detail: CommandSpec<{ sessionId: string }, SessionDetail>;
+  get_session_meta: CommandSpec<{ sessionId: string }, SessionMeta>;
+  get_session_open_window: CommandSpec<
+    { sessionId: string; offset: number; limit: number },
+    SessionOpenWindow
+  >;
+  get_session_messages_window: CommandSpec<
+    { sessionId: string; offset: number; limit: number },
+    SessionMessagesWindow
+  >;
+  get_session_turn_outline: CommandSpec<
+    { sessionId: string },
+    SessionTurnOutlineEntry[]
+  >;
+  cancel_session_load: CommandSpec<{ sessionId: string }, void>;
+  resolve_persisted_output: CommandSpec<{ path: string }, string>;
+  search_sessions: CommandSpec<{ filters: SearchFilters }, SearchResult[]>;
+  rename_session: CommandSpec<{ sessionId: string; newTitle: string }, void>;
+  get_session_count: CommandSpec<undefined, number>;
+  export_session: CommandSpec<
+    { sessionId: string; format: string; outputPath: string },
+    void
+  >;
+  get_child_sessions: CommandSpec<{ parentId: string }, SessionMeta[]>;
+  get_child_session_counts: CommandSpec<
+    { parentIds: string[] },
+    Record<string, number>
+  >;
+  get_index_stats: CommandSpec<undefined, IndexStats>;
+  get_pricing_catalog_status: CommandSpec<undefined, PricingCatalogStatus>;
+  refresh_pricing_catalog: CommandSpec<undefined, PricingCatalogStatus>;
+  start_rebuild_index: CommandSpec<undefined, boolean>;
+  clear_index: CommandSpec<undefined, void>;
+  start_refresh_usage: CommandSpec<undefined, boolean>;
+  clear_usage_stats: CommandSpec<undefined, void>;
+  detect_terminal: CommandSpec<undefined, string>;
+  get_provider_snapshots: CommandSpec<undefined, ProviderSnapshot[]>;
+  resume_session: CommandSpec<{ sessionId: string; terminalApp: string }, void>;
+  get_resume_command: CommandSpec<{ sessionId: string }, string>;
+  trash_session: CommandSpec<{ sessionId: string }, void>;
+  list_trash: CommandSpec<undefined, TrashMeta[]>;
+  restore_session: CommandSpec<{ trashId: string }, void>;
+  empty_trash: CommandSpec<undefined, void>;
+  permanent_delete_trash: CommandSpec<{ trashId: string }, void>;
+  trash_sessions_batch: CommandSpec<{ items: string[] }, BatchResult>;
+  restore_sessions_batch: CommandSpec<{ items: string[] }, BatchResult>;
+  permanent_delete_trash_batch: CommandSpec<{ items: string[] }, BatchResult>;
+  list_recent_sessions: CommandSpec<{ limit: number }, SessionMeta[]>;
+  toggle_favorite: CommandSpec<{ sessionId: string }, boolean>;
+  list_favorites: CommandSpec<undefined, SessionMeta[]>;
+  is_favorite: CommandSpec<{ sessionId: string }, boolean>;
+  read_image_base64: CommandSpec<{ path: string }, string>;
+  read_tool_result_text: CommandSpec<{ path: string }, string>;
+  open_in_folder: CommandSpec<{ path: string }, void>;
+  export_sessions_batch: CommandSpec<
+    { items: string[]; format: string; outputPath: string },
+    void
+  >;
+  get_usage_stats: CommandSpec<
+    {
+      providers: string[];
+      rangeDays: number | null;
+      dateStart: string | null;
+      dateEnd: string | null;
+    },
+    UsageStats
+  >;
+  get_activity_calendar: CommandSpec<
+    { providers: string[]; dateStart: string; dateEnd: string },
+    ActivityCalendar
+  >;
+  get_today_cost: CommandSpec<undefined, number>;
+  get_today_tokens: CommandSpec<undefined, TodayTokens>;
+};
+
+type CommandArgs<Name extends keyof BackendCommandMap> =
+  BackendCommandMap[Name]["args"];
+type CommandResultFor<Name extends keyof BackendCommandMap> =
+  BackendCommandMap[Name]["result"];
+
+export function invokeCommand<Name extends keyof BackendCommandMap>(
+  name: Name,
+  ...args: CommandArgs<Name> extends undefined ? [] : [CommandArgs<Name>]
+): Promise<CommandResultFor<Name>> {
+  if (args.length === 0) {
+    return invoke<CommandResultFor<Name>>(name);
+  }
+  return invoke<CommandResultFor<Name>>(name, args[0]);
+}
+
 export async function reindex(): Promise<number> {
-  return invoke<number>("reindex");
+  return invokeCommand("reindex");
 }
 
 export async function reindexProviders(
   providers: string[],
   aggressive = false,
 ): Promise<number> {
-  return invoke<number>("reindex_providers", { providers, aggressive });
+  return invokeCommand("reindex_providers", { providers, aggressive });
 }
 
 export async function syncSources(paths: string[]): Promise<number> {
-  return invoke<number>("sync_sources", { paths });
+  return invokeCommand("sync_sources", { paths });
 }
 
 export async function getTree(): Promise<TreeNode[]> {
-  return invoke<TreeNode[]>("get_tree");
+  return invokeCommand("get_tree");
 }
 
 export async function getSessionDetail(
   sessionId: string,
 ): Promise<SessionDetail> {
-  return invoke<SessionDetail>("get_session_detail", { sessionId });
+  return invokeCommand("get_session_detail", { sessionId });
 }
 
 export async function getSessionMeta(sessionId: string): Promise<SessionMeta> {
-  return invoke<SessionMeta>("get_session_meta", { sessionId });
+  return invokeCommand("get_session_meta", { sessionId });
 }
 
 /// Fetch session metadata plus the initial message window in one IPC.
@@ -144,7 +247,7 @@ export async function getSessionOpenWindow(
   offset: number,
   limit: number,
 ): Promise<SessionOpenWindow> {
-  return invoke<SessionOpenWindow>("get_session_open_window", {
+  return invokeCommand("get_session_open_window", {
     sessionId,
     offset,
     limit,
@@ -158,7 +261,7 @@ export async function getSessionMessagesWindow(
   offset: number,
   limit: number,
 ): Promise<SessionMessagesWindow> {
-  return invoke<SessionMessagesWindow>("get_session_messages_window", {
+  return invokeCommand("get_session_messages_window", {
     sessionId,
     offset,
     limit,
@@ -168,34 +271,34 @@ export async function getSessionMessagesWindow(
 export async function getSessionTurnOutline(
   sessionId: string,
 ): Promise<SessionTurnOutlineEntry[]> {
-  return invoke<SessionTurnOutlineEntry[]>("get_session_turn_outline", {
+  return invokeCommand("get_session_turn_outline", {
     sessionId,
   });
 }
 
 export async function cancelSessionLoad(sessionId: string): Promise<void> {
-  return invoke<void>("cancel_session_load", { sessionId });
+  return invokeCommand("cancel_session_load", { sessionId });
 }
 
 export async function resolvePersistedOutput(path: string): Promise<string> {
-  return invoke<string>("resolve_persisted_output", { path });
+  return invokeCommand("resolve_persisted_output", { path });
 }
 
 export async function searchSessions(
   filters: SearchFilters,
 ): Promise<SearchResult[]> {
-  return invoke<SearchResult[]>("search_sessions", { filters });
+  return invokeCommand("search_sessions", { filters });
 }
 
 export async function renameSession(
   sessionId: string,
   newTitle: string,
 ): Promise<void> {
-  return invoke<void>("rename_session", { sessionId, newTitle });
+  return invokeCommand("rename_session", { sessionId, newTitle });
 }
 
 export async function getSessionCount(): Promise<number> {
-  return invoke<number>("get_session_count");
+  return invokeCommand("get_session_count");
 }
 
 export async function exportSession(
@@ -203,7 +306,7 @@ export async function exportSession(
   format: string,
   outputPath: string,
 ): Promise<void> {
-  return invoke<void>("export_session", {
+  return invokeCommand("export_session", {
     sessionId,
     format,
     outputPath,
@@ -213,130 +316,130 @@ export async function exportSession(
 export async function getChildSessions(
   parentId: string,
 ): Promise<SessionMeta[]> {
-  return invoke<SessionMeta[]>("get_child_sessions", { parentId });
+  return invokeCommand("get_child_sessions", { parentId });
 }
 
 export async function getChildSessionCounts(
   parentIds: string[],
 ): Promise<Record<string, number>> {
-  return invoke<Record<string, number>>("get_child_session_counts", {
+  return invokeCommand("get_child_session_counts", {
     parentIds,
   });
 }
 
 export async function getIndexStats(): Promise<IndexStats> {
-  return invoke<IndexStats>("get_index_stats");
+  return invokeCommand("get_index_stats");
 }
 
 export async function getPricingCatalogStatus(): Promise<PricingCatalogStatus> {
-  return invoke<PricingCatalogStatus>("get_pricing_catalog_status");
+  return invokeCommand("get_pricing_catalog_status");
 }
 
 export async function refreshPricingCatalog(): Promise<PricingCatalogStatus> {
-  return invoke<PricingCatalogStatus>("refresh_pricing_catalog");
+  return invokeCommand("refresh_pricing_catalog");
 }
 
 export async function startRebuildIndex(): Promise<boolean> {
-  return invoke<boolean>("start_rebuild_index");
+  return invokeCommand("start_rebuild_index");
 }
 
 export async function clearIndex(): Promise<void> {
-  return invoke<void>("clear_index");
+  return invokeCommand("clear_index");
 }
 
 export async function startRefreshUsage(): Promise<boolean> {
-  return invoke<boolean>("start_refresh_usage");
+  return invokeCommand("start_refresh_usage");
 }
 
 export async function clearUsageStats(): Promise<void> {
-  return invoke<void>("clear_usage_stats");
+  return invokeCommand("clear_usage_stats");
 }
 
 export async function detectTerminal(): Promise<string> {
-  return invoke<string>("detect_terminal");
+  return invokeCommand("detect_terminal");
 }
 
 export async function getProviderSnapshots(): Promise<ProviderSnapshot[]> {
-  return invoke<ProviderSnapshot[]>("get_provider_snapshots");
+  return invokeCommand("get_provider_snapshots");
 }
 
 export async function resumeSession(
   sessionId: string,
   terminalApp: string,
 ): Promise<void> {
-  return invoke<void>("resume_session", { sessionId, terminalApp });
+  return invokeCommand("resume_session", { sessionId, terminalApp });
 }
 
 export async function getResumeCommand(sessionId: string): Promise<string> {
-  return invoke<string>("get_resume_command", { sessionId });
+  return invokeCommand("get_resume_command", { sessionId });
 }
 
 export async function trashSession(sessionId: string): Promise<void> {
-  return invoke<void>("trash_session", { sessionId });
+  return invokeCommand("trash_session", { sessionId });
 }
 
 export async function listTrash(): Promise<TrashMeta[]> {
-  return invoke<TrashMeta[]>("list_trash");
+  return invokeCommand("list_trash");
 }
 
 export async function restoreSession(trashId: string): Promise<void> {
-  return invoke<void>("restore_session", { trashId });
+  return invokeCommand("restore_session", { trashId });
 }
 
 export async function emptyTrash(): Promise<void> {
-  return invoke<void>("empty_trash");
+  return invokeCommand("empty_trash");
 }
 
 export async function permanentDeleteTrash(trashId: string): Promise<void> {
-  return invoke<void>("permanent_delete_trash", { trashId });
+  return invokeCommand("permanent_delete_trash", { trashId });
 }
 
 export async function trashSessionsBatch(
   items: string[],
 ): Promise<BatchResult> {
-  return invoke<BatchResult>("trash_sessions_batch", { items });
+  return invokeCommand("trash_sessions_batch", { items });
 }
 
 export async function restoreSessionsBatch(
   items: string[],
 ): Promise<BatchResult> {
-  return invoke<BatchResult>("restore_sessions_batch", { items });
+  return invokeCommand("restore_sessions_batch", { items });
 }
 
 export async function permanentDeleteTrashBatch(
   items: string[],
 ): Promise<BatchResult> {
-  return invoke<BatchResult>("permanent_delete_trash_batch", { items });
+  return invokeCommand("permanent_delete_trash_batch", { items });
 }
 
 export async function listRecentSessions(
   limit: number,
 ): Promise<SessionMeta[]> {
-  return invoke<SessionMeta[]>("list_recent_sessions", { limit });
+  return invokeCommand("list_recent_sessions", { limit });
 }
 
 export async function toggleFavorite(sessionId: string): Promise<boolean> {
-  return invoke<boolean>("toggle_favorite", { sessionId });
+  return invokeCommand("toggle_favorite", { sessionId });
 }
 
 export async function listFavorites(): Promise<SessionMeta[]> {
-  return invoke<SessionMeta[]>("list_favorites");
+  return invokeCommand("list_favorites");
 }
 
 export async function isFavorite(sessionId: string): Promise<boolean> {
-  return invoke<boolean>("is_favorite", { sessionId });
+  return invokeCommand("is_favorite", { sessionId });
 }
 
 export async function readImageBase64(path: string): Promise<string> {
-  return invoke<string>("read_image_base64", { path });
+  return invokeCommand("read_image_base64", { path });
 }
 
 export async function readToolResultText(path: string): Promise<string> {
-  return invoke<string>("read_tool_result_text", { path });
+  return invokeCommand("read_tool_result_text", { path });
 }
 
 export async function openInFolder(path: string): Promise<void> {
-  return invoke<void>("open_in_folder", { path });
+  return invokeCommand("open_in_folder", { path });
 }
 
 export async function exportSessionsBatch(
@@ -344,7 +447,7 @@ export async function exportSessionsBatch(
   format: string,
   outputPath: string,
 ): Promise<void> {
-  return invoke<void>("export_sessions_batch", { items, format, outputPath });
+  return invokeCommand("export_sessions_batch", { items, format, outputPath });
 }
 
 export async function getUsageStats(
@@ -353,7 +456,7 @@ export async function getUsageStats(
   dateStart: string | null = null,
   dateEnd: string | null = null,
 ): Promise<UsageStats> {
-  return invoke<UsageStats>("get_usage_stats", {
+  return invokeCommand("get_usage_stats", {
     providers,
     rangeDays,
     dateStart,
@@ -368,7 +471,7 @@ export async function getActivityCalendar(
   dateStart: string,
   dateEnd: string,
 ): Promise<ActivityCalendar> {
-  return invoke<ActivityCalendar>("get_activity_calendar", {
+  return invokeCommand("get_activity_calendar", {
     providers,
     dateStart,
     dateEnd,
@@ -376,7 +479,7 @@ export async function getActivityCalendar(
 }
 
 export async function getTodayCost(): Promise<number> {
-  return invoke<number>("get_today_cost");
+  return invokeCommand("get_today_cost");
 }
 
 export interface TodayTokens {
@@ -387,5 +490,5 @@ export interface TodayTokens {
 }
 
 export async function getTodayTokens(): Promise<TodayTokens> {
-  return invoke<TodayTokens>("get_today_tokens");
+  return invokeCommand("get_today_tokens");
 }
