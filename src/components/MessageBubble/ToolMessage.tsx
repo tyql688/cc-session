@@ -27,6 +27,7 @@ import {
   parseToolJsonObject,
 } from "../../lib/subagent";
 import { parseContent } from "../../lib/message-content";
+import { SubagentInline } from "./SubagentInline";
 import {
   ImagePreview,
   LocalImage,
@@ -112,6 +113,8 @@ export function ToolMessage(props: {
   parentSessionId?: string;
 }) {
   const { t } = useI18n();
+  // Const copy so truthiness narrowing survives into nested JSX callbacks.
+  const parentSessionId = props.parentSessionId;
   const [expanded, setExpanded] = useState(false);
   const [previewImage, setPreviewImage] = useState<{
     src: string;
@@ -496,6 +499,37 @@ export function ToolMessage(props: {
               })}
             </div>
           )}
+          {parentSessionId &&
+            isAgent() &&
+            SUBAGENT_FILE_PROVIDERS.has(props.provider ?? "") &&
+            (agentChildIds ? (
+              agentChildIds.map((childId, i) => (
+                <SubagentInline
+                  key={childId}
+                  parentSessionId={parentSessionId}
+                  request={{
+                    agentId: childId,
+                    description: agentChildPrompts[i] || agentDescription,
+                  }}
+                  label={
+                    agentChildPrompts[i]
+                      ? compactSubagentLabel(agentChildPrompts[i])
+                      : childId
+                  }
+                />
+              ))
+            ) : canOpenSingleAgent &&
+              (agentNickname || agentId || agentDescription) ? (
+              <SubagentInline
+                parentSessionId={parentSessionId}
+                request={{
+                  agentId,
+                  nickname: agentNickname,
+                  description: agentDescription ?? summary,
+                }}
+                label={null}
+              />
+            ) : null)}
         </>
       )}
       {previewImage && (

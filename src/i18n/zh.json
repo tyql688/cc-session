@@ -240,7 +240,9 @@
     "openSubagentNamed": "↗ 打开 {name}",
     "openSubagentTitle": "打开子会话",
     "openSubagentTitleId": "打开子会话 {id}",
-    "loadFullResult": "加载完整结果"
+    "loadFullResult": "加载完整结果",
+    "subagentPreview": "子会话预览",
+    "openInTab": "在标签页打开"
   },
   "markdown": {
     "copyCode": "复制代码",

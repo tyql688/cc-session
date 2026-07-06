@@ -240,7 +240,9 @@
     "openSubagentNamed": "↗ Open {name}",
     "openSubagentTitle": "Open subagent session",
     "openSubagentTitleId": "Open subagent {id}",
-    "loadFullResult": "Load full result"
+    "loadFullResult": "Load full result",
+    "subagentPreview": "Preview subagent",
+    "openInTab": "Open in tab"
   },
   "markdown": {
     "copyCode": "Copy Code",
