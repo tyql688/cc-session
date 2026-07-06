@@ -1,4 +1,5 @@
-import { createSignal, createEffect, Show } from "solid-js";
+import type React from "react";
+import { useEffect, useRef, useState } from "react";
 import { useI18n } from "../i18n/index";
 
 export function InputDialog(props: {
@@ -12,28 +13,28 @@ export function InputDialog(props: {
   onCancel: () => void;
 }) {
   const { t } = useI18n();
-  const [value, setValue] = createSignal(props.defaultValue);
-  let inputRef: HTMLInputElement | undefined;
+  const [value, setValue] = useState(props.defaultValue);
+  const inputRef = useRef<HTMLInputElement>(null);
 
-  createEffect(() => {
+  useEffect(() => {
     if (props.open) {
       setValue(props.defaultValue);
       // Focus input after render
       requestAnimationFrame(() => {
-        inputRef?.focus();
-        inputRef?.select();
+        inputRef.current?.focus();
+        inputRef.current?.select();
       });
     }
-  });
+  }, [props.open, props.defaultValue]);
 
-  function handleOverlayClick(e: MouseEvent) {
+  function handleOverlayClick(e: React.MouseEvent) {
     if (e.target === e.currentTarget) {
       props.onCancel();
     }
   }
 
   function handleSubmit() {
-    const trimmed = value().trim();
+    const trimmed = value.trim();
     if (trimmed && trimmed !== props.defaultValue) {
       props.onConfirm(trimmed);
     } else {
@@ -41,7 +42,7 @@ export function InputDialog(props: {
     }
   }
 
-  function handleKeyDown(e: KeyboardEvent) {
+  function handleKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
     if (e.key === "Enter") {
       e.preventDefault();
       handleSubmit();
@@ -51,41 +52,41 @@ export function InputDialog(props: {
   }
 
   return (
-    <Show when={props.open}>
+    props.open && (
       <div
-        class="modal-overlay"
+        className="modal-overlay"
         onClick={handleOverlayClick}
         role="dialog"
         aria-modal="true"
         aria-label={props.title}
       >
-        <div class="modal-card">
-          <div class="modal-title">{props.title}</div>
-          <div class="modal-message">{props.label}</div>
+        <div className="modal-card">
+          <div className="modal-title">{props.title}</div>
+          <div className="modal-message">{props.label}</div>
           <input
             ref={inputRef}
-            class="modal-input"
+            className="modal-input"
             type="text"
-            value={value()}
+            value={value}
             maxLength={props.maxLength}
-            onInput={(e) => setValue(e.currentTarget.value)}
+            onChange={(e) => setValue(e.currentTarget.value)}
             onKeyDown={handleKeyDown}
           />
           {props.maxLength !== undefined && (
-            <div class="modal-input-counter">
-              {value().length}/{props.maxLength}
+            <div className="modal-input-counter">
+              {value.length}/{props.maxLength}
             </div>
           )}
-          <div class="modal-actions">
-            <button class="btn btn-secondary" onClick={props.onCancel}>
+          <div className="modal-actions">
+            <button className="btn btn-secondary" onClick={props.onCancel}>
               {t("confirm.cancel")}
             </button>
-            <button class="btn btn-primary" onClick={handleSubmit}>
+            <button className="btn btn-primary" onClick={handleSubmit}>
               {props.confirmLabel}
             </button>
           </div>
         </div>
       </div>
-    </Show>
+    )
   );
 }

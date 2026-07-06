@@ -1,5 +1,4 @@
-import { For } from "solid-js";
-import { toasts, type Toast } from "../stores/toast";
+import { type Toast, useToastStore } from "../stores/toast";
 
 function toastIcon(type: Toast["type"]): string {
   switch (type) {
@@ -13,16 +12,15 @@ function toastIcon(type: Toast["type"]): string {
 }
 
 export function ToastContainer() {
+  const toasts = useToastStore((s) => s.toasts);
   return (
-    <div class="toast-container">
-      <For each={toasts()}>
-        {(t) => (
-          <div class={`toast toast-${t.type}`}>
-            <span class="toast-icon">{toastIcon(t.type)}</span>
-            <span class="toast-message">{t.message}</span>
-          </div>
-        )}
-      </For>
+    <div className="toast-container">
+      {toasts.map((t) => (
+        <div key={t.id} className={`toast toast-${t.type}`}>
+          <span className="toast-icon">{toastIcon(t.type)}</span>
+          <span className="toast-message">{t.message}</span>
+        </div>
+      ))}
     </div>
   );
 }

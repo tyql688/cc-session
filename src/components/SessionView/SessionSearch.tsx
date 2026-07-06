@@ -1,19 +1,19 @@
-import type { Accessor, Setter } from "solid-js";
-import { createEffect, createSignal, on, onCleanup } from "solid-js";
+import type { Dispatch, SetStateAction } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useI18n } from "../../i18n/index";
 import { getMarksInVisualOrder } from "./search-utils";
 
 export interface SessionSearchProps {
-  sessionSearch: Accessor<string>;
-  activeSessionSearch: Accessor<string>;
-  setSessionSearch: Setter<string>;
-  searchMatchIdx: Accessor<number>;
-  setSearchMatchIdx: Setter<number>;
-  setSearchBarOpen: Setter<boolean>;
+  sessionSearch: string;
+  activeSessionSearch: string;
+  setSessionSearch: Dispatch<SetStateAction<string>>;
+  searchMatchIdx: number;
+  setSearchMatchIdx: Dispatch<SetStateAction<number>>;
+  setSearchBarOpen: Dispatch<SetStateAction<boolean>>;
   // Accessor (not a bare ref) so it reflects the live messages container even
   // when the search bar is opened before the messages div mounts (Cmd+F during
   // load). Passing the ref by value would capture `undefined` permanently.
-  messagesRef: Accessor<HTMLDivElement | undefined>;
+  messagesRef: () => HTMLDivElement | undefined;
 }
 
 export function SessionSearch(props: SessionSearchProps) {
@@ -23,7 +23,7 @@ export function SessionSearch(props: SessionSearchProps) {
   // `<mark>` nodes — the SAME list navigation cycles over. Counting matching
   // entries once each (the old behavior) disagreed with Next/Prev because a
   // single entry (esp. merged tool groups) holds many marks.
-  const [markCount, setMarkCount] = createSignal(0);
+  const [markCount, setMarkCount] = useState(0);
 
   function currentMarks(): Element[] {
     return getMarksInVisualOrder(props.messagesRef());
@@ -38,31 +38,29 @@ export function SessionSearch(props: SessionSearchProps) {
   // triggers, so we wait two animation frames (mirroring the focus-first-match
   // timing in createSessionSearch) before reading the DOM. raf handles are kept
   // in closure vars so a single onCleanup cancels whichever frame is pending.
-  let pendingRaf: number | undefined;
+  const pendingRafRef = useRef<number | undefined>(undefined);
   const clearPendingRaf = () => {
-    if (pendingRaf !== undefined) cancelAnimationFrame(pendingRaf);
-    pendingRaf = undefined;
+    if (pendingRafRef.current !== undefined)
+      cancelAnimationFrame(pendingRafRef.current);
+    pendingRafRef.current = undefined;
   };
-  onCleanup(clearPendingRaf);
+  useEffect(() => clearPendingRaf, []);
 
-  createEffect(
-    on(
-      () => props.activeSessionSearch().trim(),
-      (active) => {
-        clearPendingRaf();
-        if (!active) {
-          setMarkCount(0);
-          return;
-        }
-        pendingRaf = requestAnimationFrame(() => {
-          pendingRaf = requestAnimationFrame(() => {
-            pendingRaf = undefined;
-            recountMarks();
-          });
-        });
-      },
-    ),
-  );
+  useEffect(() => {
+    const active = props.activeSessionSearch.trim();
+    clearPendingRaf();
+    if (!active) {
+      setMarkCount(0);
+      return;
+    }
+    pendingRafRef.current = requestAnimationFrame(() => {
+      pendingRafRef.current = requestAnimationFrame(() => {
+        pendingRafRef.current = undefined;
+        recountMarks();
+      });
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [props.activeSessionSearch]);
 
   function navigateSearchMatch(delta: number) {
     const marks = currentMarks();
@@ -75,8 +73,7 @@ export function SessionSearch(props: SessionSearchProps) {
       .messagesRef()
       ?.querySelector("mark.search-active")
       ?.classList.remove("search-active");
-    const newIdx =
-      (props.searchMatchIdx() + delta + marks.length) % marks.length;
+    const newIdx = (props.searchMatchIdx + delta + marks.length) % marks.length;
     props.setSearchMatchIdx(newIdx);
     const target = marks[newIdx];
     target.classList.add("search-active");
@@ -84,13 +81,13 @@ export function SessionSearch(props: SessionSearchProps) {
   }
 
   return (
-    <div class="session-search-bar">
+    <div className="session-search-bar">
       <input
-        class="session-search-input"
+        className="session-search-input"
         type="text"
         placeholder={t("session.searchPlaceholder")}
-        value={props.sessionSearch()}
-        onInput={(e) => {
+        value={props.sessionSearch}
+        onChange={(e) => {
           props.setSessionSearch(e.currentTarget.value);
           props.setSearchMatchIdx(0);
         }}
@@ -108,33 +105,33 @@ export function SessionSearch(props: SessionSearchProps) {
           }
         }}
       />
-      <span class="session-search-count">
+      <span className="session-search-count">
         {(() => {
-          const query = props.sessionSearch().trim();
-          const activeQuery = props.activeSessionSearch().trim();
+          const query = props.sessionSearch.trim();
+          const activeQuery = props.activeSessionSearch.trim();
           if (!query) return "";
           if (query !== activeQuery) return "";
-          const total = markCount();
-          if (total > 0) return `${props.searchMatchIdx() + 1}/${total}`;
+          const total = markCount;
+          if (total > 0) return `${props.searchMatchIdx + 1}/${total}`;
           return t("session.searchNoMatch");
         })()}
       </span>
       <button
-        class="session-search-nav"
+        className="session-search-nav"
         onClick={() => navigateSearchMatch(-1)}
         aria-label={t("common.previousMatch")}
       >
         &uarr;
       </button>
       <button
-        class="session-search-nav"
+        className="session-search-nav"
         onClick={() => navigateSearchMatch(1)}
         aria-label={t("common.nextMatch")}
       >
         &darr;
       </button>
       <button
-        class="session-search-nav"
+        className="session-search-nav"
         onClick={() => {
           props.setSearchBarOpen(false);
           props.setSessionSearch("");

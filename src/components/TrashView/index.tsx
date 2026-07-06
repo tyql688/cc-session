@@ -1,15 +1,15 @@
-import { For, Show } from "solid-js";
 import type { TreeNode } from "../../lib/types";
 import { ProviderDot } from "../icons";
 import { useI18n } from "../../i18n/index";
 import { formatAbsoluteTime } from "../../lib/formatters";
 import { ConfirmDialog } from "../ConfirmDialog";
-import { createTrashState } from "./hooks";
+import { useTrashState } from "./hooks";
 
 export function TrashView(props: { onRefreshTree: () => void }) {
   const { t } = useI18n();
   const {
     trashItems,
+    trashLoading,
     trashError,
     tree,
     itemMap,
@@ -30,258 +30,253 @@ export function TrashView(props: { onRefreshTree: () => void }) {
     handleEmptyTrash,
     handleRestoreAll,
     handleDeleteAll,
-  } = createTrashState(() => props.onRefreshTree());
+  } = useTrashState(props.onRefreshTree);
 
   function TrashTreeNode(nodeProps: { node: TreeNode; depth: number }) {
-    const isLeaf = () => nodeProps.node.node_type === "session";
-    const isGroup = () => nodeProps.node.node_type === "project";
-    const expanded = () => expandedIds().has(nodeProps.node.id);
-    const trashItem = () => itemMap().get(nodeProps.node.id);
+    const { node, depth } = nodeProps;
+    const isLeaf = node.node_type === "session";
+    const isGroup = node.node_type === "project";
+    const expanded = expandedIds.has(node.id);
+    const trashItem = itemMap.get(node.id);
 
     return (
       <div>
         <div
-          class={`trash-tree-node${isLeaf() ? " trash-tree-leaf" : " trash-tree-group"}`}
-          style={{ "padding-left": `${nodeProps.depth * 16 + 12}px` }}
-          onClick={() => !isLeaf() && toggleExpanded(nodeProps.node.id)}
+          className={`trash-tree-node${isLeaf ? " trash-tree-leaf" : " trash-tree-group"}`}
+          style={{ paddingLeft: `${depth * 16 + 12}px` }}
+          onClick={() => !isLeaf && toggleExpanded(node.id)}
         >
-          <Show when={!isLeaf()}>
+          {!isLeaf && (
             <svg
               width="14"
               height="14"
               fill="none"
               stroke="currentColor"
-              stroke-width="1.5"
+              strokeWidth="1.5"
               viewBox="0 0 24 24"
-              class={`chevron${expanded() ? " expanded" : ""}`}
+              className={`chevron${expanded ? " expanded" : ""}`}
             >
               <polyline points="9 18 15 12 9 6" />
             </svg>
-          </Show>
-          <Show when={isLeaf()}>
-            <span class="trash-tree-spacer" />
-          </Show>
+          )}
+          {isLeaf && <span className="trash-tree-spacer" />}
 
-          <Show
-            when={
-              nodeProps.node.node_type === "provider" && nodeProps.node.provider
-            }
-          >
-            <ProviderDot provider={nodeProps.node.provider!} />
-          </Show>
-          <Show when={isGroup()}>
-            <span class="trash-tree-icon">
+          {node.node_type === "provider" && node.provider && (
+            <ProviderDot provider={node.provider} />
+          )}
+          {isGroup && (
+            <span className="trash-tree-icon">
               <svg
                 width="14"
                 height="14"
                 fill="none"
                 stroke="currentColor"
-                stroke-width="1.5"
+                strokeWidth="1.5"
                 viewBox="0 0 24 24"
               >
                 <path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z" />
               </svg>
             </span>
-          </Show>
-          <Show when={isLeaf()}>
-            <span class="trash-tree-icon trash-tree-icon-session">
+          )}
+          {isLeaf && (
+            <span className="trash-tree-icon trash-tree-icon-session">
               <svg
                 width="14"
                 height="14"
                 fill="none"
                 stroke="currentColor"
-                stroke-width="1.5"
+                strokeWidth="1.5"
                 viewBox="0 0 24 24"
               >
                 <path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z" />
               </svg>
             </span>
-          </Show>
+          )}
 
           <span
-            class={`trash-tree-label${nodeProps.node.node_type === "provider" ? " bold" : ""}`}
-            title={isLeaf() ? nodeProps.node.label : undefined}
+            className={`trash-tree-label${node.node_type === "provider" ? " bold" : ""}`}
+            title={isLeaf ? node.label : undefined}
           >
-            {isLeaf()
-              ? nodeProps.node.label.length > 50
-                ? `${nodeProps.node.label.slice(0, 47)}...`
-                : nodeProps.node.label
-              : nodeProps.node.label}
+            {isLeaf
+              ? node.label.length > 50
+                ? `${node.label.slice(0, 47)}...`
+                : node.label
+              : node.label}
           </span>
 
-          <Show when={!isLeaf() && nodeProps.node.count > 0}>
-            <span class="tree-node-count">{nodeProps.node.count}</span>
-            <div class="trash-tree-actions">
-              <button
-                class="trash-action-btn trash-action-btn-restore"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setRestoreTarget(nodeProps.node);
-                  setShowRestoreConfirm(true);
-                }}
-                title={t("trash.restore")}
-              >
-                <svg
-                  width="12"
-                  height="12"
-                  fill="none"
-                  stroke="currentColor"
-                  stroke-width="2"
-                  viewBox="0 0 24 24"
+          {!isLeaf && node.count > 0 && (
+            <>
+              <span className="tree-node-count">{node.count}</span>
+              <div className="trash-tree-actions">
+                <button
+                  className="trash-action-btn trash-action-btn-restore"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setRestoreTarget(node);
+                    setShowRestoreConfirm(true);
+                  }}
+                  title={t("trash.restore")}
                 >
-                  <polyline points="1 4 1 10 7 10" />
-                  <path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10" />
-                </svg>
-              </button>
-              <button
-                class="trash-action-btn trash-action-btn-danger"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setDeleteAllTarget(nodeProps.node);
-                  setShowDeleteAllConfirm(true);
-                }}
-                title={t("trash.permanentDelete")}
-              >
-                <svg
-                  width="12"
-                  height="12"
-                  fill="none"
-                  stroke="currentColor"
-                  stroke-width="2"
-                  viewBox="0 0 24 24"
+                  <svg
+                    width="12"
+                    height="12"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    viewBox="0 0 24 24"
+                  >
+                    <polyline points="1 4 1 10 7 10" />
+                    <path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10" />
+                  </svg>
+                </button>
+                <button
+                  className="trash-action-btn trash-action-btn-danger"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setDeleteAllTarget(node);
+                    setShowDeleteAllConfirm(true);
+                  }}
+                  title={t("trash.permanentDelete")}
                 >
-                  <line x1="18" y1="6" x2="6" y2="18" />
-                  <line x1="6" y1="6" x2="18" y2="18" />
-                </svg>
-              </button>
-            </div>
-          </Show>
+                  <svg
+                    width="12"
+                    height="12"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    viewBox="0 0 24 24"
+                  >
+                    <line x1="18" y1="6" x2="6" y2="18" />
+                    <line x1="6" y1="6" x2="18" y2="18" />
+                  </svg>
+                </button>
+              </div>
+            </>
+          )}
 
-          <Show when={isLeaf() && trashItem()}>
-            <span class="trash-tree-date">
-              {formatAbsoluteTime(trashItem()!.trashed_at)}
-            </span>
-            <div class="trash-tree-actions">
-              <button
-                class="trash-action-btn trash-action-btn-restore"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  handleRestore(nodeProps.node.id);
-                }}
-                title={t("trash.restore")}
-              >
-                <svg
-                  width="12"
-                  height="12"
-                  fill="none"
-                  stroke="currentColor"
-                  stroke-width="2"
-                  viewBox="0 0 24 24"
+          {isLeaf && trashItem && (
+            <>
+              <span className="trash-tree-date">
+                {formatAbsoluteTime(trashItem.trashed_at)}
+              </span>
+              <div className="trash-tree-actions">
+                <button
+                  className="trash-action-btn trash-action-btn-restore"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleRestore(node.id);
+                  }}
+                  title={t("trash.restore")}
                 >
-                  <polyline points="1 4 1 10 7 10" />
-                  <path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10" />
-                </svg>
-              </button>
-              <button
-                class="trash-action-btn trash-action-btn-danger"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  handlePermanentDelete(nodeProps.node.id);
-                }}
-                title={t("trash.permanentDelete")}
-              >
-                <svg
-                  width="12"
-                  height="12"
-                  fill="none"
-                  stroke="currentColor"
-                  stroke-width="2"
-                  viewBox="0 0 24 24"
+                  <svg
+                    width="12"
+                    height="12"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    viewBox="0 0 24 24"
+                  >
+                    <polyline points="1 4 1 10 7 10" />
+                    <path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10" />
+                  </svg>
+                </button>
+                <button
+                  className="trash-action-btn trash-action-btn-danger"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handlePermanentDelete(node.id);
+                  }}
+                  title={t("trash.permanentDelete")}
                 >
-                  <line x1="18" y1="6" x2="6" y2="18" />
-                  <line x1="6" y1="6" x2="18" y2="18" />
-                </svg>
-              </button>
-            </div>
-          </Show>
+                  <svg
+                    width="12"
+                    height="12"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    viewBox="0 0 24 24"
+                  >
+                    <line x1="18" y1="6" x2="6" y2="18" />
+                    <line x1="6" y1="6" x2="18" y2="18" />
+                  </svg>
+                </button>
+              </div>
+            </>
+          )}
         </div>
 
-        <Show when={expanded() && !isLeaf()}>
-          <For each={nodeProps.node.children}>
-            {(child) => (
-              <TrashTreeNode node={child} depth={nodeProps.depth + 1} />
-            )}
-          </For>
-        </Show>
+        {expanded && !isLeaf && (
+          <>
+            {node.children.map((child) => (
+              <TrashTreeNode key={child.id} node={child} depth={depth + 1} />
+            ))}
+          </>
+        )}
       </div>
     );
   }
 
   return (
-    <div class="trash-view">
-      <div class="trash-header">
-        <span class="trash-title">
+    <div className="trash-view">
+      <div className="trash-header">
+        <span className="trash-title">
           {t("trash.title")}
-          <Show when={trashItems() && trashItems()!.length > 0}>
-            <span class="trash-count"> ({trashItems()!.length})</span>
-          </Show>
+          {trashItems && trashItems.length > 0 && (
+            <span className="trash-count"> ({trashItems.length})</span>
+          )}
         </span>
-        <Show when={trashItems() && trashItems()!.length > 0}>
+        {trashItems && trashItems.length > 0 && (
           <button
-            class="trash-empty-btn"
+            className="trash-empty-btn"
             onClick={() => setShowEmptyConfirm(true)}
           >
             {t("trash.emptyTrash")}
           </button>
-        </Show>
+        )}
       </div>
 
-      <div class="trash-list">
-        <Show
-          when={
-            !trashItems.loading &&
-            !trashError() &&
-            trashItems() &&
-            trashItems()!.length === 0
-          }
-        >
-          <div class="trash-empty-state">
-            <svg
-              class="icon-faded"
-              width="32"
-              height="32"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="1"
-              viewBox="0 0 24 24"
-            >
-              <polyline points="3 6 5 6 21 6" />
-              <path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2" />
-            </svg>
-            <span>{t("trash.empty")}</span>
-          </div>
-        </Show>
+      <div className="trash-list">
+        {!trashLoading &&
+          !trashError &&
+          trashItems &&
+          trashItems.length === 0 && (
+            <div className="trash-empty-state">
+              <svg
+                className="icon-faded"
+                width="32"
+                height="32"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1"
+                viewBox="0 0 24 24"
+              >
+                <polyline points="3 6 5 6 21 6" />
+                <path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2" />
+              </svg>
+              <span>{t("trash.empty")}</span>
+            </div>
+          )}
 
-        <Show when={trashItems.loading}>
-          <div class="trash-empty-state">
-            <div class="spinner spinner-sm" />
+        {trashLoading && (
+          <div className="trash-empty-state">
+            <div className="spinner spinner-sm" />
           </div>
-        </Show>
+        )}
 
-        <Show when={!trashItems.loading && trashError()}>
-          <div class="empty-state">
-            <p class="empty-state-text">{t("error.title")}</p>
-            <p class="empty-state-hint">{trashError()}</p>
+        {!trashLoading && trashError && (
+          <div className="empty-state">
+            <p className="empty-state-text">{t("error.title")}</p>
+            <p className="empty-state-hint">{trashError}</p>
           </div>
-        </Show>
+        )}
 
-        <For each={tree()}>
-          {(node) => <TrashTreeNode node={node} depth={0} />}
-        </For>
+        {tree.map((node) => (
+          <TrashTreeNode key={node.id} node={node} depth={0} />
+        ))}
       </div>
 
       <ConfirmDialog
-        open={showEmptyConfirm()}
+        open={showEmptyConfirm}
         title={t("trash.emptyTrash")}
         message={t("trash.emptyTrashConfirm")}
         confirmLabel={t("trash.emptyTrash")}
@@ -291,12 +286,12 @@ export function TrashView(props: { onRefreshTree: () => void }) {
       />
 
       <ConfirmDialog
-        open={showDeleteAllConfirm()}
+        open={showDeleteAllConfirm}
         title={t("trash.permanentDelete")}
         message={t("trash.deleteAllConfirm")}
         confirmLabel={t("trash.permanentDelete")}
         onConfirm={async () => {
-          const node = deleteAllTarget();
+          const node = deleteAllTarget;
           setShowDeleteAllConfirm(false);
           setDeleteAllTarget(null);
           if (node) await handleDeleteAll(node);
@@ -309,12 +304,12 @@ export function TrashView(props: { onRefreshTree: () => void }) {
       />
 
       <ConfirmDialog
-        open={showRestoreConfirm()}
+        open={showRestoreConfirm}
         title={t("trash.restore")}
         message={t("trash.restoreAllConfirm")}
         confirmLabel={t("trash.restore")}
         onConfirm={async () => {
-          const node = restoreTarget();
+          const node = restoreTarget;
           setShowRestoreConfirm(false);
           setRestoreTarget(null);
           if (node) await handleRestoreAll(node);

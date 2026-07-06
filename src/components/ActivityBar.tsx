@@ -1,10 +1,10 @@
-import { For, type Component } from "solid-js";
+import type { JSX } from "react";
 import { useI18n } from "../i18n/index";
 
 interface ActivityItem {
   id: string;
   label: string;
-  icon: Component;
+  icon: () => JSX.Element;
   position?: "bottom";
 }
 
@@ -15,7 +15,7 @@ function HomeIcon() {
       height="20"
       fill="none"
       stroke="currentColor"
-      stroke-width="1.5"
+      strokeWidth="1.5"
       viewBox="0 0 24 24"
     >
       <path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z" />
@@ -31,7 +31,7 @@ function StarIcon() {
       height="20"
       fill="none"
       stroke="currentColor"
-      stroke-width="1.5"
+      strokeWidth="1.5"
       viewBox="0 0 24 24"
     >
       <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
@@ -46,7 +46,7 @@ function BlockedIcon() {
       height="20"
       fill="none"
       stroke="currentColor"
-      stroke-width="1.5"
+      strokeWidth="1.5"
       viewBox="0 0 24 24"
     >
       <circle cx="12" cy="12" r="10" />
@@ -62,7 +62,7 @@ function TrashIcon() {
       height="20"
       fill="none"
       stroke="currentColor"
-      stroke-width="1.5"
+      strokeWidth="1.5"
       viewBox="0 0 24 24"
     >
       <polyline points="3 6 5 6 21 6" />
@@ -78,7 +78,7 @@ function UsageIcon() {
       height="20"
       fill="none"
       stroke="currentColor"
-      stroke-width="1.5"
+      strokeWidth="1.5"
       viewBox="0 0 24 24"
     >
       <rect x="3" y="12" width="4" height="9" rx="1" />
@@ -95,7 +95,7 @@ function SettingsIcon() {
       height="20"
       fill="none"
       stroke="currentColor"
-      stroke-width="1.5"
+      strokeWidth="1.5"
       viewBox="0 0 24 24"
     >
       <circle cx="12" cy="12" r="3" />
@@ -122,39 +122,43 @@ export function ActivityBar(props: {
       position: "bottom",
     },
   ];
-  const topItems = () => items.filter((i) => i.position !== "bottom");
-  const bottomItems = () => items.filter((i) => i.position === "bottom");
+  const topItems = items.filter((i) => i.position !== "bottom");
+  const bottomItems = items.filter((i) => i.position === "bottom");
 
   return (
-    <div class="activity-bar">
-      <div class="activity-bar-top">
-        <For each={topItems()}>
-          {(item) => (
+    <div className="activity-bar">
+      <div className="activity-bar-top">
+        {topItems.map((item) => {
+          const Icon = item.icon;
+          return (
             <button
-              class={`activity-btn${props.activeView === item.id ? " active" : ""}`}
+              key={item.id}
+              className={`activity-btn${props.activeView === item.id ? " active" : ""}`}
               onClick={() => props.onViewChange(item.id)}
               title={item.label}
               aria-label={item.label}
             >
-              <item.icon />
+              <Icon />
             </button>
-          )}
-        </For>
+          );
+        })}
       </div>
-      <div class="activity-bar-spacer" />
-      <div class="activity-bar-bottom">
-        <For each={bottomItems()}>
-          {(item) => (
+      <div className="activity-bar-spacer" />
+      <div className="activity-bar-bottom">
+        {bottomItems.map((item) => {
+          const Icon = item.icon;
+          return (
             <button
-              class={`activity-btn${props.activeView === item.id ? " active" : ""}`}
+              key={item.id}
+              className={`activity-btn${props.activeView === item.id ? " active" : ""}`}
               onClick={() => props.onViewChange(item.id)}
               title={item.label}
               aria-label={item.label}
             >
-              <item.icon />
+              <Icon />
             </button>
-          )}
-        </For>
+          );
+        })}
       </div>
     </div>
   );

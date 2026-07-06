@@ -1,32 +1,28 @@
-import {
-  createSignal,
-  createMemo,
-  onMount,
-  For,
-  Show,
-  createEffect,
-  on,
-} from "solid-js";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { listFavorites } from "../lib/tauri";
 import type { SessionMeta, SessionRef, TreeNode } from "../lib/types";
 import { useI18n } from "../i18n/index";
 import { buildFavoritesTree } from "../lib/tree-builders";
 import { toastError } from "../stores/toast";
 import { errorMessage } from "../lib/errors";
-import { favoriteVersion } from "../stores/favorites";
+import { useFavoriteVersion } from "../stores/favorites";
 import { TreeNodeComponent } from "./TreeNode";
 
 export function FavoritesView(props: {
   onOpenSession: (s: SessionRef) => void;
 }) {
   const { t } = useI18n();
-  const [favorites, setFavorites] = createSignal<SessionMeta[]>([]);
-  const [loading, setLoading] = createSignal(true);
-  const [expandedIds, setExpandedIds] = createSignal<Set<string>>(new Set());
-  const [initialized, setInitialized] = createSignal(false);
+  const [favorites, setFavorites] = useState<SessionMeta[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
+  const initializedRef = useRef(false);
+  const favoriteVersion = useFavoriteVersion();
 
-  const tree = createMemo(() =>
-    buildFavoritesTree(favorites(), t("explorer.noProject")),
+  const noProjectLabel = t("explorer.noProject");
+
+  const tree = useMemo(
+    () => buildFavoritesTree(favorites, noProjectLabel),
+    [favorites, noProjectLabel],
   );
 
   function autoExpand(nodes: TreeNode[]) {
@@ -44,11 +40,9 @@ export function FavoritesView(props: {
     try {
       const data = await listFavorites();
       setFavorites(data);
-      if (!initialized()) {
-        setExpandedIds(
-          autoExpand(buildFavoritesTree(data, t("explorer.noProject"))),
-        );
-        setInitialized(true);
+      if (!initializedRef.current) {
+        setExpandedIds(autoExpand(buildFavoritesTree(data, noProjectLabel)));
+        initializedRef.current = true;
       }
     } catch (e) {
       toastError(errorMessage(e));
@@ -57,14 +51,19 @@ export function FavoritesView(props: {
     }
   }
 
-  onMount(refresh);
+  // Initial load (mirrors Solid `onMount(refresh)`).
+  useEffect(() => {
+    void refresh();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
-  // Re-fetch when favorite version changes (e.g. toggled from Explorer or SessionView)
-  createEffect(
-    on(favoriteVersion, () => {
-      if (initialized()) refresh();
-    }),
-  );
+  // Re-fetch when favorite version changes (e.g. toggled from Explorer or
+  // SessionView). Mirrors Solid `on(favoriteVersion, ...)`: fires only on
+  // version change, and only after the initial load has completed.
+  useEffect(() => {
+    if (initializedRef.current) void refresh();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [favoriteVersion]);
 
   function toggleExpanded(nodeId: string) {
     setExpandedIds((prev) => {
@@ -76,14 +75,14 @@ export function FavoritesView(props: {
   }
 
   function isNodeExpanded(nodeId: string): boolean {
-    return expandedIds().has(nodeId);
+    return expandedIds.has(nodeId);
   }
 
   function findSession(id: string): SessionMeta | undefined {
-    return favorites().find((s) => s.id === id);
+    return favorites.find((s) => s.id === id);
   }
 
-  function handleSessionClick(_e: MouseEvent, node: TreeNode) {
+  function handleSessionClick(_e: React.MouseEvent, node: TreeNode) {
     const session = findSession(node.id);
     if (session) {
       props.onOpenSession(session);
@@ -91,55 +90,54 @@ export function FavoritesView(props: {
   }
 
   // no-op for context menus — no special behavior
-  function handleContextMenu(_e: MouseEvent, _node: TreeNode) {}
+  function handleContextMenu(_e: React.MouseEvent, _node: TreeNode) {}
 
   return (
-    <div class="favorites-view">
-      <div class="explorer-header">
+    <div className="favorites-view">
+      <div className="explorer-header">
         <span>{t("favorites.title")}</span>
-        <Show when={favorites().length > 0}>
-          <span class="count-badge">{favorites().length}</span>
-        </Show>
+        {favorites.length > 0 && (
+          <span className="count-badge">{favorites.length}</span>
+        )}
       </div>
-      <Show when={loading()}>
-        <div class="loading-center">
-          <div class="spinner spinner-sm" />
+      {loading && (
+        <div className="loading-center">
+          <div className="spinner spinner-sm" />
         </div>
-      </Show>
-      <Show when={!loading() && favorites().length === 0}>
-        <div class="empty-state">
+      )}
+      {!loading && favorites.length === 0 && (
+        <div className="empty-state">
           <svg
             width="32"
             height="32"
             fill="none"
             stroke="var(--text-tertiary)"
-            stroke-width="1.5"
+            strokeWidth="1.5"
             viewBox="0 0 24 24"
           >
             <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
           </svg>
-          <p class="empty-state-text">{t("favorites.empty")}</p>
-          <p class="empty-state-hint">{t("favorites.emptyHint")}</p>
+          <p className="empty-state-text">{t("favorites.empty")}</p>
+          <p className="empty-state-hint">{t("favorites.emptyHint")}</p>
         </div>
-      </Show>
-      <Show when={!loading() && favorites().length > 0}>
-        <div class="explorer-tree">
-          <For each={tree()}>
-            {(node) => (
-              <TreeNodeComponent
-                node={node}
-                depth={0}
-                activeSessionId={null}
-                isNodeExpanded={isNodeExpanded}
-                toggleExpanded={toggleExpanded}
-                onSessionContextMenu={(e, n, _p) => handleContextMenu(e, n)}
-                onNodeContextMenu={handleContextMenu}
-                onSessionClick={(e, n, _p) => handleSessionClick(e, n)}
-              />
-            )}
-          </For>
+      )}
+      {!loading && favorites.length > 0 && (
+        <div className="explorer-tree">
+          {tree.map((node) => (
+            <TreeNodeComponent
+              key={node.id}
+              node={node}
+              depth={0}
+              activeSessionId={null}
+              isNodeExpanded={isNodeExpanded}
+              toggleExpanded={toggleExpanded}
+              onSessionContextMenu={(e, n, _p) => handleContextMenu(e, n)}
+              onNodeContextMenu={handleContextMenu}
+              onSessionClick={(e, n, _p) => handleSessionClick(e, n)}
+            />
+          ))}
         </div>
-      </Show>
+      )}
     </div>
   );
 }

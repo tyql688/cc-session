@@ -1,5 +1,4 @@
-import { For, Show, createSignal } from "solid-js";
-import type { Accessor } from "solid-js";
+import { type CSSProperties, useState } from "react";
 import { useI18n } from "../../i18n/index";
 import type {
   HeatmapCell,
@@ -13,37 +12,37 @@ const WEEKDAY_ROWS = [0, 1, 2, 3, 4, 5, 6];
 const LEGEND_LEVELS = [0, 1, 2, 3, 4] as const;
 
 export interface ActivityHeatmapProps {
-  grid: Accessor<HeatmapGrid>;
-  metric: Accessor<HeatmapMetric>;
+  grid: HeatmapGrid;
+  metric: HeatmapMetric;
   setMetric: (metric: HeatmapMetric) => void;
-  year: Accessor<number | null>;
+  year: number | null;
   setYear: (year: number | null) => void;
-  availableYears: Accessor<number[]>;
-  loading: Accessor<boolean>;
+  availableYears: number[];
+  loading: boolean;
 }
 
 export function ActivityHeatmap(props: ActivityHeatmapProps) {
   const { t, locale } = useI18n();
-  const [hovered, setHovered] = createSignal<HeatmapCell | null>(null);
+  const [hovered, setHovered] = useState<HeatmapCell | null>(null);
 
-  const localeTag = () => (locale() === "zh" ? "zh-CN" : "en-US");
+  const localeTag = locale === "zh" ? "zh-CN" : "en-US";
 
   const monthLabel = (month: number): string =>
-    new Intl.DateTimeFormat(localeTag(), { month: "short" }).format(
+    new Intl.DateTimeFormat(localeTag, { month: "short" }).format(
       new Date(2020, month - 1, 1),
     );
 
   // GitHub labels only Mon / Wed / Fri (rows 1, 3, 5). 2023-01-01 was a Sunday.
   const weekdayLabel = (row: number): string =>
     row % 2 === 1
-      ? new Intl.DateTimeFormat(localeTag(), { weekday: "short" }).format(
+      ? new Intl.DateTimeFormat(localeTag, { weekday: "short" }).format(
           new Date(2023, 0, 1 + row),
         )
       : "";
 
   const formatDate = (iso: string): string => {
     const [y, m, d] = iso.split("-").map(Number);
-    return new Intl.DateTimeFormat(localeTag(), {
+    return new Intl.DateTimeFormat(localeTag, {
       year: "numeric",
       month: "short",
       day: "numeric",
@@ -71,137 +70,133 @@ export function ActivityHeatmap(props: ActivityHeatmapProps) {
     return `${text} ${metricNoun(metric)}`;
   };
 
-  const timeframe = (): string =>
-    props.year() === null
+  const timeframe =
+    props.year === null
       ? t("usage.activityTrailing")
-      : t("usage.activityInYear").replace("{year}", String(props.year()));
+      : t("usage.activityInYear").replace("{year}", String(props.year));
 
-  const headline = (): string =>
-    `${valueWithNoun(props.metric(), props.grid().total)} ${timeframe()}`;
+  const headline = `${valueWithNoun(props.metric, props.grid.total)} ${timeframe}`;
 
   /** "N tokens on Apr 9, 2026" — shared by the inspector line and cell titles. */
   const cellTooltip = (cell: HeatmapCell): string =>
     t("usage.activityDayTooltip")
-      .replace("{value}", valueWithNoun(props.metric(), cell.value))
+      .replace("{value}", valueWithNoun(props.metric, cell.value))
       .replace("{date}", formatDate(cell.date));
 
-  const inspectorText = (): string => {
-    const cell = hovered();
-    return cell ? cellTooltip(cell) : t("usage.activityHint");
-  };
+  const inspectorText = hovered
+    ? cellTooltip(hovered)
+    : t("usage.activityHint");
 
-  const flatCells = () => props.grid().weeks.flatMap((week) => week.cells);
-  const weekCount = () => props.grid().weeks.length;
+  const flatCells = props.grid.weeks.flatMap((week) => week.cells);
+  const weekCount = props.grid.weeks.length;
 
   return (
-    <section class="usage-card usage-heatmap-card">
-      <div class="usage-section-header">
-        <div class="usage-heatmap-heading">
-          <div class="usage-section-title">{headline()}</div>
-          <div class="usage-metric-toggle">
-            <For each={METRICS}>
-              {(metric) => (
-                <button
-                  class={`usage-metric-btn${props.metric() === metric ? " active" : ""}`}
-                  aria-pressed={props.metric() === metric}
-                  onClick={() => props.setMetric(metric)}
-                  type="button"
-                >
-                  {t(`usage.${metric}`)}
-                </button>
-              )}
-            </For>
+    <section className="usage-card usage-heatmap-card">
+      <div className="usage-section-header">
+        <div className="usage-heatmap-heading">
+          <div className="usage-section-title">{headline}</div>
+          <div className="usage-metric-toggle">
+            {METRICS.map((metric) => (
+              <button
+                key={metric}
+                className={`usage-metric-btn${props.metric === metric ? " active" : ""}`}
+                aria-pressed={props.metric === metric}
+                onClick={() => props.setMetric(metric)}
+                type="button"
+              >
+                {t(`usage.${metric}`)}
+              </button>
+            ))}
           </div>
         </div>
-        <div class="usage-heatmap-years">
+        <div className="usage-heatmap-years">
           <button
-            class={`usage-year-btn${props.year() === null ? " active" : ""}`}
-            aria-pressed={props.year() === null}
+            className={`usage-year-btn${props.year === null ? " active" : ""}`}
+            aria-pressed={props.year === null}
             onClick={() => props.setYear(null)}
             type="button"
           >
             {t("usage.activityYearTrailing")}
           </button>
-          <For each={props.availableYears()}>
-            {(year) => (
-              <button
-                class={`usage-year-btn${props.year() === year ? " active" : ""}`}
-                aria-pressed={props.year() === year}
-                onClick={() => props.setYear(year)}
-                type="button"
-              >
-                {year}
-              </button>
-            )}
-          </For>
+          {props.availableYears.map((year) => (
+            <button
+              key={year}
+              className={`usage-year-btn${props.year === year ? " active" : ""}`}
+              aria-pressed={props.year === year}
+              onClick={() => props.setYear(year)}
+              type="button"
+            >
+              {year}
+            </button>
+          ))}
         </div>
       </div>
 
-      <div class="usage-heatmap-inspector">{inspectorText()}</div>
+      <div className="usage-heatmap-inspector">{inspectorText}</div>
 
-      <Show when={weekCount() > 0}>
-        <div class="usage-heatmap-scroll">
+      {weekCount > 0 && (
+        <div className="usage-heatmap-scroll">
           <div
-            class="usage-heatmap-graph"
-            classList={{ "is-loading": props.loading() }}
+            className={`usage-heatmap-graph${props.loading ? " is-loading" : ""}`}
             role="img"
-            aria-label={headline()}
-            style={{ "--weeks": String(weekCount()) }}
+            aria-label={headline}
+            style={{ "--weeks": String(weekCount) } as CSSProperties}
           >
-            <div class="usage-heatmap-corner" aria-hidden="true" />
+            <div className="usage-heatmap-corner" aria-hidden="true" />
 
-            <div class="usage-heatmap-months">
-              <For each={props.grid().monthLabels}>
-                {(label) => (
-                  <span
-                    class="usage-heatmap-month"
-                    style={{ "grid-column-start": String(label.weekIndex + 1) }}
-                  >
-                    {monthLabel(label.month)}
-                  </span>
-                )}
-              </For>
+            <div className="usage-heatmap-months">
+              {props.grid.monthLabels.map((label) => (
+                <span
+                  key={`${label.month}-${label.weekIndex}`}
+                  className="usage-heatmap-month"
+                  style={{ gridColumnStart: String(label.weekIndex + 1) }}
+                >
+                  {monthLabel(label.month)}
+                </span>
+              ))}
             </div>
 
-            <div class="usage-heatmap-weekdays">
-              <For each={WEEKDAY_ROWS}>
-                {(row) => (
-                  <span class="usage-heatmap-weekday">{weekdayLabel(row)}</span>
-                )}
-              </For>
+            <div className="usage-heatmap-weekdays">
+              {WEEKDAY_ROWS.map((row) => (
+                <span key={row} className="usage-heatmap-weekday">
+                  {weekdayLabel(row)}
+                </span>
+              ))}
             </div>
 
-            <div class="usage-heatmap-cells">
-              <For each={flatCells()}>
-                {(cell) => (
-                  <div
-                    class="usage-heatmap-cell"
-                    classList={{ "is-empty": !cell.inRange }}
-                    data-level={cell.level}
-                    title={cell.inRange ? cellTooltip(cell) : undefined}
-                    onMouseEnter={() => {
-                      if (cell.inRange) setHovered(cell);
-                    }}
-                    onMouseLeave={() => setHovered(null)}
-                  />
-                )}
-              </For>
+            <div className="usage-heatmap-cells">
+              {flatCells.map((cell) => (
+                <div
+                  key={cell.date}
+                  className={`usage-heatmap-cell${!cell.inRange ? " is-empty" : ""}`}
+                  data-level={cell.level}
+                  title={cell.inRange ? cellTooltip(cell) : undefined}
+                  onMouseEnter={() => {
+                    if (cell.inRange) setHovered(cell);
+                  }}
+                  onMouseLeave={() => setHovered(null)}
+                />
+              ))}
             </div>
           </div>
         </div>
-      </Show>
+      )}
 
-      <div class="usage-heatmap-footer">
-        <Show when={props.grid().activeDays === 0 && !props.loading()}>
-          <span class="usage-heatmap-empty">{t("usage.activityNoData")}</span>
-        </Show>
-        <div class="usage-heatmap-legend">
+      <div className="usage-heatmap-footer">
+        {props.grid.activeDays === 0 && !props.loading && (
+          <span className="usage-heatmap-empty">
+            {t("usage.activityNoData")}
+          </span>
+        )}
+        <div className="usage-heatmap-legend">
           <span>{t("usage.activityLess")}</span>
-          <For each={LEGEND_LEVELS}>
-            {(level) => (
-              <span class="usage-heatmap-cell is-legend" data-level={level} />
-            )}
-          </For>
+          {LEGEND_LEVELS.map((level) => (
+            <span
+              key={level}
+              className="usage-heatmap-cell is-legend"
+              data-level={level}
+            />
+          ))}
           <span>{t("usage.activityMore")}</span>
         </div>
       </div>

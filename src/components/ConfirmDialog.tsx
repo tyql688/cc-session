@@ -1,4 +1,4 @@
-import { Show } from "solid-js";
+import type React from "react";
 import { useI18n } from "../i18n/index";
 
 export function ConfirmDialog(props: {
@@ -12,30 +12,30 @@ export function ConfirmDialog(props: {
 }) {
   const { t } = useI18n();
 
-  function handleOverlayClick(e: MouseEvent) {
+  function handleOverlayClick(e: React.MouseEvent) {
     if (e.target === e.currentTarget) {
       props.onCancel();
     }
   }
 
   return (
-    <Show when={props.open}>
+    props.open && (
       <div
-        class="modal-overlay"
+        className="modal-overlay"
         onClick={handleOverlayClick}
         role="dialog"
         aria-modal="true"
         aria-label={props.title}
       >
-        <div class="modal-card">
-          <div class="modal-title">{props.title}</div>
-          <div class="modal-message">{props.message}</div>
-          <div class="modal-actions">
-            <button class="btn btn-secondary" onClick={props.onCancel}>
+        <div className="modal-card">
+          <div className="modal-title">{props.title}</div>
+          <div className="modal-message">{props.message}</div>
+          <div className="modal-actions">
+            <button className="btn btn-secondary" onClick={props.onCancel}>
               {t("confirm.cancel")}
             </button>
             <button
-              class={`btn ${props.danger ? "btn-danger" : "btn-primary"}`}
+              className={`btn ${props.danger ? "btn-danger" : "btn-primary"}`}
               onClick={props.onConfirm}
             >
               {props.confirmLabel}
@@ -43,6 +43,6 @@ export function ConfirmDialog(props: {
           </div>
         </div>
       </div>
-    </Show>
+    )
   );
 }

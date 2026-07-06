@@ -1,4 +1,5 @@
-import { createSignal, Show, For } from "solid-js";
+import type React from "react";
+import { useState } from "react";
 import { save } from "@tauri-apps/plugin-dialog";
 import type { SessionMeta } from "../lib/types";
 import { exportSession } from "../lib/tauri";
@@ -21,17 +22,17 @@ export function ExportDialog(props: {
   onClose: () => void;
 }) {
   const { t } = useI18n();
-  const [format, setFormat] = createSignal<ExportFormat>("json");
-  const [exporting, setExporting] = createSignal(false);
+  const [format, setFormat] = useState<ExportFormat>("json");
+  const [exporting, setExporting] = useState(false);
 
-  function handleOverlayClick(e: MouseEvent) {
+  function handleOverlayClick(e: React.MouseEvent) {
     if (e.target === e.currentTarget) {
       props.onClose();
     }
   }
 
   async function handleExport() {
-    const selected = FORMAT_OPTIONS.find((f) => f.value === format());
+    const selected = FORMAT_OPTIONS.find((f) => f.value === format);
     if (!selected) return;
 
     try {
@@ -56,37 +57,36 @@ export function ExportDialog(props: {
   }
 
   return (
-    <Show when={props.open}>
-      <div class="modal-overlay" onClick={handleOverlayClick}>
-        <div class="modal-card">
-          <div class="modal-title">{t("export.title")}</div>
-          <div class="export-formats">
-            <For each={FORMAT_OPTIONS}>
-              {(opt) => (
-                <button
-                  class={`export-format-card ${format() === opt.value ? "active" : ""}`}
-                  onClick={() => setFormat(opt.value)}
-                >
-                  <span class="export-format-label">{t(opt.labelKey)}</span>
-                  <span class="export-format-ext">.{opt.ext}</span>
-                </button>
-              )}
-            </For>
+    props.open && (
+      <div className="modal-overlay" onClick={handleOverlayClick}>
+        <div className="modal-card">
+          <div className="modal-title">{t("export.title")}</div>
+          <div className="export-formats">
+            {FORMAT_OPTIONS.map((opt) => (
+              <button
+                key={opt.value}
+                className={`export-format-card ${format === opt.value ? "active" : ""}`}
+                onClick={() => setFormat(opt.value)}
+              >
+                <span className="export-format-label">{t(opt.labelKey)}</span>
+                <span className="export-format-ext">.{opt.ext}</span>
+              </button>
+            ))}
           </div>
-          <div class="modal-actions">
-            <button class="btn btn-secondary" onClick={props.onClose}>
+          <div className="modal-actions">
+            <button className="btn btn-secondary" onClick={props.onClose}>
               {t("confirm.cancel")}
             </button>
             <button
-              class="btn btn-primary"
+              className="btn btn-primary"
               onClick={handleExport}
-              disabled={exporting()}
+              disabled={exporting}
             >
-              {exporting() ? "..." : t("session.export")}
+              {exporting ? "..." : t("session.export")}
             </button>
           </div>
         </div>
       </div>
-    </Show>
+    )
   );
 }

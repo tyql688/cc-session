@@ -1,16 +1,16 @@
-import { createSignal } from "solid-js";
+import { type PointerEvent as ReactPointerEvent, useState } from "react";
 
 export function SplitHandle(props: {
   onResize: (deltaX: number) => void;
   onDoubleClick: () => void;
 }) {
-  const [active, setActive] = createSignal(false);
+  const [active, setActive] = useState(false);
 
-  function onPointerDown(e: PointerEvent) {
+  function onPointerDown(e: ReactPointerEvent<HTMLDivElement>) {
     e.preventDefault();
     setActive(true);
     let lastX = e.clientX;
-    const target = e.currentTarget as HTMLElement;
+    const target = e.currentTarget;
     target.setPointerCapture(e.pointerId);
 
     function onPointerMove(ev: PointerEvent) {
@@ -31,9 +31,9 @@ export function SplitHandle(props: {
 
   return (
     <div
-      class={`split-handle${active() ? " active" : ""}`}
+      className={`split-handle${active ? " active" : ""}`}
       onPointerDown={onPointerDown}
-      onDblClick={props.onDoubleClick}
+      onDoubleClick={props.onDoubleClick}
     />
   );
 }

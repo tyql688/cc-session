@@ -10,20 +10,6 @@
       "src/**/*.ts",
       "src/**/*.tsx",
       "src/**/*.css",
-      "!src/components/**",
-      "src/components/icons.tsx",
-      "src/components/CodeBlock.tsx",
-      "src/components/MermaidBlock.tsx",
-      "src/components/MergedToolRow.tsx",
-      "src/components/MessageBubble/**",
-      "src/components/SessionView/hooks.ts",
-      "src/components/SessionView/search-utils.ts",
-      "src/components/SessionView/createRoleFilter.ts",
-      "src/components/SessionView/useLiveWatch.ts",
-      "src/components/SessionView/createSessionPagination.ts",
-      "src/components/SessionView/createSessionSearch.ts",
-      "src/components/SessionView/useFavoriteSync.ts",
-      "src/components/SessionView/useSessionCommandEvents.ts",
       "!**/*.test.ts",
       "!**/*.test.tsx"
     ]
@@ -71,6 +57,9 @@
       "suspicious": {
         "noAssignInExpressions": "off",
         "noArrayIndexKey": "off"
+      },
+      "correctness": {
+        "useExhaustiveDependencies": "off"
       }
     }
   }

@@ -1,5 +1,4 @@
-import { For, Show } from "solid-js";
-import type { Accessor } from "solid-js";
+import type { CSSProperties } from "react";
 import { useI18n } from "../../i18n/index";
 import type { MaintenanceJob, ProviderSnapshot } from "../../lib/types";
 import type { CustomDateRange } from "../../stores/usageView";
@@ -12,29 +11,29 @@ export interface ProviderChipInfo {
 }
 
 export interface ToolbarProps {
-  activeRangeLabel: Accessor<string>;
-  selectedProviderCount: Accessor<number>;
-  activeMaintenanceJob: Accessor<MaintenanceJob | null>;
-  maintenanceStatusText: Accessor<string>;
+  activeRangeLabel: string;
+  selectedProviderCount: number;
+  activeMaintenanceJob: MaintenanceJob | null;
+  maintenanceStatusText: string;
 
-  rangeDays: Accessor<number | null>;
+  rangeDays: number | null;
   onRangeChange: (days: number | null) => void;
-  customRange: Accessor<CustomDateRange | null>;
+  customRange: CustomDateRange | null;
   onCustomRangeChange: (range: CustomDateRange) => void;
 
-  isRefreshingPricing: Accessor<boolean>;
+  isRefreshingPricing: boolean;
   onRefreshPricing: () => void;
   onRequestRefreshUsage: () => void;
 
-  formattedPricingUpdatedAt: Accessor<string>;
-  formattedUsageUpdatedAt: Accessor<string>;
-  pricingModelCountLabel: Accessor<string>;
-  pricingStatusError: Accessor<string | null>;
-  indexStatsError: Accessor<string | null>;
+  formattedPricingUpdatedAt: string;
+  formattedUsageUpdatedAt: string;
+  pricingModelCountLabel: string;
+  pricingStatusError: string | null;
+  indexStatsError: string | null;
 
-  scannedProviderSnapshots: Accessor<ProviderSnapshot[]>;
-  scannedProviderKeysCount: Accessor<number>;
-  allProvidersSelected: Accessor<boolean>;
+  scannedProviderSnapshots: ProviderSnapshot[];
+  scannedProviderKeysCount: number;
+  allProvidersSelected: boolean;
   isProviderSelected: (key: string) => boolean;
   onToggleProvider: (key: string) => void;
   onToggleAllProviders: () => void;
@@ -44,6 +43,7 @@ export interface ToolbarProps {
 
 export function Toolbar(props: ToolbarProps) {
   const { t } = useI18n();
+  const customRange = props.customRange;
 
   const ranges: { days: number | null; label: () => string }[] = [
     { days: 1, label: () => t("usage.rangeToday") },
@@ -58,7 +58,7 @@ export function Toolbar(props: ToolbarProps) {
   const MIN_USAGE_DATE = "2000-01-01";
 
   const enterCustomRange = () => {
-    if (props.customRange()) return;
+    if (customRange) return;
     // Seed with the last 7 days so the panel shows data immediately.
     const end = new Date();
     const start = new Date(end);
@@ -73,7 +73,7 @@ export function Toolbar(props: ToolbarProps) {
     field: keyof CustomDateRange,
     input: HTMLInputElement,
   ) => {
-    const current = props.customRange();
+    const current = customRange;
     if (!current) return;
     const value = input.value;
     if (!value || value < MIN_USAGE_DATE) {
@@ -95,172 +95,167 @@ export function Toolbar(props: ToolbarProps) {
   };
 
   return (
-    <section class="usage-card usage-toolbar-card">
-      <div class="usage-toolbar-main">
-        <div class="usage-toolbar-copy">
-          <div class="usage-title-row">
-            <h1 class="usage-title">{t("usage.title")}</h1>
-            <span class="usage-subtitle-pill">{props.activeRangeLabel()}</span>
+    <section className="usage-card usage-toolbar-card">
+      <div className="usage-toolbar-main">
+        <div className="usage-toolbar-copy">
+          <div className="usage-title-row">
+            <h1 className="usage-title">{t("usage.title")}</h1>
+            <span className="usage-subtitle-pill">
+              {props.activeRangeLabel}
+            </span>
           </div>
-          <div class="usage-toolbar-subline">
-            <span class="usage-subtitle">
-              {props.selectedProviderCount()} {t("usage.providers")}
+          <div className="usage-toolbar-subline">
+            <span className="usage-subtitle">
+              {props.selectedProviderCount} {t("usage.providers")}
             </span>
             <span
-              class={`usage-status-pill${props.activeMaintenanceJob() ? " is-active" : ""}`}
+              className={`usage-status-pill${props.activeMaintenanceJob ? " is-active" : ""}`}
             >
-              <span class="usage-status-dot" />
-              <span>{props.maintenanceStatusText()}</span>
+              <span className="usage-status-dot" />
+              <span>{props.maintenanceStatusText}</span>
             </span>
           </div>
         </div>
-        <div class="usage-toolbar-actions">
-          <div class="usage-range-group">
-            <For each={ranges}>
-              {(range) => {
-                const active = () =>
-                  props.customRange() === null &&
-                  props.rangeDays() === range.days;
-                return (
-                  <button
-                    class={`usage-range-btn${active() ? " active" : ""}`}
-                    aria-pressed={active()}
-                    onClick={() => props.onRangeChange(range.days)}
-                    type="button"
-                  >
-                    {range.label()}
-                  </button>
-                );
-              }}
-            </For>
+        <div className="usage-toolbar-actions">
+          <div className="usage-range-group">
+            {ranges.map((range) => {
+              const active =
+                customRange === null && props.rangeDays === range.days;
+              return (
+                <button
+                  key={String(range.days)}
+                  className={`usage-range-btn${active ? " active" : ""}`}
+                  aria-pressed={active}
+                  onClick={() => props.onRangeChange(range.days)}
+                  type="button"
+                >
+                  {range.label()}
+                </button>
+              );
+            })}
             <button
-              class={`usage-range-btn${props.customRange() ? " active" : ""}`}
-              aria-pressed={props.customRange() !== null}
+              className={`usage-range-btn${customRange ? " active" : ""}`}
+              aria-pressed={customRange !== null}
               onClick={enterCustomRange}
               type="button"
             >
               {t("usage.rangeCustom")}
             </button>
           </div>
-          <Show when={props.customRange()}>
-            {(range) => (
-              <div class="usage-custom-range">
-                <input
-                  type="date"
-                  class="usage-date-input"
-                  aria-label={t("usage.customRangeStart")}
-                  value={range().start}
-                  min={MIN_USAGE_DATE}
-                  max={range().end}
-                  onChange={(e) => updateCustomRange("start", e.currentTarget)}
-                />
-                <span class="usage-custom-range-sep">~</span>
-                <input
-                  type="date"
-                  class="usage-date-input"
-                  aria-label={t("usage.customRangeEnd")}
-                  value={range().end}
-                  min={range().start}
-                  onChange={(e) => updateCustomRange("end", e.currentTarget)}
-                />
-              </div>
-            )}
-          </Show>
+          {customRange && (
+            <div className="usage-custom-range">
+              <input
+                type="date"
+                className="usage-date-input"
+                aria-label={t("usage.customRangeStart")}
+                value={customRange.start}
+                min={MIN_USAGE_DATE}
+                max={customRange.end}
+                onChange={(e) => updateCustomRange("start", e.currentTarget)}
+              />
+              <span className="usage-custom-range-sep">~</span>
+              <input
+                type="date"
+                className="usage-date-input"
+                aria-label={t("usage.customRangeEnd")}
+                value={customRange.end}
+                min={customRange.start}
+                onChange={(e) => updateCustomRange("end", e.currentTarget)}
+              />
+            </div>
+          )}
           <button
-            class="usage-action-btn"
+            className="usage-action-btn"
             onClick={props.onRefreshPricing}
             disabled={
-              props.isRefreshingPricing() ||
-              props.activeMaintenanceJob() !== null
+              props.isRefreshingPricing || props.activeMaintenanceJob !== null
             }
             type="button"
           >
-            {props.isRefreshingPricing()
+            {props.isRefreshingPricing
               ? "..."
               : t("settings.refreshPricingCatalog")}
           </button>
           <button
-            class="usage-action-btn usage-action-btn-primary"
+            className="usage-action-btn usage-action-btn-primary"
             onClick={props.onRequestRefreshUsage}
-            disabled={props.activeMaintenanceJob() !== null}
+            disabled={props.activeMaintenanceJob !== null}
             type="button"
           >
-            {props.activeMaintenanceJob() === "refresh_usage"
+            {props.activeMaintenanceJob === "refresh_usage"
               ? "..."
               : t("usage.refreshUsage")}
           </button>
         </div>
       </div>
 
-      <div class="usage-toolbar-meta">
+      <div className="usage-toolbar-meta">
         <span
-          class="usage-meta-pill"
-          title={props.pricingStatusError() ?? undefined}
+          className="usage-meta-pill"
+          title={props.pricingStatusError ?? undefined}
         >
           {t("usage.pricingUpdatedShort").replace(
             "{count}",
-            props.pricingModelCountLabel(),
+            props.pricingModelCountLabel,
           )}
         </span>
         <span
-          class="usage-meta-pill"
-          title={props.pricingStatusError() ?? undefined}
+          className="usage-meta-pill"
+          title={props.pricingStatusError ?? undefined}
         >
           {t("usage.pricingUpdatedAtShort").replace(
             "{updatedAt}",
-            props.formattedPricingUpdatedAt(),
+            props.formattedPricingUpdatedAt,
           )}
         </span>
         <span
-          class="usage-meta-pill"
-          title={props.indexStatsError() ?? undefined}
+          className="usage-meta-pill"
+          title={props.indexStatsError ?? undefined}
         >
           {t("usage.usageUpdatedShort").replace(
             "{updatedAt}",
-            props.formattedUsageUpdatedAt(),
+            props.formattedUsageUpdatedAt,
           )}
         </span>
       </div>
 
-      <div class="usage-chips">
+      <div className="usage-chips">
         <button
-          class={`usage-chip usage-chip-all${props.allProvidersSelected() ? " active" : " inactive"}`}
-          aria-pressed={props.allProvidersSelected()}
+          className={`usage-chip usage-chip-all${props.allProvidersSelected ? " active" : " inactive"}`}
+          aria-pressed={props.allProvidersSelected}
           onClick={props.onToggleAllProviders}
           type="button"
         >
-          <span class="usage-chip-label">{t("usage.allProviders")}</span>
-          <span class="usage-chip-count">
-            {props.scannedProviderKeysCount()}
+          <span className="usage-chip-label">{t("usage.allProviders")}</span>
+          <span className="usage-chip-count">
+            {props.scannedProviderKeysCount}
           </span>
         </button>
-        <For each={props.scannedProviderSnapshots()}>
-          {(snapshot) => {
-            const info = () => props.providerInfo(snapshot.key);
-            const active = () => props.isProviderSelected(snapshot.key);
-            const filteredCount = () =>
-              props.providerSessionCount(snapshot.key);
-            return (
-              <button
-                class={`usage-chip${active() ? " active" : " inactive"}`}
-                aria-pressed={active()}
-                onClick={() => props.onToggleProvider(snapshot.key)}
-                style={{ "--provider-accent": info().color }}
-                title={info().fullLabel}
-                type="button"
-              >
-                <span
-                  class="usage-chip-dot"
-                  style={{ background: info().color }}
-                />
-                <span class="usage-chip-label">{info().label}</span>
-                <Show when={filteredCount() > 0}>
-                  <span class="usage-chip-count">{filteredCount()}</span>
-                </Show>
-              </button>
-            );
-          }}
-        </For>
+        {props.scannedProviderSnapshots.map((snapshot) => {
+          const info = props.providerInfo(snapshot.key);
+          const active = props.isProviderSelected(snapshot.key);
+          const filteredCount = props.providerSessionCount(snapshot.key);
+          return (
+            <button
+              key={snapshot.key}
+              className={`usage-chip${active ? " active" : " inactive"}`}
+              aria-pressed={active}
+              onClick={() => props.onToggleProvider(snapshot.key)}
+              style={{ "--provider-accent": info.color } as CSSProperties}
+              title={info.fullLabel}
+              type="button"
+            >
+              <span
+                className="usage-chip-dot"
+                style={{ background: info.color }}
+              />
+              <span className="usage-chip-label">{info.label}</span>
+              {filteredCount > 0 && (
+                <span className="usage-chip-count">{filteredCount}</span>
+              )}
+            </button>
+          );
+        })}
       </div>
     </section>
   );

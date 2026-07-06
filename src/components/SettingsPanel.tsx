@@ -1,4 +1,4 @@
-import { createEffect, createSignal, For, Show } from "solid-js";
+import { useEffect, useState } from "react";
 import { useI18n } from "../i18n/index";
 import { GeneralSettings } from "./Settings/GeneralSettings";
 import { DataSourceSettings } from "./Settings/DataSourceSettings";
@@ -20,13 +20,13 @@ type SettingsCategory =
 export function SettingsPanel() {
   const { t } = useI18n();
   const [activeCategory, setActiveCategory] =
-    createSignal<SettingsCategory>("general");
+    useState<SettingsCategory>("general");
 
-  createEffect(() => {
-    if (activeCategory() === "dataSources") {
+  useEffect(() => {
+    if (activeCategory === "dataSources") {
       void refreshProviderSnapshots();
     }
-  });
+  }, [activeCategory]);
 
   const categories = [
     {
@@ -47,40 +47,33 @@ export function SettingsPanel() {
   }
 
   return (
-    <div class="settings-panel">
-      <div class="settings-sidebar">
-        <For each={categories}>
-          {(cat) => (
-            <button
-              class={`settings-nav-item${activeCategory() === cat.id ? " active" : ""}`}
-              onClick={() => setActiveCategory(cat.id)}
-            >
-              {t(cat.labelKey)}
-            </button>
-          )}
-        </For>
+    <div className="settings-panel">
+      <div className="settings-sidebar">
+        {categories.map((cat) => (
+          <button
+            key={cat.id}
+            className={`settings-nav-item${activeCategory === cat.id ? " active" : ""}`}
+            onClick={() => setActiveCategory(cat.id)}
+          >
+            {t(cat.labelKey)}
+          </button>
+        ))}
       </div>
 
-      <div class="settings-content">
-        <Show when={activeCategory() === "general"}>
-          <GeneralSettings />
-        </Show>
+      <div className="settings-content">
+        {activeCategory === "general" && <GeneralSettings />}
 
-        <Show when={activeCategory() === "dataSources"}>
+        {activeCategory === "dataSources" && (
           <DataSourceSettings providerSnapshots={listProviderSnapshots} />
-        </Show>
+        )}
 
-        <Show when={activeCategory() === "index"}>
+        {activeCategory === "index" && (
           <IndexSettings onIndexChanged={handleIndexChanged} />
-        </Show>
+        )}
 
-        <Show when={activeCategory() === "keyboard"}>
-          <KeyboardSettings />
-        </Show>
+        {activeCategory === "keyboard" && <KeyboardSettings />}
 
-        <Show when={activeCategory() === "about"}>
-          <AboutSettings />
-        </Show>
+        {activeCategory === "about" && <AboutSettings />}
       </div>
     </div>
   );

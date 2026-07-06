@@ -1,4 +1,3 @@
-import { For, Show } from "solid-js";
 import { useI18n } from "../i18n/index";
 import { isMac } from "../lib/platform";
 const mod = isMac ? "\u2318" : "Ctrl+";
@@ -76,19 +75,24 @@ export function KeyboardOverlay(props: { show: boolean; onClose: () => void }) {
   const { t } = useI18n();
 
   return (
-    <Show when={props.show}>
-      <div class="keyboard-overlay-backdrop" onClick={() => props.onClose()}>
+    props.show && (
+      <div
+        className="keyboard-overlay-backdrop"
+        onClick={() => props.onClose()}
+      >
         <div
-          class="keyboard-overlay"
+          className="keyboard-overlay"
           role="dialog"
           aria-modal="true"
           aria-label={t("keyboard.title")}
           onClick={(e) => e.stopPropagation()}
         >
-          <div class="keyboard-overlay-header">
-            <span class="keyboard-overlay-title">{t("keyboard.title")}</span>
+          <div className="keyboard-overlay-header">
+            <span className="keyboard-overlay-title">
+              {t("keyboard.title")}
+            </span>
             <button
-              class="keyboard-overlay-close"
+              className="keyboard-overlay-close"
               onClick={() => props.onClose()}
             >
               <svg
@@ -96,7 +100,7 @@ export function KeyboardOverlay(props: { show: boolean; onClose: () => void }) {
                 height="14"
                 fill="none"
                 stroke="currentColor"
-                stroke-width="2"
+                strokeWidth="2"
                 viewBox="0 0 24 24"
               >
                 <line x1="18" y1="6" x2="6" y2="18" />
@@ -104,29 +108,25 @@ export function KeyboardOverlay(props: { show: boolean; onClose: () => void }) {
               </svg>
             </button>
           </div>
-          <div class="keyboard-grid">
-            <For each={shortcuts}>
-              {(cat) => (
-                <div>
-                  <div class="keyboard-category-title">
-                    {t(cat.categoryKey)}
-                  </div>
-                  <For each={cat.items}>
-                    {(item) => (
-                      <div class="keyboard-item">
-                        <span class="keyboard-item-desc">
-                          {t(item.descKey) || item.descKey}
-                        </span>
-                        <span class="keyboard-keys">{item.keys}</span>
-                      </div>
-                    )}
-                  </For>
+          <div className="keyboard-grid">
+            {shortcuts.map((cat) => (
+              <div key={cat.categoryKey}>
+                <div className="keyboard-category-title">
+                  {t(cat.categoryKey)}
                 </div>
-              )}
-            </For>
+                {cat.items.map((item, i) => (
+                  <div className="keyboard-item" key={i}>
+                    <span className="keyboard-item-desc">
+                      {t(item.descKey) || item.descKey}
+                    </span>
+                    <span className="keyboard-keys">{item.keys}</span>
+                  </div>
+                ))}
+              </div>
+            ))}
           </div>
         </div>
       </div>
-    </Show>
+    )
   );
 }

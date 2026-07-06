@@ -1,12 +1,4 @@
-import {
-  createSignal,
-  createEffect,
-  createMemo,
-  For,
-  Show,
-  on,
-  onCleanup,
-} from "solid-js";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type {
   SessionRef,
   SessionMeta,
@@ -28,7 +20,7 @@ import { MessageBubble } from "../MessageBubble";
 import { MergedToolRow } from "../MergedToolRow";
 import { ConfirmDialog } from "../ConfirmDialog";
 import { ExportDialog } from "../ExportDialog";
-import { terminalApp } from "../../stores/settings";
+import { useTerminalApp } from "../../stores/settings";
 import { toast, toastError } from "../../stores/toast";
 import { errorMessage } from "../../lib/errors";
 import { isSearchableRole, processMessages } from "./hooks";
@@ -39,10 +31,10 @@ import { useLiveWatch } from "./useLiveWatch";
 import { useFavoriteSync } from "./useFavoriteSync";
 import { useAutoLoad } from "./useAutoLoad";
 import { useSessionCommandEvents } from "./useSessionCommandEvents";
-import { createRoleFilter } from "./createRoleFilter";
-import { createSessionSearch } from "./createSessionSearch";
+import { useRoleFilter } from "./createRoleFilter";
+import { useSessionSearch } from "./createSessionSearch";
 import {
-  createSessionPagination,
+  useSessionPagination,
   BATCH_SIZE,
   LOAD_MORE_THRESHOLD,
   INITIAL_TAIL,
@@ -55,14 +47,15 @@ export function SessionView(props: {
   onCloseTab: (id: string) => void;
 }) {
   const { t } = useI18n();
-  const [messages, setMessages] = createSignal<Message[]>([]);
-  const [outline, setOutline] = createSignal<SessionTurnOutlineEntry[]>([]);
-  const processedEntries = createMemo(() => processMessages(messages()));
+  const terminalApp = useTerminalApp();
+  const [messages, setMessages] = useState<Message[]>([]);
+  const [outline, setOutline] = useState<SessionTurnOutlineEntry[]>([]);
+  const processedEntries = useMemo(() => processMessages(messages), [messages]);
 
-  const [loading, setLoading] = createSignal(true);
-  const [error, setError] = createSignal<string | null>(null);
-  const [parseWarningCount, setParseWarningCount] = createSignal(0);
-  const [meta, setMeta] = createSignal<SessionMeta>({
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [parseWarningCount, setParseWarningCount] = useState(0);
+  const [meta, setMeta] = useState<SessionMeta>(() => ({
     ...props.session,
     source_path: props.session.source_path ?? "",
     project_path: props.session.project_path ?? "",
@@ -74,12 +67,16 @@ export function SessionView(props: {
     output_tokens: 0,
     cache_read_tokens: 0,
     cache_write_tokens: 0,
-  });
-  let loadVersion = 0;
-  let messagesRef: HTMLDivElement | undefined;
-  let loadOlderDebounce: (() => void) | undefined;
-  let sessionSearchDebounce: (() => void) | undefined;
-  let prevSessionId: string | null = null;
+  }));
+  const loadVersionRef = useRef(0);
+  const messagesRef = useRef<HTMLDivElement | null>(null);
+  const loadOlderDebounceRef = useRef<(() => void) | undefined>(undefined);
+  const sessionSearchDebounceRef = useRef<(() => void) | undefined>(undefined);
+  const prevSessionIdRef = useRef<string | null>(null);
+  // Latest-value mirror of `messages` so reloadSession — captured by the
+  // live-watch effect — reads the current length instead of a stale closure.
+  const messagesStateRef = useRef<Message[]>(messages);
+  messagesStateRef.current = messages;
 
   function withTokenTotals(
     metaData: SessionMeta,
@@ -96,14 +93,14 @@ export function SessionView(props: {
 
   // Role-filter slice: hiddenRoles + filteredEntries + roleCounts.
   const { hiddenRoles, roleCounts, filteredEntries, toggleRole } =
-    createRoleFilter(processedEntries);
-  const userTurnByMessageIndex = createMemo(() => {
+    useRoleFilter(processedEntries);
+  const userTurnByMessageIndex = useMemo(() => {
     const turns = new Map<number, number>();
-    for (const entry of outline()) {
+    for (const entry of outline) {
       turns.set(entry.message_index, entry.ordinal);
     }
     return turns;
-  });
+  }, [outline]);
 
   // Windowed-loading slice: visibleCount/windowStart/totalMessages signals,
   // visibleEntries/hasMore memos, and the scroll-driven older-page fetch.
@@ -118,16 +115,16 @@ export function SessionView(props: {
     revealEntry,
     revealMessageIndex,
     handleMessagesScroll,
-  } = createSessionPagination({
-    sessionId: () => props.session.id,
+  } = useSessionPagination({
+    sessionId: props.session.id,
     filteredEntries,
     messages,
-    getMessagesRef: () => messagesRef,
+    getMessagesRef: () => messagesRef.current ?? undefined,
     setMessages,
     setMeta,
     withTokenTotals,
     registerDebounce: (clear) => {
-      loadOlderDebounce = clear;
+      loadOlderDebounceRef.current = clear;
     },
   });
 
@@ -142,81 +139,84 @@ export function SessionView(props: {
     setSearchBarOpen,
     searchMatchIdx,
     setSearchMatchIdx,
-  } = createSessionSearch({
+  } = useSessionSearch({
     filteredEntries,
-    getMessagesRef: () => messagesRef,
+    getMessagesRef: () => messagesRef.current ?? undefined,
     loading,
-    sessionId: () => props.session.id,
+    sessionId: props.session.id,
     resolveCompleteSearchMatch,
     revealEntry,
     registerDebounce: (clear) => {
-      sessionSearchDebounce = clear;
+      sessionSearchDebounceRef.current = clear;
     },
   });
 
-  createEffect(
-    on(
-      () => props.session.id,
-      async (sessionId) => {
-        const version = ++loadVersion;
-        // Best-effort cancel of the previously in-flight load so the
-        // backend parser can bail out instead of running to completion.
-        if (prevSessionId && prevSessionId !== sessionId) {
-          void cancelSessionLoad(prevSessionId).catch((err) => {
-            console.warn("cancelSessionLoad failed:", err);
-          });
-        }
-        prevSessionId = sessionId;
-
-        setLoading(true);
-        setError(null);
-        setMessages([]);
-        setOutline([]);
-        setParseWarningCount(0);
-        setVisibleCount(BATCH_SIZE);
-        setTotalMessages(0);
-        setWindowStart(0);
-
-        try {
-          // Initial open fetches meta + newest tail together so one backend
-          // load guard owns the parse and one IPC hydrates the view.
-          const open = await getSessionOpenWindow(
-            sessionId,
-            -INITIAL_TAIL,
-            INITIAL_TAIL,
-          );
-          if (version !== loadVersion) return;
-          const tail = open.window;
-          setMeta(open.meta);
-          setMessages(tail.messages);
-          setParseWarningCount(tail.parse_warning_count ?? 0);
-          setTotalMessages(tail.total);
-          setWindowStart(tail.start);
-          void refreshOutline(sessionId, version);
-        } catch (e) {
-          if (version !== loadVersion) return;
-          if (isLoadCanceledError(e)) return; // user navigated away
-          setError(errorMessage(e));
-        } finally {
-          if (version === loadVersion) setLoading(false);
-        }
-      },
-    ),
-  );
-
-  // Cancel server-side parse when this view goes away.
-  onCleanup(() => {
-    if (prevSessionId) {
-      void cancelSessionLoad(prevSessionId).catch((err) => {
+  useEffect(() => {
+    const sessionId = props.session.id;
+    const version = ++loadVersionRef.current;
+    // Best-effort cancel of the previously in-flight load so the
+    // backend parser can bail out instead of running to completion.
+    if (prevSessionIdRef.current && prevSessionIdRef.current !== sessionId) {
+      void cancelSessionLoad(prevSessionIdRef.current).catch((err) => {
         console.warn("cancelSessionLoad failed:", err);
       });
     }
-  });
+    prevSessionIdRef.current = sessionId;
 
-  onCleanup(() => {
-    loadOlderDebounce?.();
-    sessionSearchDebounce?.();
-  });
+    setLoading(true);
+    setError(null);
+    setMessages([]);
+    setOutline([]);
+    setParseWarningCount(0);
+    setVisibleCount(BATCH_SIZE);
+    setTotalMessages(0);
+    setWindowStart(0);
+
+    void (async () => {
+      try {
+        // Initial open fetches meta + newest tail together so one backend
+        // load guard owns the parse and one IPC hydrates the view.
+        const open = await getSessionOpenWindow(
+          sessionId,
+          -INITIAL_TAIL,
+          INITIAL_TAIL,
+        );
+        if (version !== loadVersionRef.current) return;
+        const tail = open.window;
+        setMeta(open.meta);
+        setMessages(tail.messages);
+        setParseWarningCount(tail.parse_warning_count ?? 0);
+        setTotalMessages(tail.total);
+        setWindowStart(tail.start);
+        void refreshOutline(sessionId, version);
+      } catch (e) {
+        if (version !== loadVersionRef.current) return;
+        if (isLoadCanceledError(e)) return; // user navigated away
+        setError(errorMessage(e));
+      } finally {
+        if (version === loadVersionRef.current) setLoading(false);
+      }
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [props.session.id]);
+
+  // Cancel server-side parse when this view goes away.
+  useEffect(() => {
+    return () => {
+      if (prevSessionIdRef.current) {
+        void cancelSessionLoad(prevSessionIdRef.current).catch((err) => {
+          console.warn("cancelSessionLoad failed:", err);
+        });
+      }
+    };
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      loadOlderDebounceRef.current?.();
+      sessionSearchDebounceRef.current?.();
+    };
+  }, []);
 
   // column-reverse: scrollTop=0 naturally shows newest messages. No scroll-to-bottom needed.
 
@@ -224,26 +224,25 @@ export function SessionView(props: {
     visibleEntries,
     loading,
     hasMore,
-    getMessagesRef: () => messagesRef,
+    getMessagesRef: () => messagesRef.current ?? undefined,
     loadMore: loadOlderEntries,
     threshold: LOAD_MORE_THRESHOLD,
   });
 
-  const [showDeleteConfirm, setShowDeleteConfirm] = createSignal(false);
-  const [showExportDialog, setShowExportDialog] = createSignal(false);
-  const [watching, setWatching] = createSignal(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [showExportDialog, setShowExportDialog] = useState(false);
+  const [watching, setWatching] = useState(false);
 
   // Stable memos so the live-watch effect only re-runs when these values
   // actually change, not on every reloadSession() → setMeta() cycle.
-  const watchProvider = createMemo(() => meta().provider);
-  const watchSourcePath = createMemo(
-    () => meta().source_path || props.session.source_path || "",
-  );
+  const watchProvider = meta.provider;
+  const watchSourcePath = meta.source_path || props.session.source_path || "";
 
   async function refreshOutline(sessionId: string, version: number) {
     try {
       const nextOutline = await getSessionTurnOutline(sessionId);
-      if (version !== loadVersion || sessionId !== props.session.id) return;
+      if (version !== loadVersionRef.current || sessionId !== props.session.id)
+        return;
       setOutline(nextOutline);
     } catch (e) {
       if (isLoadCanceledError(e)) return;
@@ -256,7 +255,7 @@ export function SessionView(props: {
       // Refresh meta + tail. Backend cache compares mtime so an actual
       // file change forces a re-parse; otherwise this is O(1) slicing.
       const sessionId = props.session.id;
-      const oldCount = messages().length;
+      const oldCount = messagesStateRef.current.length;
       const open = await getSessionOpenWindow(
         sessionId,
         -INITIAL_TAIL,
@@ -269,11 +268,11 @@ export function SessionView(props: {
       setParseWarningCount(tail.parse_warning_count ?? 0);
       setTotalMessages(tail.total);
       setWindowStart(tail.start);
-      void refreshOutline(sessionId, loadVersion);
+      void refreshOutline(sessionId, loadVersionRef.current);
       // Auto-scroll to newest if new messages arrived (column-reverse: bottom = scrollTop 0)
       if (tail.messages.length > oldCount) {
         requestAnimationFrame(() => {
-          messagesRef?.scrollTo({ top: 0, behavior: "smooth" });
+          messagesRef.current?.scrollTo({ top: 0, behavior: "smooth" });
         });
       }
     } catch (e) {
@@ -290,18 +289,13 @@ export function SessionView(props: {
   });
 
   const { starred, toggleFavorite: handleToggleFavorite } = useFavoriteSync(
-    () => props.session.id,
+    props.session.id,
   );
 
   // Sync title from props when it changes (e.g. after rename via syncTabsWithTree)
-  createEffect(
-    on(
-      () => props.session.title,
-      (newTitle) => {
-        setMeta((prev) => ({ ...prev, title: newTitle }));
-      },
-    ),
-  );
+  useEffect(() => {
+    setMeta((prev) => ({ ...prev, title: props.session.title }));
+  }, [props.session.title]);
 
   const handleDelete = async () => {
     try {
@@ -318,7 +312,7 @@ export function SessionView(props: {
 
   const handleResume = async () => {
     try {
-      await resumeSession(props.session.id, terminalApp());
+      await resumeSession(props.session.id, terminalApp);
       toast(t("toast.resumed"));
     } catch (_e) {
       toastError(t("toast.resumeFailed"));
@@ -326,7 +320,7 @@ export function SessionView(props: {
   };
 
   useSessionCommandEvents({
-    active: () => props.active,
+    active: props.active,
     onResume: () => void handleResume(),
     onExport: () => setShowExportDialog(true),
     onFavorite: () => void handleToggleFavorite(),
@@ -343,7 +337,7 @@ export function SessionView(props: {
   });
 
   return (
-    <div class="session-view">
+    <div className="session-view">
       <SessionToolbar
         meta={meta}
         messages={messages}
@@ -359,15 +353,13 @@ export function SessionView(props: {
       />
 
       {/* Filter toolbar — only show roles that have messages */}
-      <div class="filter-toolbar">
-        <For
-          each={(
-            ["user", "assistant", "tool", "system"] as MessageRole[]
-          ).filter((r) => (roleCounts()[r] || 0) > 0)}
-        >
-          {(role) => (
+      <div className="filter-toolbar">
+        {(["user", "assistant", "tool", "system"] as MessageRole[])
+          .filter((r) => (roleCounts[r] || 0) > 0)
+          .map((role) => (
             <button
-              class={`filter-btn${hiddenRoles().has(role) ? "" : " active"}`}
+              key={role}
+              className={`filter-btn${hiddenRoles.has(role) ? "" : " active"}`}
               onClick={() => toggleRole(role)}
             >
               {role === "user"
@@ -377,14 +369,13 @@ export function SessionView(props: {
                   : role === "tool"
                     ? t("session.filterTool")
                     : t("session.filterSystem")}{" "}
-              ({roleCounts()[role]})
+              ({roleCounts[role]})
             </button>
-          )}
-        </For>
+          ))}
       </div>
 
       {/* In-session search bar */}
-      <Show when={searchBarOpen()}>
+      {searchBarOpen && (
         <SessionSearch
           sessionSearch={sessionSearch}
           activeSessionSearch={activeSessionSearch}
@@ -392,87 +383,92 @@ export function SessionView(props: {
           searchMatchIdx={searchMatchIdx}
           setSearchMatchIdx={setSearchMatchIdx}
           setSearchBarOpen={setSearchBarOpen}
-          messagesRef={() => messagesRef}
+          messagesRef={() => messagesRef.current ?? undefined}
         />
-      </Show>
+      )}
 
       {/* Content */}
-      <Show when={loading()}>
-        <div class="session-loading">
-          <div class="spinner" />
+      {loading && (
+        <div className="session-loading">
+          <div className="spinner" />
           <span>{t("session.loading")}</span>
         </div>
-      </Show>
+      )}
 
-      <Show when={error()}>
-        <div class="session-error">{error()}</div>
-      </Show>
+      {error && <div className="session-error">{error}</div>}
 
-      <Show when={!loading() && !error()}>
-        <div class="session-messages-container">
+      {!loading && !error && (
+        <div className="session-messages-container">
           <div
-            class="session-messages"
+            className="session-messages"
             ref={messagesRef}
-            onScroll={handleMessagesScroll}
+            onScroll={(e) => handleMessagesScroll(e.nativeEvent)}
           >
-            <For each={visibleEntries()}>
-              {(entry) => {
-                if (entry.type === "time-sep") {
-                  return (
-                    <div class="session-entry" data-entry-key={entry.key}>
-                      <div class="msg-time-separator">{entry.time}</div>
-                    </div>
-                  );
-                }
-                if (entry.type === "merged-tools") {
-                  return (
-                    <div class="session-entry" data-entry-key={entry.key}>
-                      <MergedToolRow
-                        tools={entry.tools}
-                        messages={entry.messages}
-                        provider={meta().provider}
-                        parentSessionId={props.session.id}
-                        highlightTerm=""
-                      />
-                    </div>
-                  );
-                }
+            {visibleEntries.map((entry) => {
+              if (entry.type === "time-sep") {
                 return (
                   <div
-                    class="session-entry"
+                    className="session-entry"
                     data-entry-key={entry.key}
-                    data-turn={userTurnByMessageIndex().get(entry.messageIndex)}
+                    key={entry.key}
                   >
-                    <MessageBubble
-                      message={entry.msg}
-                      provider={meta().provider}
+                    <div className="msg-time-separator">{entry.time}</div>
+                  </div>
+                );
+              }
+              if (entry.type === "merged-tools") {
+                return (
+                  <div
+                    className="session-entry"
+                    data-entry-key={entry.key}
+                    key={entry.key}
+                  >
+                    <MergedToolRow
+                      tools={entry.tools}
+                      messages={entry.messages}
+                      provider={meta.provider}
                       parentSessionId={props.session.id}
-                      highlightTerm={
-                        isSearchableRole(entry.msg.role)
-                          ? activeSessionSearch()
-                          : ""
-                      }
+                      highlightTerm=""
                     />
                   </div>
                 );
-              }}
-            </For>
-            <Show when={messages().length === 0}>
-              <div class="session-empty-messages">
+              }
+              return (
+                <div
+                  className="session-entry"
+                  data-entry-key={entry.key}
+                  data-turn={userTurnByMessageIndex.get(entry.messageIndex)}
+                  key={entry.key}
+                >
+                  <MessageBubble
+                    message={entry.msg}
+                    provider={meta.provider}
+                    parentSessionId={props.session.id}
+                    highlightTerm={
+                      isSearchableRole(entry.msg.role)
+                        ? activeSessionSearch
+                        : ""
+                    }
+                  />
+                </div>
+              );
+            })}
+            {messages.length === 0 && (
+              <div className="session-empty-messages">
                 {t("session.noMessages")}
               </div>
-            </Show>
+            )}
           </div>
           <TimelineMinimap
-            outline={outline()}
-            messagesRef={messagesRef}
+            outline={outline}
+            messagesRef={messagesRef.current ?? undefined}
             onRevealMessage={revealMessageIndex}
           />
         </div>
-      </Show>
+      )}
 
       <ConfirmDialog
-        open={showDeleteConfirm()}
+        open={showDeleteConfirm}
         title={t("confirm.deleteTitle")}
         message={t("confirm.deleteMsg")}
         confirmLabel={t("confirm.confirm")}
@@ -482,8 +478,8 @@ export function SessionView(props: {
       />
 
       <ExportDialog
-        open={showExportDialog()}
-        session={meta()}
+        open={showExportDialog}
+        session={meta}
         onClose={() => setShowExportDialog(false)}
       />
     </div>

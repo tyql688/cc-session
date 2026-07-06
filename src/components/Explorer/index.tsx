@@ -1,4 +1,5 @@
-import { createSignal, createEffect, createMemo, For, Show } from "solid-js";
+import { useEffect, useMemo, useRef, useState } from "react";
+import type React from "react";
 import type { SessionRef, TreeNode } from "../../lib/types";
 import {
   getResumeCommand,
@@ -12,19 +13,21 @@ import {
 import { save } from "@tauri-apps/plugin-dialog";
 import { useI18n } from "../../i18n/index";
 import {
-  terminalApp,
-  timeGrouping,
-  showOrphans,
+  useTerminalApp,
+  useTimeGrouping,
+  useShowOrphans,
+  useBlockedFolders,
   addBlockedFolder,
 } from "../../stores/settings";
 import { ContextMenu } from "../ContextMenu";
 import { InputDialog } from "../InputDialog";
 import { TreeNodeComponent, collectSessionNodes } from "../TreeNode";
 import {
-  selectedIds,
   toggleSelected,
   clearSelection,
   selectionCount,
+  useSelectionCount,
+  useSelectionStore,
 } from "../../stores/selection";
 import { toast, toastError } from "../../stores/toast";
 import { errorMessage } from "../../lib/errors";
@@ -42,18 +45,19 @@ import {
 
 function ExplorerSkeleton() {
   return (
-    <div class="skeleton-wrapper">
-      {/* eslint-disable-next-line solid/prefer-for */}
-      {Array.from({ length: 3 }).map(() => (
-        <div>
-          <div class="skeleton-tree-item">
-            <div class="skeleton skeleton-tree-dot" />
-            <div class="skeleton skeleton-tree-text skeleton-tree-text-sm" />
+    <div className="skeleton-wrapper">
+      {Array.from({ length: 3 }).map((_, i) => (
+        <div key={i}>
+          <div className="skeleton-tree-item">
+            <div className="skeleton skeleton-tree-dot" />
+            <div className="skeleton skeleton-tree-text skeleton-tree-text-sm" />
           </div>
-          {/* eslint-disable-next-line solid/prefer-for */}
-          {Array.from({ length: 4 }).map(() => (
-            <div class="skeleton-tree-item skeleton-tree-item-indent">
-              <div class="skeleton skeleton-tree-text" />
+          {Array.from({ length: 4 }).map((_, j) => (
+            <div
+              key={j}
+              className="skeleton-tree-item skeleton-tree-item-indent"
+            >
+              <div className="skeleton skeleton-tree-text" />
             </div>
           ))}
         </div>
@@ -75,14 +79,21 @@ export function Explorer(props: {
   isLoading?: boolean;
 }) {
   const { t } = useI18n();
-  const displayTree = createMemo(() => {
+  const showOrphans = useShowOrphans();
+  const timeGrouping = useTimeGrouping();
+  const blockedFolders = useBlockedFolders();
+  const terminalApp = useTerminalApp();
+  const selCount = useSelectionCount();
+
+  const displayTree = useMemo(() => {
     let tree = filterBlockedFolders(props.tree);
-    if (!showOrphans()) tree = filterOrphanSubagents(tree);
-    return timeGrouping() ? applyTimeGrouping(tree, t) : tree;
-  });
+    if (!showOrphans) tree = filterOrphanSubagents(tree);
+    return timeGrouping ? applyTimeGrouping(tree, t) : tree;
+    // `blockedFolders` drives filterBlockedFolders' internal getBlockedFolders()
+  }, [props.tree, showOrphans, timeGrouping, blockedFolders, t]);
 
   // O(1) session ID → project path lookup, rebuilt when props.tree changes
-  const sessionProjectPathMap = createMemo(() => {
+  const sessionProjectPathMap = useMemo(() => {
     const map = new Map<string, string>();
     function walk(
       nodes: TreeNode[],
@@ -110,42 +121,42 @@ export function Explorer(props: {
     }
     walk(props.tree, "", "");
     return map;
-  });
-  const [expandedIds, setExpandedIds] = createSignal<Set<string>>(new Set());
-  const [initialized, setInitialized] = createSignal(false);
+  }, [props.tree]);
+  const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
+  const [initialized, setInitialized] = useState(false);
 
   // Context menu positions — each stores {x,y} or null
-  const [sessionMenu, setSessionMenu] = createSignal<{
+  const [sessionMenu, setSessionMenu] = useState<{
     pos: { x: number; y: number };
     node: TreeNode;
     projectLabel: string;
     resumeCommand: string | null;
   } | null>(null);
-  const [nodeMenu, setNodeMenu] = createSignal<{
+  const [nodeMenu, setNodeMenu] = useState<{
     pos: { x: number; y: number };
     node: TreeNode;
   } | null>(null);
-  const [selectionMenu, setSelectionMenu] = createSignal<{
+  const [selectionMenu, setSelectionMenu] = useState<{
     x: number;
     y: number;
   } | null>(null);
-  const [renameTarget, setRenameTarget] = createSignal<{
+  const [renameTarget, setRenameTarget] = useState<{
     id: string;
     label: string;
   } | null>(null);
 
   // Auto-expand providers on first load
-  createEffect(() => {
-    if (props.tree.length > 0 && !initialized()) {
+  useEffect(() => {
+    if (props.tree.length > 0 && !initialized) {
       setExpandedIds(new Set(props.tree.map((n) => n.id)));
       setInitialized(true);
     }
-  });
+  }, [props.tree, initialized]);
 
   // Reveal active session on demand: expand ancestors and scroll into view.
   function revealActiveSession() {
     const sessionId = props.activeSessionId;
-    const tree = displayTree();
+    const tree = displayTree;
     if (!sessionId || tree.length === 0) return;
 
     function findPath(nodes: TreeNode[], target: string): string[] | null {
@@ -181,7 +192,7 @@ export function Explorer(props: {
   }
 
   function isNodeExpanded(nodeId: string): boolean {
-    return expandedIds().has(nodeId);
+    return expandedIds.has(nodeId);
   }
 
   function closeAllMenus() {
@@ -193,7 +204,7 @@ export function Explorer(props: {
   // --- Click handlers ---
 
   function handleSessionClick(
-    e: MouseEvent,
+    e: React.MouseEvent,
     node: TreeNode,
     parentProjectLabel: string,
   ) {
@@ -206,23 +217,26 @@ export function Explorer(props: {
   }
 
   function handleSessionDblClick(
-    _e: MouseEvent,
+    _e: React.MouseEvent,
     node: TreeNode,
     parentProjectLabel: string,
   ) {
     props.onOpenSession(buildSessionRef(node, parentProjectLabel));
   }
 
-  const resumeCommandCache = new Map<string, string | null>();
+  // Persist across renders (Solid ran the body once; React runs it every render).
+  // Persist across renders (Solid ran the body once; React runs it every render).
+  const resumeCommandCacheRef = useRef(new Map<string, string | null>());
 
   async function handleSessionContextMenu(
-    e: MouseEvent,
+    e: React.MouseEvent,
     node: TreeNode,
     parentProjectLabel: string,
   ) {
     setNodeMenu(null);
     setSelectionMenu(null);
-    const sel = selectedIds();
+    const resumeCommandCache = resumeCommandCacheRef.current;
+    const sel = useSelectionStore.getState().selectedIds;
     if (sel.size > 1 && sel.has(node.id)) {
       setSessionMenu(null);
       setSelectionMenu({ x: e.clientX, y: e.clientY });
@@ -245,7 +259,7 @@ export function Explorer(props: {
     });
   }
 
-  function handleNodeContextMenu(e: MouseEvent, node: TreeNode) {
+  function handleNodeContextMenu(e: React.MouseEvent, node: TreeNode) {
     setSessionMenu(null);
     // If there are selected sessions, show selection menu instead of node menu
     if (selectionCount() > 0) {
@@ -275,11 +289,11 @@ export function Explorer(props: {
   }
 
   function findSessionProjectPath(sessionId: string): string {
-    return sessionProjectPathMap().get(sessionId) ?? "";
+    return sessionProjectPathMap.get(sessionId) ?? "";
   }
 
   async function trashSelected() {
-    const sel = selectedIds();
+    const sel = useSelectionStore.getState().selectedIds;
     if (sel.size === 0) return;
     const result = await trashSessionsBatch([...sel]);
     clearSelection();
@@ -294,7 +308,7 @@ export function Explorer(props: {
   }
 
   async function exportSelectedBatch() {
-    const sel = selectedIds();
+    const sel = useSelectionStore.getState().selectedIds;
     if (sel.size === 0) return;
     try {
       const outputPath = await save({
@@ -313,14 +327,14 @@ export function Explorer(props: {
   // --- Menu item builders ---
 
   function sessionMenuItems() {
-    const m = sessionMenu();
+    const m = sessionMenu;
     if (!m) return [];
     return buildSessionMenuItems({
       node: m.node,
       sessionProjectPath: findSessionProjectPath(m.node.id),
       resumeCommand: m.resumeCommand,
       t,
-      terminalApp: terminalApp(),
+      terminalApp,
       resumeSession,
       toggleFavorite,
       setRenameTarget,
@@ -338,7 +352,7 @@ export function Explorer(props: {
   }
 
   function nodeMenuItems() {
-    const m = nodeMenu();
+    const m = nodeMenu;
     if (!m) return [];
     return buildNodeMenuItems({
       node: m.node,
@@ -385,11 +399,11 @@ export function Explorer(props: {
   }
 
   // Drag-to-resize handle
-  let explorerRef: HTMLDivElement | undefined;
+  const explorerRef = useRef<HTMLDivElement>(null);
 
-  function onResizeStart(e: MouseEvent) {
+  function onResizeStart(e: React.MouseEvent) {
     e.preventDefault();
-    const el = explorerRef;
+    const el = explorerRef.current;
     if (!el) return;
     const startX = e.clientX;
     const startW = el.offsetWidth;
@@ -413,82 +427,79 @@ export function Explorer(props: {
   }
 
   return (
-    <div class="explorer" ref={explorerRef}>
-      <div class="explorer-resize-handle" onMouseDown={onResizeStart} />
-      <div class="explorer-header">
+    <div className="explorer" ref={explorerRef}>
+      <div className="explorer-resize-handle" onMouseDown={onResizeStart} />
+      <div className="explorer-header">
         <span>{t("explorer.title")}</span>
-        <Show when={selectionCount() > 0}>
-          <span class="count-badge-accent">
-            {selectionCount()} {t("explorer.selected")}
+        {selCount > 0 && (
+          <span className="count-badge-accent">
+            {selCount} {t("explorer.selected")}
           </span>
-        </Show>
-        <span class="explorer-header-actions">
-          <Show when={props.activeSessionId}>
+        )}
+        <span className="explorer-header-actions">
+          {props.activeSessionId && (
             <button
-              class="explorer-header-btn"
+              className="explorer-header-btn"
               title={t("explorer.locateSession")}
               onClick={revealActiveSession}
             >
               {"\u2316"}
             </button>
-          </Show>
-          <Show when={props.onCollapse}>
+          )}
+          {props.onCollapse && (
             <button
-              class="explorer-header-btn"
+              className="explorer-header-btn"
               title={t("explorer.hideExplorer")}
               onClick={() => props.onCollapse?.()}
             >
               {"\u2190"}
             </button>
-          </Show>
+          )}
         </span>
       </div>
-      <div class="explorer-tree">
-        <Show when={props.isLoading && props.tree.length === 0}>
-          <ExplorerSkeleton />
-        </Show>
-        <For each={displayTree()}>
-          {(node) => (
-            <TreeNodeComponent
-              node={node}
-              depth={0}
-              activeSessionId={props.activeSessionId}
-              isNodeExpanded={isNodeExpanded}
-              toggleExpanded={toggleExpanded}
-              onSessionContextMenu={handleSessionContextMenu}
-              onNodeContextMenu={handleNodeContextMenu}
-              onSessionClick={handleSessionClick}
-              onSessionDblClick={handleSessionDblClick}
-            />
-          )}
-        </For>
+      <div className="explorer-tree">
+        {props.isLoading && props.tree.length === 0 && <ExplorerSkeleton />}
+        {displayTree.map((node) => (
+          <TreeNodeComponent
+            key={node.id}
+            node={node}
+            depth={0}
+            activeSessionId={props.activeSessionId}
+            isNodeExpanded={isNodeExpanded}
+            toggleExpanded={toggleExpanded}
+            onSessionContextMenu={handleSessionContextMenu}
+            onNodeContextMenu={handleNodeContextMenu}
+            onSessionClick={handleSessionClick}
+            onSessionDblClick={handleSessionDblClick}
+          />
+        ))}
       </div>
 
       <ContextMenu
         items={sessionMenuItems()}
-        position={sessionMenu()?.pos ?? null}
+        position={sessionMenu?.pos ?? null}
         onClose={closeAllMenus}
       />
       <ContextMenu
         items={selectionMenuItems()}
-        position={selectionMenu()}
+        position={selectionMenu}
         onClose={closeAllMenus}
       />
       <ContextMenu
         items={nodeMenuItems()}
-        position={nodeMenu()?.pos ?? null}
+        position={nodeMenu?.pos ?? null}
         onClose={closeAllMenus}
       />
 
       <InputDialog
-        open={renameTarget() !== null}
+        open={renameTarget !== null}
         title={t("contextMenu.rename")}
         label={t("inputDialog.newTitle")}
-        defaultValue={renameTarget()?.label ?? ""}
+        defaultValue={renameTarget?.label ?? ""}
         confirmLabel={t("inputDialog.rename")}
         maxLength={200}
         onConfirm={async (newTitle) => {
-          const target = renameTarget();
+          const target = renameTarget;
           if (target) {
             await renameSession(target.id, newTitle);
             setRenameTarget(null);

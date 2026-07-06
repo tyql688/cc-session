@@ -1,16 +1,12 @@
 import {
-  Index,
-  Show,
-  createEffect,
-  createMemo,
-  createResource,
-  createSignal,
-  on,
-  onCleanup,
-  onMount,
-} from "solid-js";
+  type DragEvent as ReactDragEvent,
+  Fragment,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
 import { listenBackendEvent, type UnlistenFn } from "../../lib/backend-events";
-import type { SessionRef, TreeNode } from "../../lib/types";
+import type { SessionMeta, SessionRef, TreeNode } from "../../lib/types";
 import {
   getChildSessionCounts,
   invokeWithFallback,
@@ -19,8 +15,9 @@ import {
 import { isPathBlocked } from "../../stores/settings";
 import { errorMessage } from "../../lib/errors";
 import {
-  groups,
-  activeGroupId,
+  useGroups,
+  useActiveGroupId,
+  getGroups,
   focusGroup,
   setGroupFlexBasis,
   createGroupFromDrop,
@@ -40,60 +37,96 @@ export function EditorGroupsContainer(props: {
   tree: TreeNode[];
   onOpenSession: (session: SessionRef) => void;
 }) {
-  const [dropActive, setDropActive] = createSignal(false);
-  const [recentVersion, setRecentVersion] = createSignal(0);
-  const [recentSessions] = createResource(recentVersion, async () => {
-    const list = await listRecentSessions(100);
-    return list
-      .filter((s) => !isPathBlocked(s.project_path) && !s.is_sidechain)
-      .slice(0, 10);
-  });
-  const recentSessionsError = createMemo(() =>
-    recentSessions.error ? errorMessage(recentSessions.error) : null,
-  );
-  const [childCounts, setChildCounts] = createSignal<Record<string, number>>(
-    {},
-  );
+  const groups = useGroups();
+  const activeGroupId = useActiveGroupId();
+  const [dropActive, setDropActive] = useState(false);
+  const [recentVersion, setRecentVersion] = useState(0);
+  const [recentSessions, setRecentSessions] = useState<
+    SessionMeta[] | undefined
+  >(undefined);
+  const [recentSessionsLoading, setRecentSessionsLoading] = useState(true);
+  const [recentSessionsErrorRaw, setRecentSessionsErrorRaw] =
+    useState<unknown>(null);
+  const [childCounts, setChildCounts] = useState<Record<string, number>>({});
 
-  createEffect(
-    on(
-      () => recentSessions(),
-      async (sessions) => {
-        if (!sessions || sessions.length === 0) {
-          setChildCounts({});
-          return;
-        }
-        const counts = await invokeWithFallback(
-          getChildSessionCounts(sessions.map((session) => session.id)),
-          {},
-          "load child session counts",
+  useEffect(() => {
+    let cancelled = false;
+    setRecentSessionsLoading(true);
+    setRecentSessionsErrorRaw(null);
+    listRecentSessions(100)
+      .then((list) => {
+        if (cancelled) return;
+        setRecentSessions(
+          list
+            .filter((s) => !isPathBlocked(s.project_path) && !s.is_sidechain)
+            .slice(0, 10),
         );
-        setChildCounts(counts);
-      },
-      { defer: true },
-    ),
-  );
+        setRecentSessionsLoading(false);
+      })
+      .catch((error) => {
+        if (cancelled) return;
+        setRecentSessionsErrorRaw(error);
+        setRecentSessionsLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [recentVersion]);
 
-  createEffect(
-    on(
-      () => props.tree,
-      () => setRecentVersion((version) => version + 1),
-      { defer: true },
-    ),
-  );
+  const recentSessionsError = recentSessionsErrorRaw
+    ? errorMessage(recentSessionsErrorRaw)
+    : null;
 
-  onMount(() => {
+  useEffect(() => {
+    const sessions = recentSessions;
+    if (!sessions || sessions.length === 0) {
+      setChildCounts({});
+      return;
+    }
+    let cancelled = false;
+    invokeWithFallback(
+      getChildSessionCounts(sessions.map((session) => session.id)),
+      {},
+      "load child session counts",
+    ).then((counts) => {
+      if (!cancelled) setChildCounts(counts);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [recentSessions]);
+
+  // Mirror Solid's `on(..., { defer: true })`: skip the initial run and only
+  // bump the recent-sessions version when the tree actually changes.
+  const treeMounted = useRef(false);
+  useEffect(() => {
+    if (!treeMounted.current) {
+      treeMounted.current = true;
+      return;
+    }
+    setRecentVersion((version) => version + 1);
+  }, [props.tree]);
+
+  useEffect(() => {
+    let cancelled = false;
     let unlisten: UnlistenFn | undefined;
     listenBackendEvent("sessions-changed", () =>
       setRecentVersion((version) => version + 1),
     ).then((fn) => {
+      if (cancelled) {
+        fn();
+        return;
+      }
       unlisten = fn;
     });
-    onCleanup(() => unlisten?.());
-  });
+    return () => {
+      cancelled = true;
+      unlisten?.();
+    };
+  }, []);
 
   function handleResize(leftIdx: number, deltaX: number) {
-    const gs = groups();
+    const gs = getGroups();
     const left = gs[leftIdx];
     const right = gs[leftIdx + 1];
     if (!left || !right) return;
@@ -115,14 +148,14 @@ export function EditorGroupsContainer(props: {
   }
 
   function equalizeWidths() {
-    const gs = groups();
+    const gs = getGroups();
     const basis = 100 / gs.length;
     for (const g of gs) {
       setGroupFlexBasis(g.id, basis);
     }
   }
 
-  function handleDragOver(e: DragEvent) {
+  function handleDragOver(e: ReactDragEvent<HTMLDivElement>) {
     const container = e.currentTarget as HTMLElement;
     const rect = container.getBoundingClientRect();
     const inDropZone = e.clientX > rect.right - 40;
@@ -133,8 +166,8 @@ export function EditorGroupsContainer(props: {
     }
   }
 
-  function handleDrop(e: DragEvent) {
-    if (!dropActive()) return;
+  function handleDrop(e: ReactDragEvent<HTMLDivElement>) {
+    if (!dropActive) return;
     e.preventDefault();
     setDropActive(false);
     try {
@@ -156,46 +189,46 @@ export function EditorGroupsContainer(props: {
 
   return (
     <div
-      class="editor-groups-container"
+      className="editor-groups-container"
       onDragOver={handleDragOver}
       onDrop={handleDrop}
       onDragLeave={handleDragLeave}
     >
-      <Index each={groups()}>
-        {(group, idx) => (
-          <>
-            <Show when={idx > 0}>
-              <SplitHandle
-                onResize={(dx) => handleResize(idx - 1, dx)}
-                onDoubleClick={equalizeWidths}
-              />
-            </Show>
-            <EditorArea
-              groupId={group().id}
-              tabs={group().tabs}
-              activeTabId={group().activeTabId}
-              previewTabId={group().previewTabId}
-              isFocused={group().id === activeGroupId()}
-              flexBasis={group().flexBasis}
-              onFocus={() => focusGroup(group().id)}
-              onTabSelect={(tabId) => props.onTabSelect(group().id, tabId)}
-              onTabClose={props.onTabClose}
-              onCloseAllTabs={props.onCloseAllTabs}
-              onCloseOtherTabs={props.onCloseOtherTabs}
-              onCloseTabsToRight={props.onCloseTabsToRight}
-              onSplitToRight={props.onSplitToRight}
-              onPinTab={props.onPinTab}
-              onRefreshTree={props.onRefreshTree}
-              onOpenSession={props.onOpenSession}
-              recentSessions={recentSessions()}
-              recentSessionsLoading={recentSessions.loading}
-              recentSessionsError={recentSessionsError()}
-              childCounts={childCounts()}
+      {groups.map((group, idx) => (
+        <Fragment key={group.id}>
+          {idx > 0 && (
+            <SplitHandle
+              onResize={(dx) => handleResize(idx - 1, dx)}
+              onDoubleClick={equalizeWidths}
             />
-          </>
-        )}
-      </Index>
-      <div class={`editor-groups-drop-right${dropActive() ? " active" : ""}`} />
+          )}
+          <EditorArea
+            groupId={group.id}
+            tabs={group.tabs}
+            activeTabId={group.activeTabId}
+            previewTabId={group.previewTabId}
+            isFocused={group.id === activeGroupId}
+            flexBasis={group.flexBasis}
+            onFocus={() => focusGroup(group.id)}
+            onTabSelect={(tabId) => props.onTabSelect(group.id, tabId)}
+            onTabClose={props.onTabClose}
+            onCloseAllTabs={props.onCloseAllTabs}
+            onCloseOtherTabs={props.onCloseOtherTabs}
+            onCloseTabsToRight={props.onCloseTabsToRight}
+            onSplitToRight={props.onSplitToRight}
+            onPinTab={props.onPinTab}
+            onRefreshTree={props.onRefreshTree}
+            onOpenSession={props.onOpenSession}
+            recentSessions={recentSessions}
+            recentSessionsLoading={recentSessionsLoading}
+            recentSessionsError={recentSessionsError}
+            childCounts={childCounts}
+          />
+        </Fragment>
+      ))}
+      <div
+        className={`editor-groups-drop-right${dropActive ? " active" : ""}`}
+      />
     </div>
   );
 }

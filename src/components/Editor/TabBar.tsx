@@ -1,12 +1,9 @@
 import {
-  createSignal,
-  createEffect,
-  on,
-  onMount,
-  onCleanup,
-  For,
-  Show,
-} from "solid-js";
+  type MouseEvent as ReactMouseEvent,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
 import type { SessionRef, Provider } from "../../lib/types";
 import { useI18n } from "../../i18n/index";
 import { ContextMenu, type MenuItemDef } from "../ContextMenu";
@@ -37,63 +34,72 @@ export function TabBar(props: {
   onPinTab: (sessionId: string) => void;
 }) {
   const { t } = useI18n();
-  const [menuState, setMenuState] = createSignal<{
+  const [menuState, setMenuState] = useState<{
     pos: { x: number; y: number };
     tabId: string;
   } | null>(null);
-  const [overflowing, setOverflowing] = createSignal(false);
-  const [showOverflowMenu, setShowOverflowMenu] = createSignal(false);
+  const [overflowing, setOverflowing] = useState(false);
+  const [showOverflowMenu, setShowOverflowMenu] = useState(false);
 
-  let scrollRef: HTMLDivElement | undefined;
-  let overflowBtnRef: HTMLButtonElement | undefined;
-  let overflowMenuRef: HTMLDivElement | undefined;
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const overflowBtnRef = useRef<HTMLButtonElement>(null);
+  const overflowMenuRef = useRef<HTMLDivElement>(null);
 
   // --- Overflow detection ---
   function checkOverflow() {
-    if (!scrollRef) return;
-    setOverflowing(scrollRef.scrollWidth > scrollRef.clientWidth + 1);
+    const el = scrollRef.current;
+    if (!el) return;
+    setOverflowing(el.scrollWidth > el.clientWidth + 1);
   }
 
-  onMount(() => {
-    if (!scrollRef) return;
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el) return;
     const ro = new ResizeObserver(checkOverflow);
-    ro.observe(scrollRef);
-    onCleanup(() => ro.disconnect());
-  });
+    ro.observe(el);
+    return () => ro.disconnect();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Re-check overflow when tabs change (count, titles, or preview state)
-  createEffect(on(() => props.tabs, checkOverflow, { defer: true }));
+  useEffect(() => {
+    checkOverflow();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [props.tabs]);
 
   // Scroll active tab into view
-  createEffect(
-    on(
-      () => props.activeTabId,
-      (id) => {
-        if (!id || !scrollRef) return;
-        const el = scrollRef.querySelector(
-          `[data-tab-id="${CSS.escape(id)}"]`,
-        ) as HTMLElement | null;
-        el?.scrollIntoView({ block: "nearest", inline: "nearest" });
-      },
-      { defer: true },
-    ),
-  );
+  useEffect(() => {
+    const id = props.activeTabId;
+    if (!id || !scrollRef.current) return;
+    const el = scrollRef.current.querySelector(
+      `[data-tab-id="${CSS.escape(id)}"]`,
+    ) as HTMLElement | null;
+    el?.scrollIntoView({ block: "nearest", inline: "nearest" });
+  }, [props.activeTabId]);
 
-  function handleWheel(e: WheelEvent) {
-    if (!scrollRef) return;
-    if (Math.abs(e.deltaX) > Math.abs(e.deltaY)) return; // natural horizontal scroll
-    e.preventDefault();
-    scrollRef.scrollLeft += e.deltaY;
-  }
+  // Natural horizontal wheel scroll. React attaches `wheel` as a passive
+  // listener at the root, so `preventDefault()` there is a no-op — attach a
+  // non-passive native listener to keep the Solid behavior.
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    const onWheel = (e: WheelEvent) => {
+      if (Math.abs(e.deltaX) > Math.abs(e.deltaY)) return; // natural horizontal scroll
+      e.preventDefault();
+      el.scrollLeft += e.deltaY;
+    };
+    el.addEventListener("wheel", onWheel, { passive: false });
+    return () => el.removeEventListener("wheel", onWheel);
+  }, []);
 
-  function handleContextMenu(e: MouseEvent, tabId: string) {
+  function handleContextMenu(e: ReactMouseEvent, tabId: string) {
     e.preventDefault();
     e.stopPropagation();
     setMenuState({ pos: { x: e.clientX, y: e.clientY }, tabId });
   }
 
   function menuItems(): MenuItemDef[] {
-    const m = menuState();
+    const m = menuState;
     if (!m) return [];
     const isPreview = m.tabId === props.previewTabId;
     const items: MenuItemDef[] = [
@@ -135,21 +141,21 @@ export function TabBar(props: {
   // Close overflow menu when clicking outside
   function handleDocClick(e: MouseEvent) {
     const target = e.target as Node;
-    if (overflowBtnRef?.contains(target)) return;
-    if (overflowMenuRef?.contains(target)) return;
+    if (overflowBtnRef.current?.contains(target)) return;
+    if (overflowMenuRef.current?.contains(target)) return;
     setShowOverflowMenu(false);
   }
-  onMount(() => {
+  useEffect(() => {
     document.addEventListener("mousedown", handleDocClick);
-    onCleanup(() => document.removeEventListener("mousedown", handleDocClick));
-  });
+    return () => document.removeEventListener("mousedown", handleDocClick);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   return (
-    <div class="tab-bar">
+    <div className="tab-bar">
       <div
         ref={scrollRef}
-        class="tab-bar-scroll"
-        onWheel={handleWheel}
+        className="tab-bar-scroll"
         onDragOver={(e) => {
           e.preventDefault();
           if (e.dataTransfer) e.dataTransfer.dropEffect = "move";
@@ -172,104 +178,104 @@ export function TabBar(props: {
           }
         }}
       >
-        <For each={props.tabs}>
-          {(tab) => {
-            const isActive = () => tab.id === props.activeTabId;
-            const isPreview = () => tab.id === props.previewTabId;
-            return (
-              <div
-                class={`tab${isActive() ? " active" : ""}${isPreview() ? " preview" : ""}`}
-                data-tab-id={tab.id}
-                draggable={true}
-                onDragStart={(e) => {
-                  const transfer = e.dataTransfer;
-                  if (!transfer) {
-                    console.warn("Tab drag started without dataTransfer");
-                    return;
-                  }
-                  const payload = serializeTabDragPayload({
-                    sessionId: tab.id,
-                    sourceGroupId: props.groupId,
-                  });
-                  transfer.setData(TAB_DRAG_MIME, payload);
-                  transfer.setData(TAB_DRAG_FALLBACK_MIME, payload);
-                  transfer.effectAllowed = "move";
-                  (e.currentTarget as HTMLElement).style.opacity = "0.4";
-                }}
-                onDragEnd={(e) => {
-                  (e.currentTarget as HTMLElement).style.opacity = "";
-                }}
+        {props.tabs.map((tab) => {
+          const isActive = tab.id === props.activeTabId;
+          const isPreview = tab.id === props.previewTabId;
+          return (
+            <div
+              key={tab.id}
+              className={`tab${isActive ? " active" : ""}${isPreview ? " preview" : ""}`}
+              data-tab-id={tab.id}
+              draggable={true}
+              onDragStart={(e) => {
+                const transfer = e.dataTransfer;
+                if (!transfer) {
+                  console.warn("Tab drag started without dataTransfer");
+                  return;
+                }
+                const payload = serializeTabDragPayload({
+                  sessionId: tab.id,
+                  sourceGroupId: props.groupId,
+                });
+                transfer.setData(TAB_DRAG_MIME, payload);
+                transfer.setData(TAB_DRAG_FALLBACK_MIME, payload);
+                transfer.effectAllowed = "move";
+                (e.currentTarget as HTMLElement).style.opacity = "0.4";
+              }}
+              onDragEnd={(e) => {
+                (e.currentTarget as HTMLElement).style.opacity = "";
+              }}
+              onClick={(e) => {
+                if (e.button === 0) props.onTabSelect(tab.id);
+              }}
+              onDoubleClick={() => {
+                if (isPreview) props.onPinTab(tab.id);
+              }}
+              onMouseDown={(e) => {
+                if (e.button === 1) {
+                  e.preventDefault();
+                  props.onTabClose(tab.id);
+                }
+              }}
+              onContextMenu={(e) => handleContextMenu(e, tab.id)}
+            >
+              <span
+                className="tab-dot"
+                style={{ background: providerColor(tab.provider) }}
+              />
+              <span className="tab-title">{tab.title}</span>
+              <button
+                className={`tab-close${isActive ? " visible" : ""}`}
+                aria-label={t("common.closeTab")}
                 onClick={(e) => {
-                  if (e.button === 0) props.onTabSelect(tab.id);
+                  e.stopPropagation();
+                  props.onTabClose(tab.id);
                 }}
-                onDblClick={() => {
-                  if (isPreview()) props.onPinTab(tab.id);
-                }}
-                onMouseDown={(e) => {
-                  if (e.button === 1) {
-                    e.preventDefault();
-                    props.onTabClose(tab.id);
-                  }
-                }}
-                onContextMenu={(e) => handleContextMenu(e, tab.id)}
               >
-                <span
-                  class="tab-dot"
-                  style={{ background: providerColor(tab.provider) }}
-                />
-                <span class="tab-title">{tab.title}</span>
-                <button
-                  class={`tab-close${isActive() ? " visible" : ""}`}
-                  aria-label={t("common.closeTab")}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    props.onTabClose(tab.id);
-                  }}
-                >
-                  &times;
-                </button>
-              </div>
-            );
-          }}
-        </For>
+                &times;
+              </button>
+            </div>
+          );
+        })}
       </div>
 
       {/* Overflow chevron */}
-      <Show when={overflowing()}>
-        <button
-          ref={overflowBtnRef}
-          class="tab-overflow-btn"
-          title={t("tabs.showOpenTabs")}
-          onClick={() => setShowOverflowMenu((v) => !v)}
-        >
-          &#xBB;
-        </button>
-        <Show when={showOverflowMenu()}>
-          <div ref={overflowMenuRef} class="tab-overflow-menu">
-            <For each={props.tabs}>
-              {(tab) => (
+      {overflowing && (
+        <>
+          <button
+            ref={overflowBtnRef}
+            className="tab-overflow-btn"
+            title={t("tabs.showOpenTabs")}
+            onClick={() => setShowOverflowMenu((v) => !v)}
+          >
+            &#xBB;
+          </button>
+          {showOverflowMenu && (
+            <div ref={overflowMenuRef} className="tab-overflow-menu">
+              {props.tabs.map((tab) => (
                 <button
-                  class={`tab-overflow-item${tab.id === props.activeTabId ? " active" : ""}${tab.id === props.previewTabId ? " preview" : ""}`}
+                  key={tab.id}
+                  className={`tab-overflow-item${tab.id === props.activeTabId ? " active" : ""}${tab.id === props.previewTabId ? " preview" : ""}`}
                   onClick={() => {
                     props.onTabSelect(tab.id);
                     setShowOverflowMenu(false);
                   }}
                 >
                   <span
-                    class="tab-dot"
+                    className="tab-dot"
                     style={{ background: providerColor(tab.provider) }}
                   />
-                  <span class="tab-overflow-title">{tab.title}</span>
+                  <span className="tab-overflow-title">{tab.title}</span>
                 </button>
-              )}
-            </For>
-          </div>
-        </Show>
-      </Show>
+              ))}
+            </div>
+          )}
+        </>
+      )}
 
       <ContextMenu
         items={menuItems()}
-        position={menuState()?.pos ?? null}
+        position={menuState?.pos ?? null}
         onClose={() => setMenuState(null)}
       />
     </div>

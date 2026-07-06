@@ -1,4 +1,5 @@
-import { createMemo, createResource, createSignal, onMount } from "solid-js";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import type { Dispatch, SetStateAction } from "react";
 import type { TrashMeta, TreeNode } from "../../lib/types";
 import {
   listTrash,
@@ -16,33 +17,84 @@ import { errorMessage } from "../../lib/errors";
 
 // --- Trash list, tree building, and trash actions ------------------------------
 
-export function createTrashState(onRefreshTree: () => void) {
+export interface UseTrashStateResult {
+  trashItems: TrashMeta[] | undefined;
+  trashLoading: boolean;
+  trashError: string | null;
+  tree: TreeNode[];
+  itemMap: Map<string, TrashMeta>;
+  expandedIds: Set<string>;
+  toggleExpanded: (nodeId: string) => void;
+  showEmptyConfirm: boolean;
+  setShowEmptyConfirm: Dispatch<SetStateAction<boolean>>;
+  showRestoreConfirm: boolean;
+  setShowRestoreConfirm: Dispatch<SetStateAction<boolean>>;
+  restoreTarget: TreeNode | null;
+  setRestoreTarget: Dispatch<SetStateAction<TreeNode | null>>;
+  showDeleteAllConfirm: boolean;
+  setShowDeleteAllConfirm: Dispatch<SetStateAction<boolean>>;
+  deleteAllTarget: TreeNode | null;
+  setDeleteAllTarget: Dispatch<SetStateAction<TreeNode | null>>;
+  handleRestore: (id: string) => Promise<void>;
+  handlePermanentDelete: (id: string) => Promise<void>;
+  handleEmptyTrash: () => Promise<void>;
+  handleRestoreAll: (node: TreeNode) => Promise<void>;
+  handleDeleteAll: (node: TreeNode) => Promise<void>;
+}
+
+// Now a React hook: call it at the top level of a component.
+export function useTrashState(onRefreshTree: () => void): UseTrashStateResult {
   const { t } = useI18n();
-  const [showEmptyConfirm, setShowEmptyConfirm] = createSignal(false);
-  const [showRestoreConfirm, setShowRestoreConfirm] = createSignal(false);
-  const [restoreTarget, setRestoreTarget] = createSignal<TreeNode | null>(null);
-  const [showDeleteAllConfirm, setShowDeleteAllConfirm] = createSignal(false);
-  const [deleteAllTarget, setDeleteAllTarget] = createSignal<TreeNode | null>(
-    null,
+  const [showEmptyConfirm, setShowEmptyConfirm] = useState(false);
+  const [showRestoreConfirm, setShowRestoreConfirm] = useState(false);
+  const [restoreTarget, setRestoreTarget] = useState<TreeNode | null>(null);
+  const [showDeleteAllConfirm, setShowDeleteAllConfirm] = useState(false);
+  const [deleteAllTarget, setDeleteAllTarget] = useState<TreeNode | null>(null);
+  const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
+
+  const [trashItems, setTrashItems] = useState<TrashMeta[] | undefined>(
+    undefined,
   );
-  const [expandedIds, setExpandedIds] = createSignal<Set<string>>(new Set());
+  const [trashLoading, setTrashLoading] = useState(true);
+  const [resourceError, setResourceError] = useState<unknown>(null);
 
-  const [trashItems, { refetch }] = createResource<TrashMeta[]>(() =>
-    listTrash(),
+  const refetch = useCallback(async () => {
+    setTrashLoading(true);
+    try {
+      const data = await listTrash();
+      setTrashItems(data);
+      setResourceError(null);
+    } catch (e) {
+      setResourceError(e);
+    } finally {
+      setTrashLoading(false);
+    }
+  }, []);
+
+  const trashError = useMemo(
+    () => (resourceError ? errorMessage(resourceError) : null),
+    [resourceError],
   );
 
-  const trashError = createMemo(() =>
-    trashItems.error ? errorMessage(trashItems.error) : null,
+  useEffect(() => {
+    void refetch();
+  }, [refetch]);
+
+  const unknownLabel = t("common.unknown");
+  const untitledLabel = t("common.untitled");
+
+  const tree = useMemo(
+    () =>
+      buildTrashTree(trashItems ?? [], {
+        unknown: unknownLabel,
+        untitled: untitledLabel,
+      }),
+    [trashItems, unknownLabel, untitledLabel],
   );
 
-  onMount(() => refetch());
-
-  const tree = createMemo(() => {
-    const items = trashItems() || [];
-    const trashTree = buildTrashTree(items, {
-      unknown: t("common.unknown"),
-      untitled: t("common.untitled"),
-    });
+  // Auto-expand every non-session node whenever the tree is rebuilt (mirrors
+  // the side effect the Solid `tree` memo performed inline on each recompute).
+  useEffect(() => {
     const ids = new Set<string>();
     const collectIds = (nodes: TreeNode[]) => {
       for (const node of nodes) {
@@ -52,18 +104,17 @@ export function createTrashState(onRefreshTree: () => void) {
         }
       }
     };
-    collectIds(trashTree);
+    collectIds(tree);
     setExpandedIds(ids);
-    return trashTree;
-  });
+  }, [tree]);
 
-  const itemMap = createMemo(() => {
+  const itemMap = useMemo(() => {
     const map = new Map<string, TrashMeta>();
-    for (const item of trashItems() || []) {
+    for (const item of trashItems ?? []) {
       map.set(item.id, item);
     }
     return map;
-  });
+  }, [trashItems]);
 
   async function handleRestore(id: string) {
     try {
@@ -79,7 +130,7 @@ export function createTrashState(onRefreshTree: () => void) {
   async function handlePermanentDelete(id: string) {
     try {
       await permanentDeleteTrash(id);
-      refetch();
+      void refetch();
     } catch (e) {
       toastError(errorMessage(e));
     }
@@ -89,7 +140,7 @@ export function createTrashState(onRefreshTree: () => void) {
     try {
       await emptyTrash();
       setShowEmptyConfirm(false);
-      refetch();
+      void refetch();
     } catch (e) {
       toastError(errorMessage(e));
       setShowEmptyConfirm(false);
@@ -110,7 +161,7 @@ export function createTrashState(onRefreshTree: () => void) {
   async function handleDeleteAll(node: TreeNode) {
     const ids = collectSessionIds(node);
     await permanentDeleteTrashBatch(ids);
-    refetch();
+    void refetch();
   }
 
   function toggleExpanded(nodeId: string) {
@@ -124,6 +175,7 @@ export function createTrashState(onRefreshTree: () => void) {
 
   return {
     trashItems,
+    trashLoading,
     trashError,
     tree,
     itemMap,

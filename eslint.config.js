@@ -17,7 +17,6 @@ export default tseslint.config(
       ".reference/",
       "**/*.test.ts",
       "**/*.test.tsx",
-      "src/components/**",
     ],
   },
   js.configs.recommended,

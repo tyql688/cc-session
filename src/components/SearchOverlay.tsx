@@ -1,9 +1,10 @@
-import { createEffect, Show, For, onCleanup } from "solid-js";
+import type React from "react";
+import { useEffect, useRef, useState } from "react";
 import type { SessionRef } from "../lib/types";
 import {
-  query,
-  results,
-  isSearching,
+  useSearchQuery,
+  useSearchResults,
+  useIsSearching,
   search,
   clearSearch,
   parseSearchQuery,
@@ -11,7 +12,6 @@ import {
 } from "../stores/search";
 import { useI18n } from "../i18n/index";
 import { ProviderIcon } from "./icons";
-import { createSignal } from "solid-js";
 
 function sanitizeSnippet(html: string): string {
   const escaped = html
@@ -30,37 +30,40 @@ export function SearchOverlay(props: {
   onOpenSession: (session: SessionRef) => void;
 }) {
   const { t } = useI18n();
-  const [selectedIndex, setSelectedIndex] = createSignal(0);
-  let inputRef: HTMLInputElement | undefined;
+  const query = useSearchQuery();
+  const results = useSearchResults();
+  const isSearching = useIsSearching();
+  const [selectedIndex, setSelectedIndex] = useState(0);
+  const inputRef = useRef<HTMLInputElement>(null);
 
-  createEffect(() => {
+  useEffect(() => {
     if (props.show) {
-      queueMicrotask(() => inputRef?.focus());
+      queueMicrotask(() => inputRef.current?.focus());
       setSelectedIndex(0);
     }
-  });
+  }, [props.show]);
 
-  createEffect(() => {
+  useEffect(() => {
     // keep selection within range as results change
-    const len = results().length;
-    if (selectedIndex() >= len) {
+    const len = results.length;
+    if (selectedIndex >= len) {
       setSelectedIndex(len > 0 ? len - 1 : 0);
     }
-  });
+  }, [results, selectedIndex]);
 
-  function handleInput(e: InputEvent) {
-    const target = e.currentTarget as HTMLInputElement;
+  function handleInput(e: React.ChangeEvent<HTMLInputElement>) {
+    const target = e.currentTarget;
     search(target.value);
     setSelectedIndex(0);
   }
 
   function openAt(idx: number) {
-    const r = results();
+    const r = results;
     if (idx < 0 || idx >= r.length) return;
     const session = r[idx].session;
     // Strip filter prefixes (provider:foo project:bar ...) so the in-session
     // search receives the actual content query the user typed.
-    const contentQuery = parseSearchQuery(query()).query;
+    const contentQuery = parseSearchQuery(query).query;
     if (contentQuery) {
       setPendingSessionSearch({ sessionId: session.id, query: contentQuery });
     }
@@ -74,8 +77,8 @@ export function SearchOverlay(props: {
     props.onClose();
   }
 
-  function handleKeyDown(e: KeyboardEvent) {
-    const r = results();
+  function handleKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
+    const r = results;
     if (e.key === "ArrowDown") {
       e.preventDefault();
       setSelectedIndex((i) => (r.length === 0 ? 0 : (i + 1) % r.length));
@@ -92,8 +95,8 @@ export function SearchOverlay(props: {
       e.preventDefault();
       // Block Enter while a search is still in flight, so a lingering result
       // list from the previous keystroke can't be navigated to.
-      if (isSearching() || r.length === 0) return;
-      openAt(selectedIndex());
+      if (isSearching || r.length === 0) return;
+      openAt(selectedIndex);
       return;
     }
     if (e.key === "Escape") {
@@ -102,100 +105,98 @@ export function SearchOverlay(props: {
     }
   }
 
-  onCleanup(() => {
-    clearSearch();
-  });
+  useEffect(() => {
+    return () => {
+      clearSearch();
+    };
+  }, []);
 
   return (
-    <Show when={props.show}>
+    props.show && (
       <div
-        class="search-overlay-backdrop"
+        className="search-overlay-backdrop"
         onMouseDown={(e) => {
           if (e.target === e.currentTarget) handleClose();
         }}
       >
         <div
-          class="search-overlay"
+          className="search-overlay"
           role="dialog"
           aria-modal="true"
           aria-label={t("search.ariaLabel")}
         >
-          <div class="search-overlay-input-row">
+          <div className="search-overlay-input-row">
             <svg
-              class="search-icon"
+              className="search-icon"
               width="16"
               height="16"
               viewBox="0 0 24 24"
               fill="none"
               stroke="currentColor"
-              stroke-width="2"
+              strokeWidth="2"
             >
               <circle cx="11" cy="11" r="8" />
               <path d="M21 21l-4.35-4.35" />
             </svg>
             <input
               ref={inputRef}
-              class="search-overlay-input"
+              className="search-overlay-input"
               type="text"
               aria-label={t("search.ariaLabel")}
               placeholder={t("search.placeholder")}
-              value={query()}
-              onInput={handleInput}
+              value={query}
+              onChange={handleInput}
               onKeyDown={handleKeyDown}
             />
-            <kbd class="search-shortcut">Esc</kbd>
+            <kbd className="search-shortcut">Esc</kbd>
           </div>
-          <div class="search-overlay-results">
-            <Show when={isSearching()}>
-              <div class="search-loading">
-                <div class="spinner spinner-sm" />
+          <div className="search-overlay-results">
+            {isSearching && (
+              <div className="search-loading">
+                <div className="spinner spinner-sm" />
               </div>
-            </Show>
-            <Show
-              when={
-                !isSearching() &&
-                results().length === 0 &&
-                query().trim().length > 0
-              }
-            >
-              <div class="search-no-results">{t("search.noResults")}</div>
-            </Show>
-            <Show when={query().trim().length === 0}>
-              <div class="search-no-results">{t("search.placeholder")}</div>
-            </Show>
-            <For each={results()}>
-              {(result, i) => (
-                <button
-                  class="search-result-item"
-                  classList={{ selected: selectedIndex() === i() }}
-                  onMouseDown={(e) => {
-                    e.preventDefault();
-                    openAt(i());
-                  }}
-                  onMouseEnter={() => setSelectedIndex(i())}
-                >
-                  <span
-                    class="provider-dot provider-logo"
-                    style={{ color: `var(--${result.session.provider})` }}
-                  >
-                    <ProviderIcon provider={result.session.provider} />
-                  </span>
-                  <div class="search-result-text">
-                    <span class="search-result-title">
-                      {result.session.title}
-                    </span>
-                    <span
-                      class="search-result-snippet"
-                      // eslint-disable-next-line solid/no-innerhtml -- sanitizeSnippet escapes then restores <mark> only
-                      innerHTML={sanitizeSnippet(result.snippet)}
-                    />
-                  </div>
-                </button>
+            )}
+            {!isSearching &&
+              results.length === 0 &&
+              query.trim().length > 0 && (
+                <div className="search-no-results">{t("search.noResults")}</div>
               )}
-            </For>
+            {query.trim().length === 0 && (
+              <div className="search-no-results">{t("search.placeholder")}</div>
+            )}
+            {results.map((result, i) => (
+              <button
+                key={result.session.id}
+                className={`search-result-item${selectedIndex === i ? " selected" : ""}`}
+                onMouseDown={(e) => {
+                  e.preventDefault();
+                  openAt(i);
+                }}
+                onMouseEnter={() => setSelectedIndex(i)}
+              >
+                <span
+                  className="provider-dot provider-logo"
+                  style={{ color: `var(--${result.session.provider})` }}
+                >
+                  <ProviderIcon provider={result.session.provider} />
+                </span>
+                <div className="search-result-text">
+                  <span className="search-result-title">
+                    {result.session.title}
+                  </span>
+                  <span
+                    className="search-result-snippet"
+                    // biome-ignore lint/security/noDangerouslySetInnerHtml: sanitizeSnippet escapes then restores <mark> only
+                    dangerouslySetInnerHTML={{
+                      __html: sanitizeSnippet(result.snippet),
+                    }}
+                  />
+                </div>
+              </button>
+            ))}
           </div>
         </div>
       </div>
-    </Show>
+    )
   );
 }

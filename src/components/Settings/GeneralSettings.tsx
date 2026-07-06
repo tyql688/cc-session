@@ -1,13 +1,13 @@
-import { useI18n, setLocale } from "../../i18n/index";
+import { useI18n } from "../../i18n/index";
 import type { Locale } from "../../i18n/index";
-import { theme, setTheme } from "../../stores/theme";
+import { useTheme, setTheme } from "../../stores/theme";
 import type { Theme } from "../../stores/theme";
 import {
-  terminalApp,
+  useTerminalApp,
   setTerminalApp,
-  timeGrouping,
+  useTimeGrouping,
   setTimeGrouping,
-  showOrphans,
+  useShowOrphans,
   setShowOrphans,
 } from "../../stores/settings";
 import type { TerminalApp } from "../../stores/settings";
@@ -24,29 +24,33 @@ function handleThemeChange(value: string) {
   if (validThemes.includes(value as Theme)) setTheme(value as Theme);
 }
 
-function handleLanguageChange(value: string) {
-  setLocale(value as Locale);
-}
-
 function handleTerminalChange(value: string) {
   if (validTerminals.includes(value as TerminalApp))
     setTerminalApp(value as TerminalApp);
 }
 
 export function GeneralSettings() {
-  const { t, locale } = useI18n();
+  const { t, locale, setLocale } = useI18n();
+  const theme = useTheme();
+  const terminalApp = useTerminalApp();
+  const timeGrouping = useTimeGrouping();
+  const showOrphans = useShowOrphans();
+
+  function handleLanguageChange(value: string) {
+    setLocale(value as Locale);
+  }
 
   return (
-    <div class="settings-section">
-      <div class="settings-section-title">{t("settings.general")}</div>
+    <div className="settings-section">
+      <div className="settings-section-title">{t("settings.general")}</div>
 
-      <div class="settings-row">
+      <div className="settings-row">
         <div>
-          <div class="settings-label">{t("settings.theme")}</div>
+          <div className="settings-label">{t("settings.theme")}</div>
         </div>
         <select
-          class="settings-select"
-          value={theme()}
+          className="settings-select"
+          value={theme}
           onChange={(e) => handleThemeChange(e.currentTarget.value)}
         >
           <option value="light">{t("settings.themeLight")}</option>
@@ -55,13 +59,13 @@ export function GeneralSettings() {
         </select>
       </div>
 
-      <div class="settings-row">
+      <div className="settings-row">
         <div>
-          <div class="settings-label">{t("settings.language")}</div>
+          <div className="settings-label">{t("settings.language")}</div>
         </div>
         <select
-          class="settings-select"
-          value={locale()}
+          className="settings-select"
+          value={locale}
           onChange={(e) => handleLanguageChange(e.currentTarget.value)}
         >
           <option value="en">{t("settings.languageEnglish")}</option>
@@ -69,14 +73,14 @@ export function GeneralSettings() {
         </select>
       </div>
 
-      <div class="settings-row">
+      <div className="settings-row">
         <div>
-          <div class="settings-label">{t("settings.terminal")}</div>
-          <div class="settings-desc">{t("settings.terminalDesc")}</div>
+          <div className="settings-label">{t("settings.terminal")}</div>
+          <div className="settings-desc">{t("settings.terminalDesc")}</div>
         </div>
         <select
-          class="settings-select"
-          value={terminalApp()}
+          className="settings-select"
+          value={terminalApp}
           onChange={(e) => handleTerminalChange(e.currentTarget.value)}
         >
           {isMac ? (
@@ -108,28 +112,28 @@ export function GeneralSettings() {
         </select>
       </div>
 
-      <div class="settings-row">
+      <div className="settings-row">
         <div>
-          <div class="settings-label">{t("settings.timeGrouping")}</div>
-          <div class="settings-desc">{t("settings.timeGroupingDesc")}</div>
+          <div className="settings-label">{t("settings.timeGrouping")}</div>
+          <div className="settings-desc">{t("settings.timeGroupingDesc")}</div>
         </div>
         <input
           type="checkbox"
-          class="settings-checkbox"
-          checked={timeGrouping()}
+          className="settings-checkbox"
+          checked={timeGrouping}
           onChange={(e) => setTimeGrouping(e.currentTarget.checked)}
         />
       </div>
 
-      <div class="settings-row">
+      <div className="settings-row">
         <div>
-          <div class="settings-label">{t("settings.showOrphans")}</div>
-          <div class="settings-desc">{t("settings.showOrphansDesc")}</div>
+          <div className="settings-label">{t("settings.showOrphans")}</div>
+          <div className="settings-desc">{t("settings.showOrphansDesc")}</div>
         </div>
         <input
           type="checkbox"
-          class="settings-checkbox"
-          checked={showOrphans()}
+          className="settings-checkbox"
+          checked={showOrphans}
           onChange={(e) => setShowOrphans(e.currentTarget.checked)}
         />
       </div>
