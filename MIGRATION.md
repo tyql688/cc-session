@@ -76,3 +76,7 @@ components → SessionView → editor groups → panels → App shell → tests/
   at each checkpoint (excluded dirs aside).
 - Behavior parity is verified against `master` as the oracle, not from memory.
 - No Solid remnant left by Phase 10 (`grep -r solid-js src` must be empty).
+- **Tests during migration are run targeted** (`vitest run <ported path>`); the
+  green gate each checkpoint is tsc + biome + eslint. Full `npm test` (both
+  vitest projects) is restored green in Phase 10. Each ported module ports its
+  own test alongside it.

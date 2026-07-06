@@ -9,7 +9,7 @@ import {
   shortenHomePath,
   toLocalISODate,
 } from "./formatters";
-import { locale, setLocale } from "../i18n/index";
+import { getLocale, i18next } from "../i18n/index";
 
 describe("parseTimestamp", () => {
   it("parses epoch seconds and converts to ms", () => {
@@ -73,15 +73,17 @@ describe("fmtWan", () => {
 });
 
 describe("fmtTokens", () => {
-  const initialLocale = locale();
-  afterEach(() => setLocale(initialLocale));
+  const initialLocale = getLocale();
+  afterEach(async () => {
+    await i18next.changeLanguage(initialLocale);
+  });
 
-  it("uses 万/亿 scale for zh locale", () => {
-    setLocale("zh");
+  it("uses 万/亿 scale for zh locale", async () => {
+    await i18next.changeLanguage("zh");
     expect(fmtTokens(340_000_000)).toBe("3.4亿");
   });
-  it("uses K/M/B scale for en locale", () => {
-    setLocale("en");
+  it("uses K/M/B scale for en locale", async () => {
+    await i18next.changeLanguage("en");
     expect(fmtTokens(340_000_000)).toBe("340.0M");
   });
 });

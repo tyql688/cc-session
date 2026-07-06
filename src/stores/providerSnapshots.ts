@@ -1,13 +1,19 @@
-import { createSignal } from "solid-js";
+import { create } from "zustand";
 import { getProviderSnapshots } from "../lib/tauri";
 import type { Provider, ProviderSnapshot } from "../lib/types";
 
 type ProviderSnapshotMap = Partial<Record<Provider, ProviderSnapshot>>;
 type ProviderWatchStrategy = ProviderSnapshot["watch_strategy"];
 
-const [providerSnapshotMap, setProviderSnapshotMap] =
-  createSignal<ProviderSnapshotMap>({});
-const [providerSnapshotVersion, setProviderSnapshotVersion] = createSignal(0);
+interface ProviderSnapshotState {
+  snapshotMap: ProviderSnapshotMap;
+  version: number;
+}
+
+const useProviderSnapshotStore = create<ProviderSnapshotState>(() => ({
+  snapshotMap: {},
+  version: 0,
+}));
 
 const FALLBACK_PROVIDER_SNAPSHOTS: Record<Provider, ProviderSnapshot> = {
   claude: {
@@ -95,15 +101,17 @@ const FALLBACK_PROVIDER_SNAPSHOTS: Record<Provider, ProviderSnapshot> = {
 let loadPromise: Promise<void> | null = null;
 
 function activeProviderSnapshotMap(): Record<Provider, ProviderSnapshot> {
-  const loaded = providerSnapshotMap();
   return {
     ...FALLBACK_PROVIDER_SNAPSHOTS,
-    ...loaded,
+    ...useProviderSnapshotStore.getState().snapshotMap,
   };
 }
 
 export async function loadProviderSnapshots(force = false) {
-  if (!force && Object.keys(providerSnapshotMap()).length > 0) {
+  if (
+    !force &&
+    Object.keys(useProviderSnapshotStore.getState().snapshotMap).length > 0
+  ) {
     return;
   }
 
@@ -115,8 +123,10 @@ export async function loadProviderSnapshots(force = false) {
       for (const snapshot of snapshots) {
         next[snapshot.key] = snapshot;
       }
-      setProviderSnapshotMap(next);
-      setProviderSnapshotVersion((version) => version + 1);
+      useProviderSnapshotStore.setState((state) => ({
+        snapshotMap: next,
+        version: state.version + 1,
+      }));
     })
     .catch((error) => {
       console.warn("failed to load provider snapshots:", error);
@@ -180,5 +190,14 @@ export function getProviderSortOrder(provider: Provider): number {
 }
 
 export function getProviderSnapshotVersion(): number {
-  return providerSnapshotVersion();
+  return useProviderSnapshotStore.getState().version;
+}
+
+/**
+ * Reactive subscription for React components that render provider metadata:
+ * re-renders when snapshots finish loading (bumps `version`). Imperative
+ * callers (lib/*) keep using the plain getters above.
+ */
+export function useProviderSnapshotVersion(): number {
+  return useProviderSnapshotStore((state) => state.version);
 }
