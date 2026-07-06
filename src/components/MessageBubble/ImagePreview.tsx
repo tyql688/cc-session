@@ -1,4 +1,4 @@
-import { createSignal, createEffect, onCleanup, Show } from "solid-js";
+import { useState, useEffect } from "react";
 import { readImageBase64 } from "../../lib/tauri";
 import { cachedLoad } from "../../lib/image-cache";
 import { shortenHomePath } from "../../lib/formatters";
@@ -17,10 +17,10 @@ export function LocalImage(props: {
   path: string;
   onPreview: (src: string, source: string) => void;
 }) {
-  const [src, setSrc] = createSignal<string | null>(null);
-  const [failed, setFailed] = createSignal(false);
+  const [src, setSrc] = useState<string | null>(null);
+  const [failed, setFailed] = useState(false);
 
-  createEffect(() => {
+  useEffect(() => {
     let active = true;
     setSrc(null);
     setFailed(false);
@@ -36,32 +36,25 @@ export function LocalImage(props: {
         setFailed(true);
       });
 
-    onCleanup(() => {
+    return () => {
       active = false;
-    });
-  });
+    };
+  }, [props.path]);
 
-  return (
-    <Show
-      when={src()}
-      fallback={
-        failed() ? (
-          <div class="msg-image-wrap">
-            <ImageFallback source={props.path} />
-          </div>
-        ) : (
-          <div class="msg-image-wrap">
-            <ImageLoading source={props.path} />
-          </div>
-        )
-      }
-    >
-      <InlineImage
-        src={src()!}
-        source={props.path}
-        onPreview={props.onPreview}
-      />
-    </Show>
+  if (src) {
+    return (
+      <InlineImage src={src} source={props.path} onPreview={props.onPreview} />
+    );
+  }
+
+  return failed ? (
+    <div className="msg-image-wrap">
+      <ImageFallback source={props.path} />
+    </div>
+  ) : (
+    <div className="msg-image-wrap">
+      <ImageLoading source={props.path} />
+    </div>
   );
 }
 
@@ -69,10 +62,10 @@ export function RemoteImage(props: {
   src: string;
   onPreview: (src: string, source: string) => void;
 }) {
-  const [loadedSrc, setLoadedSrc] = createSignal<string | null>(null);
-  const [failed, setFailed] = createSignal(false);
+  const [loadedSrc, setLoadedSrc] = useState<string | null>(null);
+  const [failed, setFailed] = useState(false);
 
-  createEffect(() => {
+  useEffect(() => {
     let active = true;
     setLoadedSrc(null);
     setFailed(false);
@@ -94,32 +87,29 @@ export function RemoteImage(props: {
         setFailed(true);
       });
 
-    onCleanup(() => {
+    return () => {
       active = false;
-    });
-  });
+    };
+  }, [props.src]);
 
-  return (
-    <Show
-      when={loadedSrc()}
-      fallback={
-        failed() ? (
-          <div class="msg-image-wrap">
-            <ImageFallback source={props.src} />
-          </div>
-        ) : (
-          <div class="msg-image-wrap">
-            <ImageLoading source={props.src} />
-          </div>
-        )
-      }
-    >
+  if (loadedSrc) {
+    return (
       <InlineImage
-        src={loadedSrc()!}
+        src={loadedSrc}
         source={props.src}
         onPreview={props.onPreview}
       />
-    </Show>
+    );
+  }
+
+  return failed ? (
+    <div className="msg-image-wrap">
+      <ImageFallback source={props.src} />
+    </div>
+  ) : (
+    <div className="msg-image-wrap">
+      <ImageLoading source={props.src} />
+    </div>
   );
 }
 
@@ -129,17 +119,17 @@ function InlineImage(props: {
   onPreview: (src: string, source: string) => void;
 }) {
   return (
-    <div class="msg-image-wrap">
+    <div className="msg-image-wrap">
       <button
         type="button"
-        class="msg-image-button"
+        className="msg-image-button"
         onClick={() => props.onPreview(props.src, props.source)}
         title={describeImageSource(props.source)}
       >
         <img
           src={props.src}
           alt={describeImageSource(props.source)}
-          class="msg-image is-ready"
+          className="msg-image is-ready"
           loading="lazy"
           decoding="async"
           draggable={false}
@@ -153,11 +143,11 @@ function ImageLoading(props: { source: string }) {
   const { t } = useI18n();
   return (
     <div
-      class="msg-image-state msg-image-loading"
+      className="msg-image-state msg-image-loading"
       title={describeImageSource(props.source)}
     >
-      <span class="msg-image-state-label">{t("common.loading")}</span>
-      <span class="msg-image-state-source">
+      <span className="msg-image-state-label">{t("common.loading")}</span>
+      <span className="msg-image-state-source">
         {labelImageSource(props.source, t)}
       </span>
     </div>
@@ -168,11 +158,13 @@ function ImageFallback(props: { source: string }) {
   const { t } = useI18n();
   return (
     <div
-      class="msg-image-state msg-image-fallback"
+      className="msg-image-state msg-image-fallback"
       title={describeImageSource(props.source)}
     >
-      <span class="msg-image-state-label">{t("common.imageLoadFailed")}</span>
-      <span class="msg-image-state-source">
+      <span className="msg-image-state-label">
+        {t("common.imageLoadFailed")}
+      </span>
+      <span className="msg-image-state-source">
         {labelImageSource(props.source, t)}
       </span>
     </div>
@@ -186,7 +178,7 @@ export function ImagePreview(props: {
 }) {
   const { t } = useI18n();
 
-  createEffect(() => {
+  useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
         props.onClose();
@@ -197,32 +189,32 @@ export function ImagePreview(props: {
     document.body.style.overflow = "hidden";
     window.addEventListener("keydown", onKeyDown);
 
-    onCleanup(() => {
+    return () => {
       document.body.style.overflow = previousOverflow;
       window.removeEventListener("keydown", onKeyDown);
-    });
-  });
+    };
+  }, [props.onClose]);
 
   return (
-    <div class="image-preview-overlay" onClick={props.onClose}>
+    <div className="image-preview-overlay" onClick={props.onClose}>
       <img
         src={props.src}
         alt={t("common.image")}
-        class="image-preview-img"
+        className="image-preview-img"
         onClick={(e) => e.stopPropagation()}
       />
-      <Show when={props.source}>
+      {props.source && (
         <div
-          class="image-preview-meta"
+          className="image-preview-meta"
           title={props.source ? describeImageSource(props.source) : undefined}
           onClick={(e) => e.stopPropagation()}
         >
           {labelImageSource(props.source!, t)}
         </div>
-      </Show>
+      )}
       <button
         type="button"
-        class="image-preview-close"
+        className="image-preview-close"
         aria-label={t("common.closePreview")}
         onClick={props.onClose}
       >
@@ -231,7 +223,7 @@ export function ImagePreview(props: {
           height="20"
           fill="none"
           stroke="currentColor"
-          stroke-width="2"
+          strokeWidth="2"
           viewBox="0 0 24 24"
         >
           <line x1="18" y1="6" x2="6" y2="18" />

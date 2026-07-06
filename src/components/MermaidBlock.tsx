@@ -1,7 +1,7 @@
-import { createEffect, createSignal, onCleanup, Show } from "solid-js";
+import { useCallback, useEffect, useState } from "react";
 import { useI18n } from "../i18n/index";
 import { normalizeMermaidCode } from "../lib/mermaidNormalize";
-import { theme } from "../stores/theme";
+import { useTheme } from "../stores/theme";
 import { CodeBlock } from "./CodeBlock";
 
 let mermaidMod: typeof import("mermaid").default | null = null;
@@ -13,33 +13,28 @@ function resolveIsDark(themeValue: string, systemDark: boolean): boolean {
   return systemDark;
 }
 
-export function MermaidBlock(props: { code: string }) {
+export function MermaidBlock({ code }: { code: string }) {
   const { t } = useI18n();
-  const [html, setHtml] = createSignal<string | null>(null);
-  const [error, setError] = createSignal(false);
-  const [showSource, setShowSource] = createSignal(false);
+  const [html, setHtml] = useState<string | null>(null);
+  const [error, setError] = useState(false);
+  const [showSource, setShowSource] = useState(false);
+  const themeValue = useTheme();
 
   // OS-level dark mode preference — re-renders Mermaid when the user
   // is on `theme: "system"` and toggles their OS theme.
-  const systemDarkQuery = window.matchMedia("(prefers-color-scheme: dark)");
-  const [systemDark, setSystemDark] = createSignal(systemDarkQuery.matches);
-  const onSystemThemeChange = (e: MediaQueryListEvent) =>
-    setSystemDark(e.matches);
-  systemDarkQuery.addEventListener("change", onSystemThemeChange);
-  onCleanup(() =>
-    systemDarkQuery.removeEventListener("change", onSystemThemeChange),
+  const [systemDark, setSystemDark] = useState(
+    () => window.matchMedia("(prefers-color-scheme: dark)").matches,
   );
+  useEffect(() => {
+    const systemDarkQuery = window.matchMedia("(prefers-color-scheme: dark)");
+    const onSystemThemeChange = (e: MediaQueryListEvent) =>
+      setSystemDark(e.matches);
+    systemDarkQuery.addEventListener("change", onSystemThemeChange);
+    return () =>
+      systemDarkQuery.removeEventListener("change", onSystemThemeChange);
+  }, []);
 
-  // Re-render on code change OR theme change. createEffect subscribes
-  // to every signal it reads on first run, so accessing props.code,
-  // theme(), and systemDark() here is enough to re-fire on any of them.
-  createEffect(() => {
-    const code = props.code;
-    const dark = resolveIsDark(theme(), systemDark());
-    void renderDiagram(code, dark);
-  });
-
-  async function renderDiagram(code: string, dark: boolean) {
+  const renderDiagram = useCallback(async (code: string, dark: boolean) => {
     try {
       if (!mermaidMod) {
         const mod = await import("mermaid");
@@ -68,33 +63,40 @@ export function MermaidBlock(props: { code: string }) {
       console.warn("Mermaid render failed:", e);
       setError(true);
     }
-  }
+  }, []);
 
-  return (
-    <Show
-      when={!error()}
-      fallback={<CodeBlock code={props.code} language="mermaid" />}
-    >
-      <div class="mermaid-block">
-        <div class="mermaid-toolbar">
-          <button
-            class="mermaid-toggle"
-            onClick={() => setShowSource((v) => !v)}
-          >
-            {showSource() ? t("common.viewDiagram") : t("common.viewSource")}
-          </button>
-        </div>
-        {/* Security: innerHTML is used here to render Mermaid SVG output.
-            Mermaid's "strict" securityLevel sanitizes the SVG (removes scripts,
-            foreign objects, and event handlers), so this is considered safe. */}
-        <Show
-          when={showSource()}
-          // eslint-disable-next-line solid/no-innerhtml -- Mermaid strict securityLevel sanitizes SVG
-          fallback={<div class="mermaid-diagram" innerHTML={html() || ""} />}
+  // Re-render on code change OR theme change. createEffect subscribes
+  // to every signal it reads on first run, so accessing props.code,
+  // theme(), and systemDark() here is enough to re-fire on any of them.
+  useEffect(() => {
+    const dark = resolveIsDark(themeValue, systemDark);
+    void renderDiagram(code, dark);
+  }, [code, themeValue, systemDark, renderDiagram]);
+
+  return !error ? (
+    <div className="mermaid-block">
+      <div className="mermaid-toolbar">
+        <button
+          className="mermaid-toggle"
+          onClick={() => setShowSource((v) => !v)}
         >
-          <CodeBlock code={props.code} language="mermaid" />
-        </Show>
+          {showSource ? t("common.viewDiagram") : t("common.viewSource")}
+        </button>
       </div>
-    </Show>
+      {/* Security: innerHTML is used here to render Mermaid SVG output.
+          Mermaid's "strict" securityLevel sanitizes the SVG (removes scripts,
+          foreign objects, and event handlers), so this is considered safe. */}
+      {showSource ? (
+        <CodeBlock code={code} language="mermaid" />
+      ) : (
+        <div
+          className="mermaid-diagram"
+          // biome-ignore lint/security/noDangerouslySetInnerHtml: Mermaid "strict" securityLevel sanitizes the SVG (see comment above)
+          dangerouslySetInnerHTML={{ __html: html || "" }}
+        />
+      )}
+    </div>
+  ) : (
+    <CodeBlock code={code} language="mermaid" />
   );
 }

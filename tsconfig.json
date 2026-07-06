@@ -14,7 +14,22 @@
     "esModuleInterop": true,
     "forceConsistentCasingInFileNames": true
   },
-  "include": ["src"],
-  "//": "MIGRATION (migrate/react): exclude not-yet-ported Solid source until its phase ports it. Shrink this list as phases land; empty by Phase 10. See MIGRATION.md.",
-  "exclude": ["**/*.test.ts", "**/*.test.tsx", "src/components"]
+  "//": "MIGRATION (migrate/react): base layers always included; ported component files appended per phase. Un-ported Solid components are simply absent from `include`. When all are ported, switch back to include:[\"src\"]. See MIGRATION.md.",
+  "include": [
+    "src/main.tsx",
+    "src/App.tsx",
+    "src/vite-env.d.ts",
+    "src/lib",
+    "src/stores",
+    "src/i18n",
+    "src/components/icons.tsx",
+    "src/components/CodeBlock.tsx",
+    "src/components/MermaidBlock.tsx",
+    "src/components/MessageBubble/markdown",
+    "src/components/MessageBubble/MarkdownRenderer.tsx",
+    "src/components/MessageBubble/ImagePreview.tsx",
+    "src/components/MessageBubble/TokenUsage.tsx",
+    "src/components/MessageBubble/ThinkingBlock.tsx"
+  ],
+  "exclude": ["**/*.test.ts", "**/*.test.tsx"]
 }

@@ -1,4 +1,4 @@
-import type { JSX } from "solid-js";
+import type { JSX } from "react";
 import type { Definition, FootnoteDefinition, Root } from "mdast";
 import {
   collectDefinitions,
@@ -89,7 +89,7 @@ export function renderParsedMarkdown(
   };
 
   return (
-    <div class="msg-text">
+    <div className="msg-text">
       {renderBlockNodes(parsed.tree.children, context)}
       {renderFootnotesSection(context)}
     </div>

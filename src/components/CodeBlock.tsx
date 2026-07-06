@@ -1,4 +1,4 @@
-import { createSignal, createEffect, onCleanup } from "solid-js";
+import { useEffect, useRef, useState } from "react";
 import { useI18n } from "../i18n/index";
 import { toastError } from "../stores/toast";
 import hljs from "highlight.js/lib/core";
@@ -125,33 +125,31 @@ function highlightCode(code: string, language: string): string | undefined {
   return highlighted;
 }
 
-export function CodeBlock(props: {
+export function CodeBlock({
+  code,
+  language,
+  highlightTerm,
+}: {
   code: string;
   language?: string;
   highlightTerm?: string;
 }) {
   const { t } = useI18n();
-  const [copied, setCopied] = createSignal(false);
-  const [highlightReady, setHighlightReady] = createSignal(false);
-  let copyTimer: ReturnType<typeof setTimeout> | undefined;
-  let codeRef: HTMLElement | undefined;
-  let highlightObserver: IntersectionObserver | undefined;
+  const [copied, setCopied] = useState(false);
+  const [highlightReady, setHighlightReady] = useState(false);
+  const copyTimer = useRef<ReturnType<typeof setTimeout> | undefined>(
+    undefined,
+  );
+  const codeRef = useRef<HTMLElement>(null);
 
-  onCleanup(() => {
-    clearTimeout(copyTimer);
-    highlightObserver?.disconnect();
-  });
+  useEffect(() => {
+    return () => clearTimeout(copyTimer.current);
+  }, []);
 
-  createEffect(() => {
-    highlightObserver?.disconnect();
-    highlightObserver = undefined;
-
-    const lang = props.language?.toLowerCase();
-    if (
-      !codeRef ||
-      !lang ||
-      props.code.length < LAZY_HIGHLIGHT_MIN_CODE_CHARS
-    ) {
+  useEffect(() => {
+    const el = codeRef.current;
+    const lang = language?.toLowerCase();
+    if (!el || !lang || code.length < LAZY_HIGHLIGHT_MIN_CODE_CHARS) {
       setHighlightReady(true);
       return;
     }
@@ -162,24 +160,25 @@ export function CodeBlock(props: {
     }
 
     setHighlightReady(false);
-    highlightObserver = new IntersectionObserver((entries) => {
+    const highlightObserver = new IntersectionObserver((entries) => {
       if (!entries.some((entry) => entry.isIntersecting)) return;
       setHighlightReady(true);
-      highlightObserver?.disconnect();
-      highlightObserver = undefined;
+      highlightObserver.disconnect();
     });
-    highlightObserver.observe(codeRef);
-  });
+    highlightObserver.observe(el);
+    return () => highlightObserver.disconnect();
+  }, [code, language]);
 
-  createEffect(() => {
-    if (!codeRef) return;
+  useEffect(() => {
+    const el = codeRef.current;
+    if (!el) return;
 
-    codeRef.textContent = props.code;
-    const lang = props.language?.toLowerCase();
-    if (lang && highlightReady()) {
-      const highlighted = highlightCode(props.code, lang);
+    el.textContent = code;
+    const lang = language?.toLowerCase();
+    if (lang && highlightReady) {
+      const highlighted = highlightCode(code, lang);
       if (highlighted !== undefined) {
-        codeRef.innerHTML = highlighted;
+        el.innerHTML = highlighted;
       }
     }
 
@@ -187,18 +186,18 @@ export function CodeBlock(props: {
     // preserving existing hljs markup. Matches that cross span boundaries
     // (e.g. a keyword that's partially colored) are not highlighted — this
     // covers the common "search for plain substring" case.
-    const term = props.highlightTerm?.trim();
+    const term = highlightTerm?.trim();
     if (term && term.length > 0) {
-      highlightMatchesInElement(codeRef, term);
+      highlightMatchesInElement(el, term);
     }
-  });
+  }, [code, language, highlightReady, highlightTerm]);
 
   async function handleCopy() {
     try {
-      await navigator.clipboard.writeText(props.code);
+      await navigator.clipboard.writeText(code);
       setCopied(true);
-      clearTimeout(copyTimer);
-      copyTimer = setTimeout(() => setCopied(false), 1500);
+      clearTimeout(copyTimer.current);
+      copyTimer.current = setTimeout(() => setCopied(false), 1500);
     } catch (error) {
       console.error("Failed to copy code block:", error);
       toastError(t("toast.copyFailed"));
@@ -206,27 +205,25 @@ export function CodeBlock(props: {
   }
 
   return (
-    <div class="code-block">
-      <div class="code-block-header">
-        {props.language && (
-          <span class="code-block-lang">{props.language}</span>
-        )}
+    <div className="code-block">
+      <div className="code-block-header">
+        {language && <span className="code-block-lang">{language}</span>}
         <button
           type="button"
-          class="code-block-copy"
+          className="code-block-copy"
           onClick={handleCopy}
           title={t("common.copyCode")}
           aria-label={t("common.copyCode")}
         >
-          {copied() ? (
+          {copied ? (
             <svg
               width="14"
               height="14"
               viewBox="0 0 24 24"
               fill="none"
               stroke="currentColor"
-              stroke-width="2"
-              stroke-linecap="round"
+              strokeWidth="2"
+              strokeLinecap="round"
             >
               <polyline points="20 6 9 17 4 12" />
             </svg>
@@ -237,8 +234,8 @@ export function CodeBlock(props: {
               viewBox="0 0 24 24"
               fill="none"
               stroke="currentColor"
-              stroke-width="2"
-              stroke-linecap="round"
+              strokeWidth="2"
+              strokeLinecap="round"
             >
               <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
               <path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1" />
@@ -246,8 +243,8 @@ export function CodeBlock(props: {
           )}
         </button>
       </div>
-      <pre class="code-block-pre">
-        <code ref={codeRef}>{props.code}</code>
+      <pre className="code-block-pre">
+        <code ref={codeRef}>{code}</code>
       </pre>
     </div>
   );

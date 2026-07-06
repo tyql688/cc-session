@@ -1,4 +1,4 @@
-import { For, type JSX } from "solid-js";
+import { Fragment, type JSX } from "react";
 import type {
   Code,
   FootnoteDefinition,
@@ -37,9 +37,14 @@ export function renderBlockNodes(
   context: RenderContext,
 ): JSX.Element {
   return (
-    <For each={nodes}>
-      {(node, index) => renderBlockNode(node, context, `block-${index()}`)}
-    </For>
+    <>
+      {nodes.map((node, index) => {
+        const key = `block-${index}`;
+        return (
+          <Fragment key={key}>{renderBlockNode(node, context, key)}</Fragment>
+        );
+      })}
+    </>
   );
 }
 
@@ -55,7 +60,7 @@ function renderBlockNode(
       return renderHeading(node, context, key);
     case "blockquote":
       return (
-        <blockquote class="msg-blockquote">
+        <blockquote className="msg-blockquote">
           {renderBlockNodes(node.children, context)}
         </blockquote>
       );
@@ -70,10 +75,10 @@ function renderBlockNode(
     case "math":
       return renderMathBlock(node, key);
     case "thematicBreak":
-      return <hr class="msg-hr" />;
+      return <hr className="msg-hr" />;
     case "html":
       return (
-        <p class="msg-text-line">
+        <p className="msg-text-line">
           {wrapHighlight(node.value, context.highlightTerm)}
         </p>
       );
@@ -94,24 +99,24 @@ function renderParagraph(
 
   if (segments.length === 1 && segments[0].type === "phrasing") {
     return (
-      <p class="msg-text-line">
+      <p className="msg-text-line">
         {renderInlineNodes(segments[0].children, context)}
       </p>
     );
   }
 
   return (
-    <For each={segments}>
-      {(segment) =>
+    <>
+      {segments.map((segment, index) =>
         segment.type === "phrasing" ? (
-          <p class="msg-text-line">
+          <p key={index} className="msg-text-line">
             {renderInlineNodes(segment.children, context)}
           </p>
         ) : (
-          <div>{renderImageNode(segment.node, context)}</div>
-        )
-      }
-    </For>
+          <div key={index}>{renderImageNode(segment.node, context)}</div>
+        ),
+      )}
+    </>
   );
 }
 
@@ -172,20 +177,22 @@ function renderList(
   if (node.ordered) {
     return (
       <ol start={node.start ?? 1}>
-        <For each={node.children}>
-          {(child, index) =>
-            renderListItem(child, context, `${key}-${index()}`)
-          }
-        </For>
+        {node.children.map((child, index) => (
+          <Fragment key={`${key}-${index}`}>
+            {renderListItem(child, context, `${key}-${index}`)}
+          </Fragment>
+        ))}
       </ol>
     );
   }
 
   return (
     <ul>
-      <For each={node.children}>
-        {(child, index) => renderListItem(child, context, `${key}-${index()}`)}
-      </For>
+      {node.children.map((child, index) => (
+        <Fragment key={`${key}-${index}`}>
+          {renderListItem(child, context, `${key}-${index}`)}
+        </Fragment>
+      ))}
     </ul>
   );
 }
@@ -204,16 +211,16 @@ function renderListItem(
     : renderBlockNodes(node.children, context);
 
   return (
-    <li class={isTask ? "msg-task-item" : undefined}>
+    <li className={isTask ? "msg-task-item" : undefined}>
       {isTask && (
         <input
-          class="msg-task-checkbox"
+          className="msg-task-checkbox"
           type="checkbox"
           checked={node.checked === true}
           disabled
         />
       )}
-      <div class={isTask ? "msg-task-content" : undefined}>{content}</div>
+      <div className={isTask ? "msg-task-content" : undefined}>{content}</div>
     </li>
   );
 }
@@ -230,17 +237,17 @@ function renderListItemParagraph(
   }
 
   return (
-    <For each={segments}>
-      {(segment) =>
+    <>
+      {segments.map((segment, index) =>
         segment.type === "phrasing" ? (
-          <p class="msg-text-line">
+          <p key={index} className="msg-text-line">
             {renderInlineNodes(segment.children, context)}
           </p>
         ) : (
-          <div>{renderImageNode(segment.node, context)}</div>
-        )
-      }
-    </For>
+          <div key={index}>{renderImageNode(segment.node, context)}</div>
+        ),
+      )}
+    </>
   );
 }
 
@@ -253,38 +260,36 @@ function renderTable(
   const bodyRows = node.children.slice(1);
 
   return (
-    <table class="msg-table">
+    <table className="msg-table">
       <thead>
         <tr>
-          <For each={headerRow.children}>
-            {(cell, index) =>
-              renderTableCell(
+          {headerRow.children.map((cell, index) => (
+            <Fragment key={index}>
+              {renderTableCell(
                 cell,
-                node.align?.[index()] ?? null,
+                node.align?.[index] ?? null,
                 context,
                 "th",
-              )
-            }
-          </For>
+              )}
+            </Fragment>
+          ))}
         </tr>
       </thead>
       <tbody>
-        <For each={bodyRows}>
-          {(row) => (
-            <tr>
-              <For each={row.children}>
-                {(cell, index) =>
-                  renderTableCell(
-                    cell,
-                    node.align?.[index()] ?? null,
-                    context,
-                    "td",
-                  )
-                }
-              </For>
-            </tr>
-          )}
-        </For>
+        {bodyRows.map((row, rowIndex) => (
+          <tr key={rowIndex}>
+            {row.children.map((cell, index) => (
+              <Fragment key={index}>
+                {renderTableCell(
+                  cell,
+                  node.align?.[index] ?? null,
+                  context,
+                  "td",
+                )}
+              </Fragment>
+            ))}
+          </tr>
+        ))}
       </tbody>
     </table>
   );
@@ -297,7 +302,7 @@ function renderTableCell(
   tag: "th" | "td",
 ): JSX.Element {
   const content = renderInlineNodes(node.children, context);
-  const style = align ? { "text-align": align } : undefined;
+  const style = align ? { textAlign: align } : undefined;
 
   return tag === "th" ? (
     <th style={style}>{content}</th>
@@ -330,12 +335,17 @@ function renderMathBlock(node: MathNode, _key: string): JSX.Element {
   if (html) {
     // KaTeX output is sanitized HTML produced from controlled LaTeX input;
     // innerHTML is required because KaTeX's renderer emits a DOM string.
-    // eslint-disable-next-line solid/no-innerhtml
-    return <div class="katex-display-block" innerHTML={html} />;
+    return (
+      <div
+        className="katex-display-block"
+        // biome-ignore lint/security/noDangerouslySetInnerHtml: KaTeX renders sanitized HTML from controlled LaTeX input
+        dangerouslySetInnerHTML={{ __html: html }}
+      />
+    );
   }
 
   return (
-    <pre class="code-block-pre">
+    <pre className="code-block-pre">
       <code>{`$$\n${node.value}\n$$`}</code>
     </pre>
   );
@@ -346,9 +356,14 @@ function renderInlineNodes(
   context: RenderContext,
 ): JSX.Element {
   return (
-    <For each={nodes}>
-      {(node, index) => renderInlineNode(node, context, `inline-${index()}`)}
-    </For>
+    <>
+      {nodes.map((node, index) => {
+        const key = `inline-${index}`;
+        return (
+          <Fragment key={key}>{renderInlineNode(node, context, key)}</Fragment>
+        );
+      })}
+    </>
   );
 }
 
@@ -503,7 +518,7 @@ function renderFootnoteReferenceNode(
     : undefined;
 
   return (
-    <sup class="msg-footnote-ref">
+    <sup className="msg-footnote-ref">
       {target ? <a href={target}>{label}</a> : <span>{label}</span>}
     </sup>
   );
@@ -531,18 +546,17 @@ export function renderFootnotesSection(
   }
 
   return (
-    <section class="msg-footnotes">
+    <section className="msg-footnotes">
       <ol>
-        <For each={footnotes}>
-          {(entry) => (
-            <li
-              id={footnoteDomId(context.footnotePrefix, entry.identifier)}
-              class="msg-footnote-item"
-            >
-              {renderBlockNodes(entry.node.children, context)}
-            </li>
-          )}
-        </For>
+        {footnotes.map((entry) => (
+          <li
+            key={entry.identifier}
+            id={footnoteDomId(context.footnotePrefix, entry.identifier)}
+            className="msg-footnote-item"
+          >
+            {renderBlockNodes(entry.node.children, context)}
+          </li>
+        ))}
       </ol>
     </section>
   );
@@ -554,8 +568,13 @@ function renderInlineMathNode(node: InlineMathNode, _key: string): JSX.Element {
   if (html) {
     // KaTeX output is sanitized HTML produced from controlled LaTeX input;
     // innerHTML is required because KaTeX's renderer emits a DOM string.
-    // eslint-disable-next-line solid/no-innerhtml
-    return <span class="katex-inline" innerHTML={html} />;
+    return (
+      <span
+        className="katex-inline"
+        // biome-ignore lint/security/noDangerouslySetInnerHtml: KaTeX renders sanitized HTML from controlled LaTeX input
+        dangerouslySetInnerHTML={{ __html: html }}
+      />
+    );
   }
 
   return <code>{`$${node.value}$`}</code>;

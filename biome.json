@@ -10,9 +10,21 @@
       "src/**/*.ts",
       "src/**/*.tsx",
       "src/**/*.css",
+      "!src/components/**",
+      "src/components/icons.tsx",
+      "src/components/CodeBlock.tsx",
+      "src/components/MermaidBlock.tsx",
+      "src/components/MessageBubble/markdown/renderers.tsx",
+      "src/components/MessageBubble/markdown/utils.tsx",
+      "src/components/MessageBubble/markdown/parser.ts",
+      "src/components/MessageBubble/markdown/katex.ts",
+      "src/components/MessageBubble/markdown/types.ts",
+      "src/components/MessageBubble/MarkdownRenderer.tsx",
+      "src/components/MessageBubble/ImagePreview.tsx",
+      "src/components/MessageBubble/TokenUsage.tsx",
+      "src/components/MessageBubble/ThinkingBlock.tsx",
       "!**/*.test.ts",
-      "!**/*.test.tsx",
-      "!src/components/**"
+      "!**/*.test.tsx"
     ]
   },
   "formatter": {
@@ -56,7 +68,8 @@
         "noDescendingSpecificity": "off"
       },
       "suspicious": {
-        "noAssignInExpressions": "off"
+        "noAssignInExpressions": "off",
+        "noArrayIndexKey": "off"
       }
     }
   }

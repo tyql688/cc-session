@@ -1,4 +1,4 @@
-import { For, type JSX } from "solid-js";
+import { Fragment, type JSX } from "react";
 import { isExternalUrl } from "../../../lib/external-links";
 
 export function wrapHighlight(text: string, term?: string): JSX.Element {
@@ -8,15 +8,17 @@ export function wrapHighlight(text: string, term?: string): JSX.Element {
   const lowerTerm = term.toLowerCase();
 
   return (
-    <For each={parts}>
-      {(part) =>
+    <>
+      {parts.map((part, index) =>
         part.toLowerCase() === lowerTerm ? (
-          <mark class="search-highlight">{part}</mark>
+          <mark key={index} className="search-highlight">
+            {part}
+          </mark>
         ) : (
-          part
-        )
-      }
-    </For>
+          <Fragment key={index}>{part}</Fragment>
+        ),
+      )}
+    </>
   );
 }
 
