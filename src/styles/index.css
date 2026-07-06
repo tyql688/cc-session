@@ -15,5 +15,3 @@
 @import "./code.css";
 @import "./messages.css";
 @import "./usage.css";
-@import "katex/dist/katex.min.css";
-@import "highlight.js/styles/github.css";

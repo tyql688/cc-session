@@ -9,7 +9,6 @@
     "jsx": "react-jsx",
     "isolatedModules": true,
     "skipLibCheck": true,
-    "types": ["katex"],
     "resolveJsonModule": true,
     "esModuleInterop": true,
     "forceConsistentCasingInFileNames": true,

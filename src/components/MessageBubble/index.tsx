@@ -4,8 +4,10 @@ import type { Message, Provider } from "../../lib/types";
 import { ProviderIcon, UserIcon } from "../icons";
 import { useI18n } from "../../i18n/index";
 import { parseTimestamp } from "../../lib/formatters";
-import { extractImages } from "../../lib/message-images";
-import { sanitizeMessageForClipboard } from "./MarkdownRenderer";
+import {
+  extractImages,
+  sanitizeMessageForClipboard,
+} from "../../lib/message-content";
 import {
   ImagePreview,
   isLocalPath,

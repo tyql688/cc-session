@@ -26,7 +26,7 @@ import {
   isAgentToolMessage,
   parseToolJsonObject,
 } from "../../lib/subagent";
-import { parseContent } from "./MarkdownRenderer";
+import { parseContent } from "../../lib/message-content";
 import {
   ImagePreview,
   LocalImage,
