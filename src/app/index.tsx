@@ -242,12 +242,23 @@ export default function App() {
     // Warm the markdown engine (streamdown + shiki) while the shell is idle,
     // so the first session open doesn't pay the chunk-load + highlighter
     // initialization on the critical path.
-    const idleHandle = window.requestIdleCallback(
-      () => {
-        void import("@/features/session/timeline/Markdown");
-      },
-      { timeout: 3000 },
-    );
+    // WKWebView (Safari engine) has never shipped requestIdleCallback,
+    // despite lib.dom typing it — feature-detect and fall back to a timer.
+    const warmMarkdown = () => {
+      void import("@/features/session/timeline/Markdown");
+    };
+    const cancelWarmup =
+      typeof window.requestIdleCallback === "function"
+        ? (() => {
+            const handle = window.requestIdleCallback(warmMarkdown, {
+              timeout: 3000,
+            });
+            return () => window.cancelIdleCallback(handle);
+          })()
+        : (() => {
+            const handle = window.setTimeout(warmMarkdown, 1500);
+            return () => window.clearTimeout(handle);
+          })();
     const updateTimer = setTimeout(() => void checkForUpdate(), 2000);
 
     async function setup() {
@@ -333,7 +344,7 @@ export default function App() {
       unlistenMaintenance?.();
       unlistenResized?.();
       sync.stopPolling();
-      window.cancelIdleCallback(idleHandle);
+      cancelWarmup();
       clearTimeout(updateTimer);
       clearTimeout(debounceTimer);
       debouncedChangedPaths.clear();
