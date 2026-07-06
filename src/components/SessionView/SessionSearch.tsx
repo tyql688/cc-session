@@ -1,7 +1,11 @@
 import type { Dispatch, SetStateAction } from "react";
 import { useEffect, useRef, useState } from "react";
 import { useI18n } from "../../i18n/index";
-import { getMarksInVisualOrder } from "./search-utils";
+import {
+  applySearchHighlight,
+  collectSearchRanges,
+  scrollRangeIntoView,
+} from "./search-utils";
 
 export interface SessionSearchProps {
   sessionSearch: string;
@@ -19,25 +23,19 @@ export interface SessionSearchProps {
 export function SessionSearch(props: SessionSearchProps) {
   const { t } = useI18n();
 
-  // Single source of truth for the displayed total: the number of navigable
-  // `<mark>` nodes — the SAME list navigation cycles over. Counting matching
-  // entries once each (the old behavior) disagreed with Next/Prev because a
-  // single entry (esp. merged tool groups) holds many marks.
-  const [markCount, setMarkCount] = useState(0);
+  // Single source of truth for the displayed total: the number of highlight
+  // ranges — the SAME list navigation cycles over, so the counter can never
+  // disagree with how many times Next advances before looping.
+  const [rangeCount, setRangeCount] = useState(0);
 
-  function currentMarks(): Element[] {
-    return getMarksInVisualOrder(props.messagesRef());
+  function currentRanges(): Range[] {
+    return collectSearchRanges(props.messagesRef(), props.activeSessionSearch);
   }
 
-  function recountMarks() {
-    setMarkCount(currentMarks().length);
-  }
-
-  // Recompute the mark count whenever the committed query changes. Highlights
-  // are inserted during the bubble re-render that the new `activeSessionSearch`
-  // triggers, so we wait two animation frames (mirroring the focus-first-match
-  // timing in createSessionSearch) before reading the DOM. raf handles are kept
-  // in closure vars so a single onCleanup cancels whichever frame is pending.
+  // Recompute the count whenever the committed query changes. The rows render
+  // during the re-render the new `activeSessionSearch` triggers, so wait two
+  // animation frames (mirroring the focus-first-match timing in
+  // createSessionSearch) before reading the DOM.
   const pendingRafRef = useRef<number | undefined>(undefined);
   const clearPendingRaf = () => {
     if (pendingRafRef.current !== undefined)
@@ -50,34 +48,29 @@ export function SessionSearch(props: SessionSearchProps) {
     const active = props.activeSessionSearch.trim();
     clearPendingRaf();
     if (!active) {
-      setMarkCount(0);
+      setRangeCount(0);
+      applySearchHighlight([], null);
       return;
     }
     pendingRafRef.current = requestAnimationFrame(() => {
       pendingRafRef.current = requestAnimationFrame(() => {
         pendingRafRef.current = undefined;
-        recountMarks();
+        setRangeCount(currentRanges().length);
       });
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [props.activeSessionSearch]);
 
   function navigateSearchMatch(delta: number) {
-    const marks = currentMarks();
-    // Keep the displayed total in sync with the list we are about to cycle —
-    // the same array, so counter and navigation can never disagree.
-    setMarkCount(marks.length);
-    if (marks.length === 0) return;
-    // Remove previous active highlight
-    props
-      .messagesRef()
-      ?.querySelector("mark.search-active")
-      ?.classList.remove("search-active");
-    const newIdx = (props.searchMatchIdx + delta + marks.length) % marks.length;
+    const ranges = currentRanges();
+    // Keep the displayed total in sync with the list we are about to cycle.
+    setRangeCount(ranges.length);
+    if (ranges.length === 0) return;
+    const newIdx =
+      (props.searchMatchIdx + delta + ranges.length) % ranges.length;
     props.setSearchMatchIdx(newIdx);
-    const target = marks[newIdx];
-    target.classList.add("search-active");
-    target.scrollIntoView({ behavior: "smooth", block: "center" });
+    applySearchHighlight(ranges, newIdx);
+    scrollRangeIntoView(ranges[newIdx]);
   }
 
   return (
@@ -111,7 +104,7 @@ export function SessionSearch(props: SessionSearchProps) {
           const activeQuery = props.activeSessionSearch.trim();
           if (!query) return "";
           if (query !== activeQuery) return "";
-          const total = markCount;
+          const total = rangeCount;
           if (total > 0) return `${props.searchMatchIdx + 1}/${total}`;
           return t("session.searchNoMatch");
         })()}

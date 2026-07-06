@@ -277,6 +277,15 @@
     "copied": "Copied",
     "openLink": "Open link"
   },
+  "timeline": {
+    "workedFor": "Worked for {duration}",
+    "working": "Working…",
+    "thinking": "Thought process",
+    "unknownMessage": "Unrecognized message",
+    "steps": "{count} steps",
+    "commandInput": "Command",
+    "commandOutput": "Output"
+  },
   "blocked": {
     "hint": "Right-click a project folder and select \"Block This Folder\""
   },

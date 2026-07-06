@@ -231,6 +231,21 @@
 .session-entry {
   display: flex;
   flex-direction: column;
+  /* Timeline reading column: centered, comfortable line length. */
+  width: 100%;
+  max-width: 48rem;
+  margin-inline: auto;
+}
+
+/* In-session search highlighting (CSS Custom Highlight API — ranges are
+ * painted by search-utils, no DOM mutation). */
+::highlight(session-search) {
+  background-color: color-mix(in srgb, var(--accent) 30%, transparent);
+}
+
+::highlight(session-search-active) {
+  background-color: var(--warning-amber);
+  color: #1d1d1f;
 }
 
 .session-empty-messages {

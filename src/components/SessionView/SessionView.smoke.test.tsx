@@ -3,7 +3,8 @@ import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { Message, SessionMeta } from "../../lib/types";
 import { SESSION_COMMAND_EVENTS } from "../../lib/session-command-events";
-import { processMessages } from "./hooks";
+import { normalizeMessages } from "../../features/session/timeline/normalize";
+import { toEntries } from "../../features/session/timeline/types";
 import { findFirstMatchingEntryIndex } from "./search-utils";
 
 // Minimal synthetic session payloads. The backend is fully mocked: `invoke`
@@ -222,12 +223,10 @@ describe("SessionView smoke", () => {
         expect.objectContaining({ offset: 0, limit: 1 }),
       ),
     );
-    await waitFor(() =>
-      expect(
-        document.querySelector(".msg-row-user mark.search-highlight")
-          ?.textContent,
-      ).toBe("我发的旧内容"),
-    );
+    // The match lives outside the initial tail; the search must page it in
+    // and reveal it in the rendered timeline (highlighting itself runs on the
+    // CSS Highlight API, absent in happy-dom).
+    expect(await findByText("我发的旧内容")).toBeInTheDocument();
   });
 
   it("loads the complete session before choosing the first search match", async () => {
@@ -275,12 +274,9 @@ describe("SessionView smoke", () => {
         expect.objectContaining({ offset: 0, limit: 2 }),
       ),
     );
-    await waitFor(() =>
-      expect(
-        document.querySelector("mark.search-active")?.parentElement
-          ?.textContent,
-      ).toContain("无常最早是用户提问"),
-    );
+    // The FIRST match session-wide is the oldest message; it must be loaded
+    // and revealed even though the initial window only held the newest one.
+    expect(await findByText("无常最早是用户提问")).toBeInTheDocument();
   });
 
   it("keeps normal upward scrolling after search reveals an older loaded match", async () => {
@@ -296,7 +292,7 @@ describe("SessionView smoke", () => {
     );
     expect(
       findFirstMatchingEntryIndex(
-        processMessages(manyMessages, 0),
+        toEntries(normalizeMessages(manyMessages, { windowStart: 0 }).items),
         "target after search",
       ),
     ).toBe(10);
@@ -338,10 +334,7 @@ describe("SessionView smoke", () => {
     fireEvent.input(input, { target: { value: "target after search" } });
 
     await waitFor(() =>
-      expect(
-        document.querySelector(".session-entry mark.search-highlight")
-          ?.textContent,
-      ).toBe("target after search"),
+      expect(queryByText("target after search")).toBeInTheDocument(),
     );
     expect(queryByText("oldest still above")).not.toBeInTheDocument();
 

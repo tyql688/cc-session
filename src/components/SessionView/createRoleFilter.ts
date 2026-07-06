@@ -1,42 +1,54 @@
 import { useMemo, useState } from "react";
+import type { TimelineEntry } from "../../features/session/timeline/types";
 import type { MessageRole } from "../../lib/types";
-import type { ProcessedEntry } from "./hooks";
 
 export interface CreateRoleFilterResult {
   /** Currently hidden roles. */
   hiddenRoles: Set<MessageRole>;
   /** Per-role message counts for the filter toolbar. */
   roleCounts: Record<string, number>;
-  /** Processed entries with hidden roles removed. */
-  filteredEntries: ProcessedEntry[];
+  /** Entries with hidden roles removed. */
+  filteredEntries: TimelineEntry[];
   /** Toggle a role's visibility. */
   toggleRole: (role: MessageRole) => void;
 }
 
+/** Filter-toolbar role bucket for a timeline item. Thinking and system
+ * markers both surface under "system", mirroring their source role; unknown
+ * items are never filterable — they must stay visible. */
+function roleOf(entry: TimelineEntry): MessageRole | null {
+  switch (entry.item.kind) {
+    case "user":
+      return "user";
+    case "assistantText":
+      return "assistant";
+    case "toolStep":
+      return "tool";
+    case "thinking":
+    case "systemMarker":
+      return "system";
+    case "unknown":
+      return null;
+  }
+}
+
 /**
  * Owns the role-filter slice of SessionView: the `hiddenRoles` set plus the
- * derived `filteredEntries` and `roleCounts` memos. Bodies are moved verbatim
- * from the inline component so dependency tracking is unchanged.
- *
- * Now a React hook: call it at the top level of a component.
+ * derived `filteredEntries` and `roleCounts` memos.
  */
 export function useRoleFilter(
-  processedEntries: ProcessedEntry[],
+  entries: TimelineEntry[],
 ): CreateRoleFilterResult {
   const [hiddenRoles, setHiddenRoles] = useState<Set<MessageRole>>(new Set());
 
-  // Apply role filtering
   const filteredEntries = useMemo(() => {
-    const hidden = hiddenRoles;
-    if (hidden.size === 0) return processedEntries;
-    return processedEntries.filter((e) => {
-      if (e.type === "time-sep") return true;
-      if (e.type === "merged-tools") return !hidden.has("tool");
-      return !hidden.has(e.msg.role);
+    if (hiddenRoles.size === 0) return entries;
+    return entries.filter((entry) => {
+      const role = roleOf(entry);
+      return role === null || !hiddenRoles.has(role);
     });
-  }, [processedEntries, hiddenRoles]);
+  }, [entries, hiddenRoles]);
 
-  // Role counts for filter toolbar
   const roleCounts = useMemo(() => {
     const counts: Record<string, number> = {
       user: 0,
@@ -44,13 +56,12 @@ export function useRoleFilter(
       tool: 0,
       system: 0,
     };
-    for (const e of processedEntries) {
-      if (e.type === "message")
-        counts[e.msg.role] = (counts[e.msg.role] || 0) + 1;
-      else if (e.type === "merged-tools") counts.tool += e.messages.length;
+    for (const entry of entries) {
+      const role = roleOf(entry);
+      if (role !== null) counts[role] += 1;
     }
     return counts;
-  }, [processedEntries]);
+  }, [entries]);
 
   function toggleRole(role: MessageRole) {
     setHiddenRoles((prev) => {

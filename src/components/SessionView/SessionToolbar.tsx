@@ -11,12 +11,10 @@ import {
   formatFileSize,
   shortenHomePath,
 } from "../../lib/formatters";
-import type { ProcessedEntry } from "./hooks";
 
 export function SessionToolbar(props: {
   meta: SessionMeta;
   messages: Message[];
-  processedEntries: ProcessedEntry[];
   watching: boolean;
   starred: boolean | null;
   parseWarningCount: number;

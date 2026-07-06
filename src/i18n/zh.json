@@ -277,6 +277,15 @@
     "copied": "已复制",
     "openLink": "打开链接"
   },
+  "timeline": {
+    "workedFor": "工作了 {duration}",
+    "working": "进行中…",
+    "thinking": "思考过程",
+    "unknownMessage": "未识别消息",
+    "steps": "{count} 个步骤",
+    "commandInput": "命令",
+    "commandOutput": "输出"
+  },
   "blocked": {
     "hint": "右键项目文件夹，选择「屏蔽此文件夹」"
   },

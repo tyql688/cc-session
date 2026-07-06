@@ -1,18 +1,20 @@
 import { useEffect, useRef, useState } from "react";
 import type { Dispatch, SetStateAction } from "react";
+import type { TimelineEntry } from "../../features/session/timeline/types";
 import {
   setPendingSessionSearch,
   usePendingSessionSearch,
 } from "../../stores/search";
-import type { ProcessedEntry } from "./hooks";
 import {
+  applySearchHighlight,
+  collectSearchRanges,
   SESSION_SEARCH_DEBOUNCE_MS,
-  getMarksInVisualOrder,
+  scrollRangeIntoView,
 } from "./search-utils";
 
 export interface CreateSessionSearchOptions {
   /** Role-filtered entries the search runs against. */
-  filteredEntries: ProcessedEntry[];
+  filteredEntries: TimelineEntry[];
   /** Lazy ref getter — the messages container may not exist yet. */
   getMessagesRef: () => HTMLDivElement | undefined;
   /** Whether the session is still loading (gates the pending-search effect). */
@@ -76,28 +78,32 @@ export function useSessionSearch(
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  function focusRenderedSearchMatch(entryKey: string | undefined) {
+  function focusRenderedSearchMatch(term: string, entryKey?: string) {
     requestAnimationFrame(() => {
       requestAnimationFrame(() => {
         const messagesRef = opts.getMessagesRef();
         if (!messagesRef) return;
-        const marks = getMarksInVisualOrder(messagesRef);
+        const ranges = collectSearchRanges(messagesRef, term);
+        if (ranges.length === 0) {
+          applySearchHighlight([], null);
+          return;
+        }
+        // Prefer the first occurrence inside the resolved entry (the complete
+        // first match across the whole session); fall back to the first
+        // rendered occurrence.
         const targetEntry = entryKey
-          ? Array.from(
-              messagesRef.querySelectorAll<HTMLElement>(".session-entry"),
-            ).find((entry) => entry.dataset.entryKey === entryKey)
-          : undefined;
-        const target =
-          (targetEntry && getMarksInVisualOrder(targetEntry)[0]) ?? marks[0];
-        if (!target) return;
-
-        messagesRef
-          .querySelector("mark.search-active")
-          ?.classList.remove("search-active");
-        target.classList.add("search-active");
-        const targetIndex = marks.indexOf(target);
-        setSearchMatchIdx(targetIndex >= 0 ? targetIndex : 0);
-        target.scrollIntoView({ behavior: "smooth", block: "center" });
+          ? messagesRef.querySelector(`[data-entry-key="${entryKey}"]`)
+          : null;
+        let targetIndex = 0;
+        if (targetEntry) {
+          const found = ranges.findIndex((range) =>
+            targetEntry.contains(range.startContainer),
+          );
+          if (found >= 0) targetIndex = found;
+        }
+        setSearchMatchIdx(targetIndex);
+        applySearchHighlight(ranges, targetIndex);
+        scrollRangeIntoView(ranges[targetIndex]);
       });
     });
   }
@@ -108,6 +114,7 @@ export function useSessionSearch(
     setSearchMatchIdx(0);
     if (!term) {
       setActiveSessionSearch("");
+      applySearchHighlight([], null);
       return;
     }
 
@@ -124,7 +131,7 @@ export function useSessionSearch(
       opts.revealEntry(matchIdx);
     }
     setActiveSessionSearch(term);
-    focusRenderedSearchMatch(targetEntry?.key);
+    focusRenderedSearchMatch(term, targetEntry?.key);
   }
 
   // Consume a pending session search set by the global SearchOverlay.

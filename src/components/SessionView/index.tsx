@@ -16,14 +16,19 @@ import {
   type SessionTurnOutlineEntry,
 } from "../../lib/tauri";
 import { useI18n } from "../../i18n/index";
-import { MessageBubble } from "../MessageBubble";
-import { MergedToolRow } from "../MergedToolRow";
 import { ConfirmDialog } from "../ConfirmDialog";
 import { ExportDialog } from "../ExportDialog";
 import { useTerminalApp } from "../../stores/settings";
 import { toast, toastError } from "../../stores/toast";
 import { errorMessage } from "../../lib/errors";
-import { isSearchableRole, processMessages } from "./hooks";
+import { buildRows } from "../../features/session/timeline/buildRows";
+import { normalizeMessages } from "../../features/session/timeline/normalize";
+import { TimelineRowView } from "../../features/session/timeline/TimelineRows";
+import {
+  itemEntryKey,
+  rowKey,
+  toEntries,
+} from "../../features/session/timeline/types";
 import { SessionToolbar } from "./SessionToolbar";
 import { SessionSearch } from "./SessionSearch";
 import { TimelineMinimap } from "./TimelineMinimap";
@@ -51,12 +56,14 @@ export function SessionView(props: {
   const [messages, setMessages] = useState<Message[]>([]);
   const [outline, setOutline] = useState<SessionTurnOutlineEntry[]>([]);
   // Absolute session index of messages[0]. Owned here (not by the pagination
-  // hook) because processMessages needs it to emit absolute message indices.
+  // hook) because normalization needs it to emit absolute message indices.
   const [windowStart, setWindowStart] = useState(0);
-  const processedEntries = useMemo(
-    () => processMessages(messages, windowStart),
+  const [watching, setWatching] = useState(false);
+  const normalized = useMemo(
+    () => normalizeMessages(messages, { windowStart }),
     [messages, windowStart],
   );
+  const entries = useMemo(() => toEntries(normalized.items), [normalized]);
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -103,7 +110,7 @@ export function SessionView(props: {
 
   // Role-filter slice: hiddenRoles + filteredEntries + roleCounts.
   const { hiddenRoles, roleCounts, filteredEntries, toggleRole } =
-    useRoleFilter(processedEntries);
+    useRoleFilter(entries);
   const userTurnByMessageIndex = useMemo(() => {
     const turns = new Map<number, number>();
     for (const entry of outline) {
@@ -242,7 +249,15 @@ export function SessionView(props: {
 
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [showExportDialog, setShowExportDialog] = useState(false);
-  const [watching, setWatching] = useState(false);
+
+  // Grouped timeline rows over the visible window, chronological order.
+  // `visibleEntries` arrives newest-first (column-reverse rendering); rows are
+  // built chronologically and re-reversed for the DOM below.
+  const visibleRows = useMemo(() => {
+    const chronological = visibleEntries.map((entry) => entry.item).reverse();
+    return buildRows(chronological, { live: watching });
+  }, [visibleEntries, watching]);
+  const lastRow = visibleRows[visibleRows.length - 1];
 
   // Stable memos so the live-watch effect only re-runs when these values
   // actually change, not on every reloadSession() → setMeta() cycle.
@@ -352,7 +367,6 @@ export function SessionView(props: {
       <SessionToolbar
         meta={meta}
         messages={messages}
-        processedEntries={processedEntries}
         watching={watching}
         starred={starred}
         parseWarningCount={parseWarningCount}
@@ -418,55 +432,36 @@ export function SessionView(props: {
             }}
             onScroll={(e) => handleMessagesScroll(e.nativeEvent)}
           >
-            {visibleEntries.map((entry) => {
-              if (entry.type === "time-sep") {
-                return (
-                  <div
-                    className="session-entry"
-                    data-entry-key={entry.key}
-                    key={entry.key}
-                  >
-                    <div className="msg-time-separator">{entry.time}</div>
-                  </div>
-                );
-              }
-              if (entry.type === "merged-tools") {
-                return (
-                  <div
-                    className="session-entry"
-                    data-entry-key={entry.key}
-                    key={entry.key}
-                  >
-                    <MergedToolRow
-                      tools={entry.tools}
-                      messages={entry.messages}
-                      provider={meta.provider}
-                      parentSessionId={props.session.id}
-                      highlightTerm=""
-                    />
-                  </div>
-                );
-              }
-              return (
-                <div
-                  className="session-entry"
-                  data-entry-key={entry.key}
-                  data-turn={userTurnByMessageIndex.get(entry.messageIndex)}
-                  key={entry.key}
-                >
-                  <MessageBubble
-                    message={entry.msg}
-                    provider={meta.provider}
-                    parentSessionId={props.session.id}
-                    highlightTerm={
-                      isSearchableRole(entry.msg.role)
-                        ? activeSessionSearch
-                        : ""
-                    }
-                  />
-                </div>
-              );
-            })}
+            {/* Rows render newest-first in the DOM; column-reverse flips them
+                back to chronological visual order. */}
+            {[...visibleRows].reverse().map((row) => (
+              <div
+                className="session-entry"
+                key={rowKey(row)}
+                data-entry-key={
+                  row.kind === "activity" ? undefined : itemEntryKey(row.item)
+                }
+                data-turn={
+                  row.kind === "user"
+                    ? userTurnByMessageIndex.get(row.item.index)
+                    : undefined
+                }
+                data-searchable={
+                  row.kind === "user" || row.kind === "assistant"
+                    ? ""
+                    : undefined
+                }
+              >
+                <TimelineRowView
+                  row={row}
+                  provider={meta.provider}
+                  parentSessionId={props.session.id}
+                  streaming={
+                    watching && row === lastRow && row.kind === "assistant"
+                  }
+                />
+              </div>
+            ))}
             {messages.length === 0 && (
               <div className="session-empty-messages">
                 {t("session.noMessages")}

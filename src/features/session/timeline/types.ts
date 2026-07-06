@@ -98,3 +98,36 @@ export function rowKey(row: TimelineRow): string {
     ? `activity-${row.firstIndex}`
     : `${row.kind}-${row.item.index}`;
 }
+
+/**
+ * The shape SessionView's windowing/search/filter hooks operate on: one entry
+ * per timeline item, keyed by absolute index, with the lowercase search
+ * haystack precomputed once (search covers user + assistant dialogue only,
+ * matching global FTS search semantics).
+ */
+export interface TimelineEntry {
+  key: string;
+  messageIndex: number;
+  searchHaystack: string;
+  item: TimelineItem;
+}
+
+export function itemEntryKey(item: TimelineItem): string {
+  return `item-${item.index}`;
+}
+
+function itemHaystack(item: TimelineItem): string {
+  if (item.kind === "user" || item.kind === "assistantText") {
+    return item.markdown.toLocaleLowerCase();
+  }
+  return "";
+}
+
+export function toEntries(items: TimelineItem[]): TimelineEntry[] {
+  return items.map((item) => ({
+    key: itemEntryKey(item),
+    messageIndex: item.index,
+    searchHaystack: itemHaystack(item),
+    item,
+  }));
+}
