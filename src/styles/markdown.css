@@ -105,3 +105,79 @@
 .timeline-markdown :where(h4, h5, h6) {
   font-size: 1em;
 }
+
+/* Task-list items: the checkbox IS the marker — a bullet next to it is
+ * double punctuation. */
+.timeline-markdown [data-streamdown="list-item"]:has(> input[type="checkbox"]) {
+  list-style: none;
+}
+
+.timeline-markdown [data-streamdown="list-item"] > input[type="checkbox"] {
+  margin-right: 4px;
+  vertical-align: -1px;
+}
+
+/* Blockquote: faux-italic mangles CJK text — keep it upright, and give
+ * stacked paragraphs inside the quote some air. */
+.timeline-markdown [data-streamdown="blockquote"] {
+  font-style: normal;
+}
+
+.timeline-markdown [data-streamdown="blockquote"] p + p {
+  margin-top: 0.4em;
+}
+
+/* Block math can be wider than the bubble — scroll inside, never overflow. */
+.timeline-markdown .katex-display {
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding-block: 2px;
+}
+
+/* Code/mermaid action buttons: their anonymous wrapper row (sticky + negative
+ * margin upstream) ends up occupying a blank full-width strip here — pin the
+ * whole row onto the header line instead. */
+.timeline-markdown [data-streamdown="code-block"],
+.timeline-markdown [data-streamdown="mermaid-block"] {
+  position: relative;
+}
+
+.timeline-markdown
+  [data-streamdown="code-block"]
+  > div:has(> [data-streamdown="code-block-actions"]),
+.timeline-markdown
+  [data-streamdown="mermaid-block"]
+  > div:has(> [data-streamdown="mermaid-block-actions"]) {
+  position: absolute;
+  top: 2px;
+  right: 6px;
+  margin-top: 0;
+  height: auto;
+}
+
+.timeline-markdown [data-streamdown="code-block-actions"],
+.timeline-markdown [data-streamdown="mermaid-block-actions"] {
+  opacity: 0.65;
+  transition: opacity var(--dur-fast) var(--ease-standard);
+}
+
+.timeline-markdown
+  [data-streamdown="code-block"]:hover
+  [data-streamdown="code-block-actions"],
+.timeline-markdown
+  [data-streamdown="mermaid-block"]:hover
+  [data-streamdown="mermaid-block-actions"] {
+  opacity: 1;
+}
+
+/* Mermaid canvas shares the code-block framing. */
+.timeline-markdown [data-streamdown="mermaid-block"] {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+}
+
+/* Line numbers: recede behind the code instead of competing with it. */
+.timeline-markdown [data-streamdown="code-block-body"] code > span::before {
+  opacity: 0.45;
+  padding-right: 4px;
+}
