@@ -1,0 +1,107 @@
+/* ---------------------------------------------------------------------------
+ * Element-level polish for Streamdown output inside message bubbles.
+ * Streamdown ships neutral utility styling (bg-muted etc.) that has near-zero
+ * contrast against the bubble backgrounds — these overrides re-anchor its
+ * elements to the app's design tokens. Scoped to .timeline-markdown, keyed on
+ * the stable data-streamdown markers.
+ * ------------------------------------------------------------------------- */
+
+/* Inline code: the classic accent pill (bg-muted vanished against bubbles). */
+.timeline-markdown [data-streamdown="inline-code"] {
+  padding: 1px 5px;
+  border-radius: var(--radius-sm);
+  background: var(--inline-code-bg);
+  color: var(--inline-code-text);
+  font-family: var(--font-mono);
+  font-size: 0.92em;
+}
+
+/* Links: accent-colored, quiet underline that firms up on hover. */
+.timeline-markdown [data-streamdown="link"] {
+  color: var(--accent);
+  text-decoration-color: color-mix(in srgb, var(--accent) 40%, transparent);
+  text-underline-offset: 2px;
+}
+
+.timeline-markdown [data-streamdown="link"]:hover {
+  text-decoration-color: var(--accent);
+}
+
+/* Code blocks: crisp border + header strip that reads against bubble bg. */
+.timeline-markdown [data-streamdown="code-block"] {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--code-bg);
+}
+
+.timeline-markdown [data-streamdown="code-block-header"] {
+  border-bottom: 1px solid var(--border-subtle);
+  background: color-mix(in srgb, var(--text-primary) 3%, transparent);
+  color: var(--text-secondary);
+}
+
+/* Lists: restore visible markers and a comfortable hang. */
+.timeline-markdown [data-streamdown="unordered-list"] {
+  padding-left: 1.3em;
+  list-style: disc;
+}
+
+.timeline-markdown [data-streamdown="ordered-list"] {
+  padding-left: 1.3em;
+  list-style: decimal;
+}
+
+.timeline-markdown [data-streamdown="list-item"] {
+  margin-block: 2px;
+}
+
+.timeline-markdown [data-streamdown="list-item"]::marker {
+  color: var(--text-tertiary);
+}
+
+/* Blockquote */
+.timeline-markdown [data-streamdown="blockquote"] {
+  border-left: 3px solid var(--border);
+  padding-left: 10px;
+  color: var(--text-secondary);
+}
+
+/* Tables: token-colored grid instead of the neutral defaults. */
+.timeline-markdown [data-streamdown="table-cell"],
+.timeline-markdown [data-streamdown="table-header-cell"] {
+  border: 1px solid var(--border);
+  padding: 4px 8px;
+}
+
+.timeline-markdown [data-streamdown="table-header-cell"] {
+  background: color-mix(in srgb, var(--text-primary) 4%, transparent);
+  color: var(--text-secondary);
+}
+
+.timeline-markdown [data-streamdown="horizontal-rule"] {
+  border-color: var(--border-subtle);
+}
+
+/* Headings: bubble-scale hierarchy (streamdown's page-scale sizes shout
+ * inside a 13px bubble). */
+.timeline-markdown :where(h1, h2, h3, h4, h5, h6) {
+  margin-block: 0.6em 0.3em;
+  font-weight: 600;
+  line-height: 1.4;
+}
+
+.timeline-markdown :where(h1) {
+  font-size: 1.25em;
+}
+
+.timeline-markdown :where(h2) {
+  font-size: 1.15em;
+}
+
+.timeline-markdown :where(h3) {
+  font-size: 1.08em;
+}
+
+.timeline-markdown :where(h4, h5, h6) {
+  font-size: 1em;
+}

@@ -1,9 +1,13 @@
 import { useState } from "react";
+import { useI18n } from "@/i18n/index";
 
 export function ThinkingBlock(props: { content: string }) {
+  const { t } = useI18n();
   const [expanded, setExpanded] = useState(false);
   const preview = () => {
-    const first = props.content.split("\n")[0];
+    // Models pepper thinking with markdown-ish **emphasis**; the collapsed
+    // one-liner reads better with the markers stripped (content stays raw).
+    const first = props.content.split("\n")[0].replaceAll("**", "");
     return first.length > 80 ? `${first.slice(0, 80)}...` : first;
   };
 
@@ -14,7 +18,7 @@ export function ThinkingBlock(props: { content: string }) {
         onClick={() => setExpanded(!expanded)}
       >
         <span className="msg-thinking-icon">💭</span>
-        <span className="msg-thinking-label">Thinking</span>
+        <span className="msg-thinking-label">{t("timeline.thinking")}</span>
         {!expanded && <span className="msg-thinking-preview">{preview()}</span>}
         <span className="msg-thinking-chevron">{expanded ? "▾" : "▸"}</span>
       </div>
