@@ -157,8 +157,39 @@
 
 .timeline-markdown [data-streamdown="code-block-actions"],
 .timeline-markdown [data-streamdown="mermaid-block-actions"] {
-  opacity: 0.65;
+  /* Invisible at rest — chrome should not compete with content. */
+  opacity: 0;
+  border: 0;
+  background: none;
+  padding: 0;
+  box-shadow: none;
+  backdrop-filter: none;
   transition: opacity var(--dur-fast) var(--ease-standard);
+}
+
+/* Ghost icon buttons instead of the heavy bordered squares. */
+.timeline-markdown [data-streamdown="code-block-actions"] button,
+.timeline-markdown [data-streamdown="mermaid-block-actions"] button {
+  width: 22px;
+  height: 22px;
+  padding: 3px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: none;
+  box-shadow: none;
+  color: var(--text-tertiary);
+}
+
+.timeline-markdown [data-streamdown="code-block-actions"] button:hover,
+.timeline-markdown [data-streamdown="mermaid-block-actions"] button:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.timeline-markdown [data-streamdown="code-block-actions"] svg,
+.timeline-markdown [data-streamdown="mermaid-block-actions"] svg {
+  width: 14px;
+  height: 14px;
 }
 
 .timeline-markdown
@@ -180,4 +211,9 @@
 .timeline-markdown [data-streamdown="code-block-body"] code > span::before {
   opacity: 0.45;
   padding-right: 4px;
+}
+
+/* Language-less code blocks: an empty header strip is pure noise. */
+.timeline-markdown [data-streamdown="code-block-header"]:has(> span:empty) {
+  display: none;
 }

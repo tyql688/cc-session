@@ -239,6 +239,15 @@ export default function App() {
 
     void loadProviderSnapshots();
     void sync.coldStart();
+    // Warm the markdown engine (streamdown + shiki) while the shell is idle,
+    // so the first session open doesn't pay the chunk-load + highlighter
+    // initialization on the critical path.
+    const idleHandle = window.requestIdleCallback(
+      () => {
+        void import("@/features/session/timeline/Markdown");
+      },
+      { timeout: 3000 },
+    );
     const updateTimer = setTimeout(() => void checkForUpdate(), 2000);
 
     async function setup() {
@@ -324,6 +333,7 @@ export default function App() {
       unlistenMaintenance?.();
       unlistenResized?.();
       sync.stopPolling();
+      window.cancelIdleCallback(idleHandle);
       clearTimeout(updateTimer);
       clearTimeout(debounceTimer);
       debouncedChangedPaths.clear();

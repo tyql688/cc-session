@@ -1,5 +1,5 @@
 import { Check, Copy, ExternalLink } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { memo, useEffect, useMemo, useState } from "react";
 // @streamdown/math renders KaTeX markup but does NOT inject its stylesheet —
 // without this import every formula renders twice (KaTeX HTML plus the
 // unhidden MathML fallback copy).
@@ -118,13 +118,22 @@ const linkSafety: LinkSafetyConfig = {
   renderModal: (props) => <ExternalLinkModal {...props} />,
 };
 
+/* A viewer needs far fewer chrome buttons than a chat product: copy is the
+ * core affordance; downloading code/tables out of a session transcript is
+ * noise. Mermaid keeps fullscreen + pan-zoom for reading large diagrams. */
+const controls = {
+  code: { copy: true, download: false },
+  table: { copy: true, download: false, fullscreen: false },
+  mermaid: { copy: false, download: false, fullscreen: true, panZoom: true },
+};
+
 /**
  * Timeline markdown renders through Streamdown: shiki-highlighted code blocks
  * with a copy control, mermaid diagrams, GFM, KaTeX math, CJK emphasis fixes.
  * This is a viewer — incomplete-markdown parsing and the typing caret are only
  * enabled for the message currently streaming in under live watch.
  */
-export function Markdown({
+export const Markdown = memo(function Markdown({
   text,
   streaming = false,
 }: {
@@ -141,6 +150,7 @@ export function Markdown({
         shikiTheme={["github-light", "github-dark"]}
         plugins={{ cjk, math, code, mermaid }}
         translations={translations}
+        controls={controls}
         linkSafety={linkSafety}
         {...(streaming ? { caret: "block" as const, isAnimating: true } : {})}
       >
@@ -148,4 +158,4 @@ export function Markdown({
       </Streamdown>
     </div>
   );
-}
+});
