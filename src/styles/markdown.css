@@ -27,8 +27,9 @@
   text-decoration-color: var(--accent);
 }
 
-/* Code blocks: one-piece card — a single surface, hairline-separated header,
- * no stacked strips of competing greys. */
+/* Code blocks: one-piece panel that follows the app theme — github-light
+ * tokens on the light surface, github-dark on the dark one (the dark:
+ * variant flips with [data-theme]). */
 .timeline-markdown [data-streamdown="code-block"] {
   border: 1px solid var(--border-subtle);
   border-radius: 10px;
@@ -37,23 +38,23 @@
 }
 
 .timeline-markdown [data-streamdown="code-block-header"] {
-  padding: 5px 12px;
+  padding: 6px 12px;
   border-bottom: 1px solid var(--border-subtle);
   background: none;
   color: var(--text-tertiary);
-  font-size: 10px;
+  font-size: 11px;
   letter-spacing: 0.08em;
-  text-transform: uppercase;
 }
 
 /* Streamdown paints the body white on its own — that stripes the card.
- * Inherit the container surface instead. */
+ * Inherit the panel surface instead. */
 .timeline-markdown [data-streamdown="code-block-body"] {
   border: 0;
   background: transparent;
-  padding: 10px 14px;
-  font-size: 12px;
-  line-height: 1.65;
+  padding: 11px 14px;
+  font-size: 13px;
+  line-height: 1.7;
+  color: var(--code-text);
 }
 
 /* Lists: restore visible markers and a comfortable hang. */
@@ -77,7 +78,8 @@
 
 /* Blockquote */
 .timeline-markdown [data-streamdown="blockquote"] {
-  border-left: 3px solid var(--border);
+  border-left: 3px solid
+    color-mix(in srgb, var(--text-tertiary) 55%, transparent);
   padding-left: 10px;
   color: var(--text-secondary);
 }
@@ -226,11 +228,44 @@
 
 /* Line numbers: recede behind the code instead of competing with it. */
 .timeline-markdown [data-streamdown="code-block-body"] code > span::before {
-  opacity: 0.45;
-  padding-right: 4px;
+  color: var(--text-tertiary);
+  opacity: 0.7;
+  padding-right: 6px;
 }
 
 /* Language-less code blocks: an empty header strip is pure noise. */
 .timeline-markdown [data-streamdown="code-block-header"]:has(> span:empty) {
   display: none;
+}
+
+/* Tables: drop the padded grey wrapper frame (double-framing the table's own
+ * borders) and pin the copy control to the corner instead of a blank row. */
+.timeline-markdown [data-streamdown="table-wrapper"] {
+  position: relative;
+  border: 0;
+  background: none;
+  padding: 0;
+}
+
+.timeline-markdown [data-streamdown="table-wrapper"] > div:has(button) {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  z-index: 1;
+  margin: 0;
+  /* Overlaps the header row, so it only appears while hovering the table. */
+  opacity: 0;
+  transition: opacity var(--dur-fast) var(--ease-standard);
+}
+
+.timeline-markdown [data-streamdown="table-wrapper"]:hover > div:has(button) {
+  opacity: 1;
+}
+
+/* Mermaid pan-zoom cluster: bottom-right, horizontal — out of the diagram's
+ * reading path. */
+.timeline-markdown [data-streamdown="mermaid-block"]
+  div[class~="absolute"][class~="flex-col"] {
+  inset: auto 8px 8px auto;
+  flex-direction: row;
 }

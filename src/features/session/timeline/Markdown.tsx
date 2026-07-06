@@ -27,6 +27,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { useI18n } from "@/i18n/index";
+import { useResolvedTheme } from "@/stores/theme";
 import { openExternalUrl } from "@/lib/external-links";
 import { toastError } from "@/stores/toast";
 
@@ -142,13 +143,25 @@ export const Markdown = memo(function Markdown({
   streaming?: boolean;
 }) {
   const translations = useStreamdownTranslations();
+  const resolvedTheme = useResolvedTheme();
+  // Mermaid rasterizes its own colors — it must be told the concrete theme.
+  const mermaidOptions = useMemo(
+    () => ({
+      config: {
+        theme:
+          resolvedTheme === "dark" ? ("dark" as const) : ("default" as const),
+      },
+    }),
+    [resolvedTheme],
+  );
   return (
-    <div className="timeline-markdown min-w-0 text-[13px] leading-relaxed text-text-primary">
+    <div className="timeline-markdown min-w-0 text-sm leading-relaxed text-text-primary">
       <Streamdown
         className="space-y-3"
         parseIncompleteMarkdown={streaming}
         shikiTheme={["github-light", "github-dark"]}
         plugins={{ cjk, math, code, mermaid }}
+        mermaid={mermaidOptions}
         translations={translations}
         controls={controls}
         linkSafety={linkSafety}

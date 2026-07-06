@@ -53,15 +53,23 @@ export function applyTheme(theme: Theme) {
   // so the app shell follows OS dark mode.
   const resolved = theme === "system" ? resolveSystemTheme() : theme;
   document.documentElement.setAttribute("data-theme", resolved);
+  useThemeStore.setState({ resolvedTheme: resolved });
   writeStoredTheme(theme);
 }
 
 interface ThemeState {
   theme: Theme;
+  /** The concrete light/dark value after resolving "system" against the OS —
+   * for consumers that must feed a renderer (e.g. mermaid) a real theme. */
+  resolvedTheme: "light" | "dark";
 }
 
+const initialTheme = readStoredTheme();
+
 const useThemeStore = create<ThemeState>(() => ({
-  theme: readStoredTheme(),
+  theme: initialTheme,
+  resolvedTheme:
+    initialTheme === "system" ? resolveSystemTheme() : initialTheme,
 }));
 
 export function setTheme(t: Theme) {
@@ -75,6 +83,10 @@ export function getTheme(): Theme {
 
 export function useTheme(): Theme {
   return useThemeStore((state) => state.theme);
+}
+
+export function useResolvedTheme(): "light" | "dark" {
+  return useThemeStore((state) => state.resolvedTheme);
 }
 
 // Re-apply on OS theme change while tracking it ("system" mode), so a live
