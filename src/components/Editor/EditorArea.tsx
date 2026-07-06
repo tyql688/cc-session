@@ -99,7 +99,10 @@ export function EditorArea(props: {
                     <SessionView
                       key={session.id}
                       session={session}
-                      active={isActive}
+                      // Session commands (resume/export/delete/...) are
+                      // document-level events; only the focused group's active
+                      // tab may respond, or split view double-fires them.
+                      active={isActive && props.isFocused}
                       onRefreshTree={props.onRefreshTree}
                       onCloseTab={props.onTabClose}
                     />

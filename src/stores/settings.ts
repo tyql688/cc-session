@@ -18,15 +18,20 @@ export type TerminalApp =
   | "konsole"
   | "xterm"; // Linux
 
-const VALID_PROVIDERS: Provider[] = [
-  "claude",
-  "codex",
-  "antigravity",
-  "opencode",
-  "kimi",
-  "cursor",
-  "cc-mirror",
-];
+// Record<Provider, true> forces a compile error when a Provider variant is
+// added without updating this map, so stored settings can never silently drop
+// a valid provider on load.
+const PROVIDER_FLAGS: Record<Provider, true> = {
+  claude: true,
+  codex: true,
+  antigravity: true,
+  opencode: true,
+  kimi: true,
+  cursor: true,
+  "cc-mirror": true,
+  pi: true,
+};
+const VALID_PROVIDERS = Object.keys(PROVIDER_FLAGS) as Provider[];
 
 const VALID_TERMINALS: TerminalApp[] = [
   "terminal",

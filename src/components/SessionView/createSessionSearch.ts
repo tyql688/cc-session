@@ -135,7 +135,11 @@ export function useSessionSearch(
     if (pending.sessionId !== opts.sessionId) return;
     setPendingSessionSearch(null);
 
-    suppressNextSearchEffectRef.current = true;
+    // Only arm the suppress flag when the state write actually changes the
+    // value — an identical query re-runs no effect, and a stale flag would
+    // swallow the user's next keystroke.
+    suppressNextSearchEffectRef.current =
+      pending.query !== sessionSearchRef.current;
     setSessionSearch(pending.query);
     setSearchBarOpen(true);
     void commitSessionSearch(pending.query);

@@ -149,19 +149,31 @@ export function useTrashState(onRefreshTree: () => void): UseTrashStateResult {
 
   async function handleRestoreAll(node: TreeNode) {
     const ids = collectSessionIds(node);
-    const result = await restoreSessionsBatch(ids);
-    await Promise.all([refetch(), onRefreshTree()]);
-    if (result.failed > 0)
-      toastError(
-        `${result.failed}/${result.succeeded + result.failed} ${t("trash.restore")}`,
-      );
-    else toast(`${result.succeeded} ${t("trash.restoreOk")}`);
+    try {
+      const result = await restoreSessionsBatch(ids);
+      await Promise.all([refetch(), onRefreshTree()]);
+      if (result.failed > 0)
+        toastError(
+          `${result.failed}/${result.succeeded + result.failed} ${t("trash.restore")}`,
+        );
+      else toast(`${result.succeeded} ${t("trash.restoreOk")}`);
+    } catch (e) {
+      toastError(`${t("trash.restore")}: ${errorMessage(e)}`);
+      // The batch may have partially applied before failing — resync the list.
+      void refetch();
+    }
   }
 
   async function handleDeleteAll(node: TreeNode) {
     const ids = collectSessionIds(node);
-    await permanentDeleteTrashBatch(ids);
-    void refetch();
+    try {
+      await permanentDeleteTrashBatch(ids);
+    } catch (e) {
+      toastError(errorMessage(e));
+    } finally {
+      // Deletes may have partially applied before a failure — resync either way.
+      void refetch();
+    }
   }
 
   function toggleExpanded(nodeId: string) {
