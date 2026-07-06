@@ -1,5 +1,6 @@
 import { useState, useMemo, useEffect } from "react";
 import type { Message } from "../../lib/types";
+import { useI18n } from "../../i18n/index";
 import { readToolResultText } from "../../lib/tauri";
 import { buildToolLineDiff, type ToolDiffLine } from "../../lib/diff";
 import {
@@ -33,8 +34,6 @@ import {
   isLocalPath,
 } from "./ImagePreview";
 
-export { formatMcpLabel } from "../../lib/tools";
-
 /** Dispatch a custom event to open a subagent session by description, nickname, or agent ID. */
 function openSubagent(
   description: string,
@@ -58,17 +57,18 @@ function compactSubagentLabel(value: string): string {
 }
 
 function subagentButtonLabel(
+  t: (key: string, options?: Record<string, unknown>) => string,
   prompt: string | undefined,
   agentId: string | undefined,
   index: number,
   total: number,
 ): string {
-  if (total <= 1) return "↗ Open";
+  if (total <= 1) return t("tool.openSubagent");
   const identity =
     compactSubagentLabel(prompt ?? "") ||
     compactSubagentLabel(agentId ?? "") ||
     `#${index + 1}`;
-  return `↗ Open ${identity}`;
+  return t("tool.openSubagentNamed", { name: identity });
 }
 
 function DiffRows(props: { lines: ToolDiffLine[] }) {
@@ -111,6 +111,7 @@ export function ToolMessage(props: {
   provider?: string;
   parentSessionId?: string;
 }) {
+  const { t } = useI18n();
   const [expanded, setExpanded] = useState(false);
   const [previewImage, setPreviewImage] = useState<{
     src: string;
@@ -326,6 +327,7 @@ export function ToolMessage(props: {
             agentChildIds.map((childId, i) => {
               const prompt = agentChildPrompts[i] ?? "";
               const label = subagentButtonLabel(
+                t,
                 prompt,
                 childId,
                 i,
@@ -344,7 +346,11 @@ export function ToolMessage(props: {
                       props.parentSessionId,
                     );
                   }}
-                  title={prompt ? prompt : `Open subagent ${childId}`}
+                  title={
+                    prompt
+                      ? prompt
+                      : t("tool.openSubagentTitleId", { id: childId })
+                  }
                 >
                   {label}
                 </button>
@@ -353,6 +359,7 @@ export function ToolMessage(props: {
           ) : agentPromptTargets.length > 0 ? (
             agentPromptTargets.map((prompt, i) => {
               const label = subagentButtonLabel(
+                t,
                 prompt,
                 undefined,
                 i,
@@ -389,9 +396,9 @@ export function ToolMessage(props: {
                   props.parentSessionId,
                 );
               }}
-              title="Open subagent session"
+              title={t("tool.openSubagentTitle")}
             >
-              ↗ Open
+              {t("tool.openSubagent")}
             </button>
           ))}
         {(hasInput() || hasOutput() || resultMetadata) && (
@@ -446,7 +453,9 @@ export function ToolMessage(props: {
                   }}
                   type="button"
                 >
-                  {loadingFullResult ? "Loading..." : "Load full result"}
+                  {loadingFullResult
+                    ? t("common.loading")
+                    : t("tool.loadFullResult")}
                 </button>
               )}
               {fullResultError && (

@@ -239,6 +239,13 @@
     "turnAborted": "Aborted",
     "contextCompacted": "Compacted"
   },
+  "tool": {
+    "openSubagent": "↗ Open",
+    "openSubagentNamed": "↗ Open {name}",
+    "openSubagentTitle": "Open subagent session",
+    "openSubagentTitleId": "Open subagent {id}",
+    "loadFullResult": "Load full result"
+  },
   "blocked": {
     "hint": "Right-click a project folder and select \"Block This Folder\""
   },

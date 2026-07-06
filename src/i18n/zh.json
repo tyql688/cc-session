@@ -239,6 +239,13 @@
     "turnAborted": "已中断",
     "contextCompacted": "上下文已压缩"
   },
+  "tool": {
+    "openSubagent": "↗ 打开",
+    "openSubagentNamed": "↗ 打开 {name}",
+    "openSubagentTitle": "打开子会话",
+    "openSubagentTitleId": "打开子会话 {id}",
+    "loadFullResult": "加载完整结果"
+  },
   "blocked": {
     "hint": "右键项目文件夹，选择「屏蔽此文件夹」"
   },

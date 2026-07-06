@@ -5,7 +5,6 @@ import {
   useRef,
   useState,
 } from "react";
-import { listenBackendEvent, type UnlistenFn } from "../../lib/backend-events";
 import type { SessionMeta, SessionRef, TreeNode } from "../../lib/types";
 import {
   getChildSessionCounts,
@@ -107,23 +106,10 @@ export function EditorGroupsContainer(props: {
     setRecentVersion((version) => version + 1);
   }, [props.tree]);
 
-  useEffect(() => {
-    let cancelled = false;
-    let unlisten: UnlistenFn | undefined;
-    listenBackendEvent("sessions-changed", () =>
-      setRecentVersion((version) => version + 1),
-    ).then((fn) => {
-      if (cancelled) {
-        fn();
-        return;
-      }
-      unlisten = fn;
-    });
-    return () => {
-      cancelled = true;
-      unlisten?.();
-    };
-  }, []);
+  // No direct `sessions-changed` listener here: the App shell already
+  // debounces that event into a sync whose refreshTree() produces a new
+  // `props.tree`, and the effect above bumps `recentVersion` off that. A
+  // second listener would refetch the recent list once per raw event.
 
   function handleResize(leftIdx: number, deltaX: number) {
     const gs = getGroups();

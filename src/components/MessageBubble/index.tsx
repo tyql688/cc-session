@@ -13,10 +13,6 @@ import { ThinkingBlock } from "./ThinkingBlock";
 import { CopyMessageButton, TokenUsageDisplay } from "./TokenUsage";
 import { ToolMessage } from "./ToolMessage";
 
-// Re-export for backward compatibility
-export { ProviderIcon } from "../icons";
-export { formatMcpLabel } from "./ToolMessage";
-
 const SYSTEM_SUBTYPE_CONFIG: Record<
   string,
   { icon: string; labelKey: string; cls: string }

@@ -54,8 +54,10 @@ export async function openSubagent(
   detail: OpenSubagentDetail,
   deps: OpenSubagentDeps,
 ): Promise<void> {
+  // Lazy read: an explicit parentSessionId must not touch the active-tab
+  // lookup (covered by tests asserting zero active-parent reads).
   const parentIds = detail.parentSessionId
-    ? [detail.parentSessionId]
+    ? candidateParentSessionIds(detail, [])
     : candidateParentSessionIds(detail, deps.getActiveParentSessionIds());
 
   let anyParentResolved = false;
