@@ -1,5 +1,10 @@
+import path from "node:path";
 import react from "@vitejs/plugin-react";
 import { defineConfig } from "vitest/config";
+
+const alias = {
+  "@": path.resolve(import.meta.dirname, "./src"),
+};
 
 // Two test projects: logic/store/parser tests (`*.test.ts`, plain node env) and
 // React component render tests (`*.test.tsx`, DOM + JSX via happy-dom).
@@ -7,6 +12,7 @@ export default defineConfig({
   test: {
     projects: [
       {
+        resolve: { alias },
         test: {
           name: "unit",
           environment: "node",
@@ -14,6 +20,7 @@ export default defineConfig({
         },
       },
       {
+        resolve: { alias },
         plugins: [react()],
         test: {
           name: "components",

@@ -11,7 +11,8 @@
       "src/**/*.tsx",
       "src/**/*.css",
       "!**/*.test.ts",
-      "!**/*.test.tsx"
+      "!**/*.test.tsx",
+      "!src/styles/theme.css"
     ]
   },
   "formatter": {

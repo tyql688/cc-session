@@ -1,4 +1,5 @@
 @import "./variables.css";
+@import "./theme.css";
 @import "./layout.css";
 @import "./explorer.css";
 @import "./editor.css";

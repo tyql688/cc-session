@@ -1,0 +1,133 @@
+/* ---------------------------------------------------------------------------
+ * Tailwind v4 entry — theme + utilities layers only.
+ *
+ * Preflight is intentionally NOT imported: the legacy hand-written stylesheets
+ * still rely on UA defaults (markdown lists/headings, button backgrounds).
+ * It lands in Phase C of the UI migration, once those files are deleted.
+ *
+ * Token layering:
+ *   variables.css  — runtime source of truth; flips values via [data-theme]
+ *   this file      — exposes those values to Tailwind utilities and to the
+ *                    shadcn semantic tokens (--background/--foreground/…)
+ *
+ * Naming collisions with variables.css, resolved here:
+ *   --accent  : legacy = brand blue; shadcn = subtle hover bg. The legacy var
+ *               keeps the name; shadcn's hover semantic maps to --bg-hover and
+ *               the brand blue is exposed as `brand` utilities instead.
+ *   --border  : same semantic in both — shared as-is.
+ *   --radius-*: same values in both — literals kept in sync.
+ * ------------------------------------------------------------------------- */
+@layer theme, base, components, utilities;
+@import "tailwindcss/theme.css" layer(theme);
+@import "tailwindcss/utilities.css" layer(utilities);
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
+
+/* `dark:` follows the app's data-theme attribute (driven by the theme store),
+ * not the OS media query — "system" mode is resolved to an explicit attribute
+ * value by applyTheme(). */
+@custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *));
+
+/* shadcn semantic tokens, remapped onto variables.css. Values are var()
+ * references, so a single :root block covers both themes — the indirection
+ * flips with [data-theme]. */
+:root {
+  --background: var(--bg-editor);
+  --foreground: var(--text-primary);
+  --card: var(--modal-bg);
+  --card-foreground: var(--text-primary);
+  --popover: var(--context-menu-bg);
+  --popover-foreground: var(--text-primary);
+  --primary: var(--accent);
+  --primary-foreground: #ffffff;
+  --secondary: var(--code-bg);
+  --secondary-foreground: var(--text-primary);
+  --muted: var(--code-bg);
+  --muted-foreground: var(--text-secondary);
+  --destructive: var(--danger);
+  --input: var(--border);
+  --ring: var(--accent);
+  --radius: 0.375rem; /* 6px — matches --radius-md; denser than shadcn preset */
+}
+
+@theme inline {
+  /* shadcn token bridge */
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  /* shadcn "accent" = subtle hover surface, NOT the brand blue */
+  --color-accent: var(--bg-hover);
+  --color-accent-foreground: var(--text-primary);
+  --color-destructive: var(--danger);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+
+  /* App-level tokens for utilities (bg-surface, text-secondary, …) */
+  --color-surface: var(--bg-editor);
+  --color-surface-window: var(--bg-window);
+  --color-surface-sidebar: var(--bg-sidebar);
+  --color-surface-raised: var(--modal-bg);
+  --color-surface-hover: var(--bg-hover);
+  --color-surface-code: var(--code-bg);
+  --color-border-subtle: var(--border-subtle);
+  --color-text-primary: var(--text-primary);
+  --color-text-secondary: var(--text-secondary);
+  --color-text-tertiary: var(--text-tertiary);
+  --color-brand: var(--accent);
+  --color-brand-soft: var(--accent-light);
+  --color-danger: var(--danger);
+  --color-success: var(--success);
+  --color-warning: var(--text-warning);
+
+  /* Provider brand colors (theme-adjusted variants live in variables.css) */
+  --color-provider-claude: var(--claude);
+  --color-provider-codex: var(--codex);
+  --color-provider-antigravity: var(--antigravity);
+  --color-provider-opencode: var(--opencode);
+  --color-provider-kimi: var(--kimi);
+  --color-provider-cursor: var(--cursor);
+  --color-provider-cc-mirror: var(--cc-mirror);
+  --color-provider-pi: var(--pi);
+
+  /* Elevation — e-prefixed to avoid self-referencing the variables.css names */
+  --shadow-e1: var(--shadow-1);
+  --shadow-e2: var(--shadow-2);
+  --shadow-e3: var(--shadow-3);
+
+  --font-heading: var(--font-sans);
+}
+
+@theme {
+  /* Scale tokens — literals mirroring variables.css; that file remains the
+   * source of truth until Phase C promotes this one. System font stack — the
+   * shadcn preset's Geist is intentionally not used. */
+  --font-sans: -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  --radius-xs: 3px;
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 10px;
+  --radius-xl: 14px;
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+  html {
+    @apply font-sans;
+  }
+}
