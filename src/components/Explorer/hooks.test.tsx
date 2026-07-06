@@ -10,7 +10,7 @@ import {
   getBlockedFolders,
   removeBlockedFolder,
 } from "../../stores/settings";
-import { filterBlockedFolders } from "./hooks";
+import { filterBlockedFolders, groupTreeByDirectory } from "./hooks";
 
 function clearBlockedFolders() {
   for (const folder of [...getBlockedFolders()]) {
@@ -91,5 +91,113 @@ describe("filterBlockedFolders", () => {
       "claude:/repo/visible",
     ]);
     expect(filtered[0].count).toBe(2);
+  });
+});
+
+describe("groupTreeByDirectory", () => {
+  function session(
+    id: string,
+    provider: TreeNode["provider"],
+    updatedAt: number,
+  ): TreeNode {
+    return {
+      id,
+      label: id,
+      node_type: "session",
+      children: [],
+      count: 0,
+      provider,
+      updated_at: updatedAt,
+    };
+  }
+
+  function providerTree(): TreeNode[] {
+    return [
+      {
+        id: "claude",
+        label: "Claude",
+        node_type: "provider",
+        children: [
+          {
+            id: "claude:/repo/app",
+            label: "app",
+            node_type: "project",
+            project_path: "/repo/app",
+            children: [session("c1", "claude", 100), session("c2", "claude", 300)],
+            count: 2,
+            provider: "claude",
+          },
+        ],
+        count: 2,
+        provider: "claude",
+      },
+      {
+        id: "codex",
+        label: "Codex",
+        node_type: "provider",
+        children: [
+          {
+            id: "codex:/repo/app",
+            label: "app",
+            node_type: "project",
+            project_path: "/repo/app",
+            children: [session("x1", "codex", 200)],
+            count: 1,
+            provider: "codex",
+          },
+          {
+            id: "codex:none",
+            label: "(No Project)",
+            node_type: "project",
+            children: [session("x2", "codex", 999)],
+            count: 1,
+            provider: "codex",
+          },
+        ],
+        count: 2,
+        provider: "codex",
+      },
+    ];
+  }
+
+  it("merges the same directory across providers, newest session first", () => {
+    const groups = groupTreeByDirectory(providerTree(), "No Project");
+    const app = groups.find((g) => g.project_path === "/repo/app");
+    expect(app).toBeDefined();
+    expect(app?.count).toBe(3);
+    expect(app?.children.map((c) => c.id)).toEqual(["c2", "x1", "c1"]);
+    expect(app?.id).toBe("dir:/repo/app");
+  });
+
+  it("sinks pathless sessions into a trailing labeled bucket", () => {
+    const groups = groupTreeByDirectory(providerTree(), "No Project");
+    const last = groups[groups.length - 1];
+    expect(last?.label).toBe("No Project");
+    expect(last?.project_path).toBeUndefined();
+    expect(last?.children.map((c) => c.id)).toEqual(["x2"]);
+  });
+
+  it("orders directories by most recent activity", () => {
+    const tree = providerTree();
+    tree.push({
+      id: "pi",
+      label: "Pi",
+      node_type: "provider",
+      children: [
+        {
+          id: "pi:/repo/hot",
+          label: "hot",
+          node_type: "project",
+          project_path: "/repo/hot",
+          children: [session("p1", "pi", 5000)],
+          count: 1,
+          provider: "pi",
+        },
+      ],
+      count: 1,
+      provider: "pi",
+    });
+    const groups = groupTreeByDirectory(tree, "No Project");
+    expect(groups[0]?.project_path).toBe("/repo/hot");
   });
 });

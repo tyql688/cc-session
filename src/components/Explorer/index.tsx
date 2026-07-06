@@ -16,6 +16,8 @@ import {
   useTerminalApp,
   useShowOrphans,
   useBlockedFolders,
+  useExplorerGrouping,
+  setExplorerGrouping,
   addBlockedFolder,
 } from "../../stores/settings";
 import { ContextMenu } from "../ContextMenu";
@@ -33,6 +35,7 @@ import { errorMessage } from "../../lib/errors";
 import {
   filterBlockedFolders,
   filterOrphanSubagents,
+  groupTreeByDirectory,
   buildSessionRef,
 } from "./hooks";
 import {
@@ -78,6 +81,7 @@ export function Explorer(props: {
 }) {
   const { t } = useI18n();
   const showOrphans = useShowOrphans();
+  const grouping = useExplorerGrouping();
   const blockedFolders = useBlockedFolders();
   const terminalApp = useTerminalApp();
   const selCount = useSelectionCount();
@@ -85,11 +89,14 @@ export function Explorer(props: {
   const displayTree = useMemo(() => {
     let tree = filterBlockedFolders(props.tree);
     if (!showOrphans) tree = filterOrphanSubagents(tree);
+    if (grouping === "directory") {
+      tree = groupTreeByDirectory(tree, t("explorer.noProject"));
+    }
     return tree;
     // `blockedFolders` drives filterBlockedFolders' internal getBlockedFolders(),
     // so it's a real dep even though not textually referenced here.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [props.tree, showOrphans, blockedFolders]);
+  }, [props.tree, showOrphans, grouping, blockedFolders, t]);
 
   // O(1) session ID → project path lookup, rebuilt when props.tree changes
   const sessionProjectPathMap = useMemo(() => {
@@ -436,6 +443,42 @@ export function Explorer(props: {
           </span>
         )}
         <span className="explorer-header-actions">
+          <span className="explorer-grouping-toggle">
+            <button
+              className={`explorer-grouping-btn${grouping === "provider" ? " active" : ""}`}
+              title={t("explorer.groupByProvider")}
+              onClick={() => setExplorerGrouping("provider")}
+            >
+              <svg
+                width="12"
+                height="12"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+              >
+                <path d="M12 2 2 7l10 5 10-5-10-5Z" />
+                <path d="m2 17 10 5 10-5" />
+                <path d="m2 12 10 5 10-5" />
+              </svg>
+            </button>
+            <button
+              className={`explorer-grouping-btn${grouping === "directory" ? " active" : ""}`}
+              title={t("explorer.groupByDirectory")}
+              onClick={() => setExplorerGrouping("directory")}
+            >
+              <svg
+                width="12"
+                height="12"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+              >
+                <path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z" />
+              </svg>
+            </button>
+          </span>
           {props.activeSessionId && (
             <button
               className="explorer-header-btn"
@@ -470,6 +513,7 @@ export function Explorer(props: {
             onNodeContextMenu={handleNodeContextMenu}
             onSessionClick={handleSessionClick}
             onSessionDblClick={handleSessionDblClick}
+            sessionProviderDot={grouping === "directory"}
           />
         ))}
       </div>

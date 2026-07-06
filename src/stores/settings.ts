@@ -115,6 +115,16 @@ function parseStoredStringArray<T extends string>(
   }
 }
 
+export type ExplorerGrouping = "provider" | "directory";
+
+function readStoredExplorerGrouping(): ExplorerGrouping {
+  const raw = readStorage("cc-session-explorer-grouping");
+  if (raw === null || raw === "provider") return "provider";
+  if (raw === "directory") return "directory";
+  console.warn(`Ignoring invalid explorer grouping setting: ${raw}`);
+  return "provider";
+}
+
 const storedTerminal = readStorage("cc-session-terminal") as TerminalApp | null;
 const initialDisabledProviders = parseStoredStringArray<Provider>(
   "cc-session-disabled-providers",
@@ -132,6 +142,7 @@ interface SettingsState {
   disabledProviders: Provider[];
   disabledProvidersError: string | null;
   showOrphans: boolean;
+  explorerGrouping: ExplorerGrouping;
   blockedFolders: string[];
   blockedFoldersError: string | null;
 }
@@ -141,6 +152,7 @@ export const useSettingsStore = create<SettingsState>(() => ({
   disabledProviders: initialDisabledProviders.value,
   disabledProvidersError: initialDisabledProviders.error,
   showOrphans: readStorage("cc-session-show-orphans") !== "false",
+  explorerGrouping: readStoredExplorerGrouping(),
   blockedFolders: initialBlockedFolders.value,
   blockedFoldersError: initialBlockedFolders.error,
 }));
@@ -177,6 +189,11 @@ export function toggleProvider(id: Provider) {
 export function setShowOrphans(v: boolean) {
   useSettingsStore.setState({ showOrphans: v });
   writeStorage("cc-session-show-orphans", String(v));
+}
+
+export function setExplorerGrouping(mode: ExplorerGrouping) {
+  useSettingsStore.setState({ explorerGrouping: mode });
+  writeStorage("cc-session-explorer-grouping", mode);
 }
 
 export function addBlockedFolder(path: string) {
@@ -222,6 +239,8 @@ export const useDisabledProviders = () =>
 export const useDisabledProvidersError = () =>
   useSettingsStore((s) => s.disabledProvidersError);
 export const useShowOrphans = () => useSettingsStore((s) => s.showOrphans);
+export const useExplorerGrouping = () =>
+  useSettingsStore((s) => s.explorerGrouping);
 export const useBlockedFolders = () =>
   useSettingsStore((s) => s.blockedFolders);
 export const useBlockedFoldersError = () =>

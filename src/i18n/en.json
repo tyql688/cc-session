@@ -35,7 +35,9 @@
     "noProject": "(No Project)",
     "selected": "selected",
     "locateSession": "Scroll to active session",
-    "hideExplorer": "Hide explorer"
+    "hideExplorer": "Hide explorer",
+    "groupByProvider": "Group by provider",
+    "groupByDirectory": "Group by directory"
   },
   "search": {
     "placeholder": "Search all sessions...",

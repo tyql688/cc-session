@@ -49,6 +49,39 @@
   gap: 2px;
 }
 
+.explorer-grouping-toggle {
+  display: inline-flex;
+  gap: 1px;
+  margin-right: 2px;
+  padding: 1px;
+  border-radius: 5px;
+  background: var(--bg-tab-hover);
+}
+
+.explorer-grouping-btn {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 5px;
+  border: none;
+  border-radius: 4px;
+  background: none;
+  color: var(--text-tertiary);
+  cursor: pointer;
+  transition:
+    color 0.15s,
+    background 0.15s;
+}
+
+.explorer-grouping-btn:hover {
+  color: var(--text-primary);
+}
+
+.explorer-grouping-btn.active {
+  background: var(--bg-editor);
+  color: var(--text-primary);
+  box-shadow: var(--shadow-1);
+}
+
 .explorer-header-btn {
   background: none;
   border: none;

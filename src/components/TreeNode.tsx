@@ -127,6 +127,9 @@ export function TreeNodeComponent(props: {
     node: TreeNode,
     parentProjectLabel: string,
   ) => void;
+  /** Directory grouping merges providers, so each session row identifies its
+   * provider with a colored dot instead of the generic chat icon. */
+  sessionProviderDot?: boolean;
 }) {
   const { t } = useI18n();
   const hasChildren = () => props.node.children.length > 0;
@@ -244,11 +247,14 @@ export function TreeNodeComponent(props: {
             <span className="tree-node-icon tree-node-icon-orphan">⤷</span>
           )}
         {props.node.node_type === "session" &&
-          !(props.node.is_sidechain && !isSubagentParent()) && (
+          !(props.node.is_sidechain && !isSubagentParent()) &&
+          (props.sessionProviderDot && props.node.provider ? (
+            <ProviderDot provider={props.node.provider} />
+          ) : (
             <span className="tree-node-icon">
               <ChatIcon />
             </span>
-          )}
+          ))}
 
         <span
           className={`tree-node-label${props.node.node_type === "provider" ? " bold" : ""}`}
@@ -294,6 +300,7 @@ export function TreeNodeComponent(props: {
             onNodeContextMenu={props.onNodeContextMenu}
             onSessionClick={props.onSessionClick}
             onSessionDblClick={props.onSessionDblClick}
+            sessionProviderDot={props.sessionProviderDot}
           />
         ))}
       {/* Provider/project children use expand/collapse */}
@@ -313,6 +320,7 @@ export function TreeNodeComponent(props: {
             onNodeContextMenu={props.onNodeContextMenu}
             onSessionClick={props.onSessionClick}
             onSessionDblClick={props.onSessionDblClick}
+            sessionProviderDot={props.sessionProviderDot}
           />
         ))}
     </div>

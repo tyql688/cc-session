@@ -35,7 +35,9 @@
     "noProject": "(无项目)",
     "selected": "已选择",
     "locateSession": "定位到当前会话",
-    "hideExplorer": "隐藏资源管理器"
+    "hideExplorer": "隐藏资源管理器",
+    "groupByProvider": "按提供商分组",
+    "groupByDirectory": "按目录分组"
   },
   "search": {
     "placeholder": "搜索所有会话...",
