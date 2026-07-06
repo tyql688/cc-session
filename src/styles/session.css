@@ -264,17 +264,14 @@
 
 .timeline-minimap-strip {
   display: flex;
-  max-height: calc(100% - 32px);
   flex-direction: column;
   justify-content: center;
   gap: 2px;
-  overflow-y: auto;
-  scrollbar-width: none;
+  /* No overflow clipping here: the hover preview card is absolutely
+   * positioned outside the strip's box, and non-visible overflow on an
+   * ancestor clips it away entirely (the card never showed). Tick count is
+   * bounded by sampling, so the strip never needs to scroll. */
   pointer-events: auto;
-}
-
-.timeline-minimap-strip::-webkit-scrollbar {
-  display: none;
 }
 
 .timeline-minimap-row {
@@ -284,6 +281,10 @@
 .timeline-minimap-button {
   display: flex;
   align-items: center;
+  /* The minimap hugs the right edge, so ticks anchor right and grow leftward
+   * (the hover card opens leftward for the same reason). */
+  justify-content: flex-end;
+  width: 100%;
   padding: 2px 6px;
   border: 0;
   background: transparent;
@@ -342,6 +343,18 @@
   text-align: left;
   cursor: pointer;
   font: inherit;
+}
+
+/* Invisible hover bridge across the 4px gap between card and tick — without
+ * it the pointer leaves the row while crossing the gap and the card unmounts
+ * before it can be reached. */
+.timeline-minimap-card::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 100%;
+  width: 4px;
 }
 
 .timeline-minimap-card-top {
