@@ -12,3 +12,4 @@ coverage/
 docs/
 .claude
 .macos-signing/
+.playwright-mcp/
