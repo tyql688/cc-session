@@ -1,3 +1,9 @@
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { Download, Radio, Star, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -68,58 +74,74 @@ export function SessionToolbar(props: {
           </div>
           <div className="breadcrumb-title">{props.meta.title}</div>
         </div>
-        <div className="session-actions flex items-center gap-1.5">
-          <Button
-            variant="ghost"
-            size="icon-sm"
-            onClick={props.onToggleWatch}
-            title={
-              props.watching ? t("session.watchStop") : t("session.watchStart")
-            }
-          >
-            <Radio
-              className={cn(
-                "size-4",
-                props.watching && "animate-pulse text-success",
-              )}
-              aria-hidden="true"
-            />
-          </Button>
-          <Button
-            variant="ghost"
-            size="icon-sm"
-            disabled={props.starred === null}
-            onClick={props.onToggleFavorite}
-            title={
-              props.starred === null
-                ? t("common.loading")
-                : props.starred
-                  ? t("session.favoriteRemove")
-                  : t("session.favoriteAdd")
-            }
-          >
-            <Star
-              className={cn(
-                "size-4",
-                props.starred && "fill-warning text-warning",
-              )}
-              aria-hidden="true"
-            />
-          </Button>
-          {!(props.meta.is_sidechain && props.meta.provider === "kimi") && (
-            <Button size="sm" onClick={props.onResume}>
-              {t("session.resume")}
+        <TooltipProvider delay={400}>
+          <div className="session-actions flex items-center gap-1.5">
+            <Tooltip>
+              <TooltipTrigger
+                render={
+                  <Button
+                    variant="ghost"
+                    size="icon-sm"
+                    onClick={props.onToggleWatch}
+                  />
+                }
+              >
+                <Radio
+                  className={cn(
+                    "size-4",
+                    props.watching && "animate-pulse text-success",
+                  )}
+                  aria-hidden="true"
+                />
+              </TooltipTrigger>
+              <TooltipContent side="bottom">
+                {props.watching
+                  ? t("session.watchStop")
+                  : t("session.watchStart")}
+              </TooltipContent>
+            </Tooltip>
+            <Tooltip>
+              <TooltipTrigger
+                render={
+                  <Button
+                    variant="ghost"
+                    size="icon-sm"
+                    disabled={props.starred === null}
+                    onClick={props.onToggleFavorite}
+                  />
+                }
+              >
+                <Star
+                  className={cn(
+                    "size-4",
+                    props.starred && "fill-warning text-warning",
+                  )}
+                  aria-hidden="true"
+                />
+              </TooltipTrigger>
+              <TooltipContent side="bottom">
+                {props.starred === null
+                  ? t("common.loading")
+                  : props.starred
+                    ? t("session.favoriteRemove")
+                    : t("session.favoriteAdd")}
+              </TooltipContent>
+            </Tooltip>
+            {!(props.meta.is_sidechain && props.meta.provider === "kimi") && (
+              <Button size="sm" onClick={props.onResume}>
+                {t("session.resume")}
+              </Button>
+            )}
+            <Button variant="outline" size="sm" onClick={props.onExport}>
+              <Download className="size-3.5" aria-hidden="true" />
+              {t("session.export")}
             </Button>
-          )}
-          <Button variant="outline" size="sm" onClick={props.onExport}>
-            <Download className="size-3.5" aria-hidden="true" />
-            {t("session.export")}
-          </Button>
-          <Button variant="destructive" size="sm" onClick={props.onDelete}>
-            <Trash2 className="size-3.5" aria-hidden="true" />
-            {t("session.delete")}
-          </Button>
-        </div>
+            <Button variant="destructive" size="sm" onClick={props.onDelete}>
+              <Trash2 className="size-3.5" aria-hidden="true" />
+              {t("session.delete")}
+            </Button>
+          </div>
+        </TooltipProvider>
       </div>
 
       {/* Info bar */}

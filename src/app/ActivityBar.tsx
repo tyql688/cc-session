@@ -1,3 +1,9 @@
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import type { JSX } from "react";
 import { useI18n } from "@/i18n/index";
 
@@ -126,40 +132,52 @@ export function ActivityBar(props: {
   const bottomItems = items.filter((i) => i.position === "bottom");
 
   return (
-    <div className="activity-bar">
-      <div className="activity-bar-top">
-        {topItems.map((item) => {
-          const Icon = item.icon;
-          return (
-            <button
-              key={item.id}
-              className={`activity-btn${props.activeView === item.id ? " active" : ""}`}
-              onClick={() => props.onViewChange(item.id)}
-              title={item.label}
-              aria-label={item.label}
-            >
-              <Icon />
-            </button>
-          );
-        })}
+    <TooltipProvider delay={400}>
+      <div className="activity-bar">
+        <div className="activity-bar-top">
+          {topItems.map((item) => {
+            const Icon = item.icon;
+            return (
+              <Tooltip key={item.id}>
+                <TooltipTrigger
+                  render={
+                    <button
+                      className={`activity-btn${props.activeView === item.id ? " active" : ""}`}
+                      onClick={() => props.onViewChange(item.id)}
+                      aria-label={item.label}
+                    />
+                  }
+                >
+                  <Icon />
+                </TooltipTrigger>
+                <TooltipContent side="right">{item.label}</TooltipContent>
+              </Tooltip>
+            );
+          })}
+        </div>
+        <div className="activity-bar-spacer" />
+        <div className="activity-bar-bottom">
+          {bottomItems.map((item) => {
+            const Icon = item.icon;
+            return (
+              <Tooltip key={item.id}>
+                <TooltipTrigger
+                  render={
+                    <button
+                      className={`activity-btn${props.activeView === item.id ? " active" : ""}`}
+                      onClick={() => props.onViewChange(item.id)}
+                      aria-label={item.label}
+                    />
+                  }
+                >
+                  <Icon />
+                </TooltipTrigger>
+                <TooltipContent side="right">{item.label}</TooltipContent>
+              </Tooltip>
+            );
+          })}
+        </div>
       </div>
-      <div className="activity-bar-spacer" />
-      <div className="activity-bar-bottom">
-        {bottomItems.map((item) => {
-          const Icon = item.icon;
-          return (
-            <button
-              key={item.id}
-              className={`activity-btn${props.activeView === item.id ? " active" : ""}`}
-              onClick={() => props.onViewChange(item.id)}
-              title={item.label}
-              aria-label={item.label}
-            >
-              <Icon />
-            </button>
-          );
-        })}
-      </div>
-    </div>
+    </TooltipProvider>
   );
 }
