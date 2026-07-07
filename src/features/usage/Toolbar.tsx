@@ -1,9 +1,12 @@
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import type { CSSProperties } from "react";
 import { useI18n } from "@/i18n/index";
 import type { MaintenanceJob, ProviderSnapshot } from "@/lib/types";
 import type { CustomDateRange } from "@/features/usage/usageView";
 import { toLocalISODate } from "@/lib/formatters";
+import { cn } from "@/lib/utils";
 
 export interface ProviderChipInfo {
   color: string;
@@ -95,6 +98,23 @@ export function Toolbar(props: ToolbarProps) {
     props.onCustomRangeChange(next);
   };
 
+  const activeRangeValue =
+    customRange !== null
+      ? "custom"
+      : props.rangeDays === null
+        ? "all"
+        : String(props.rangeDays);
+
+  const handleRangeValueChange = (next: string[]) => {
+    const value = next[0];
+    if (!value) return;
+    if (value === "custom") {
+      enterCustomRange();
+      return;
+    }
+    props.onRangeChange(value === "all" ? null : Number(value));
+  };
+
   return (
     <section className="usage-card usage-toolbar-card">
       <div className="usage-toolbar-main">
@@ -118,36 +138,45 @@ export function Toolbar(props: ToolbarProps) {
           </div>
         </div>
         <div className="usage-toolbar-actions">
-          <div className="usage-range-group">
+          <ToggleGroup
+            className="usage-range-group"
+            size="sm"
+            spacing={0}
+            value={[activeRangeValue]}
+            onValueChange={handleRangeValueChange}
+          >
             {ranges.map((range) => {
               const active =
                 customRange === null && props.rangeDays === range.days;
+              const value = range.days === null ? "all" : String(range.days);
               return (
-                <button
-                  key={String(range.days)}
-                  className={`usage-range-btn${active ? " active" : ""}`}
-                  aria-pressed={active}
-                  onClick={() => props.onRangeChange(range.days)}
-                  type="button"
+                <ToggleGroupItem
+                  key={value}
+                  value={value}
+                  className={cn(
+                    "usage-range-btn h-auto min-w-0",
+                    active && "active",
+                  )}
                 >
                   {range.label()}
-                </button>
+                </ToggleGroupItem>
               );
             })}
-            <button
-              className={`usage-range-btn${customRange ? " active" : ""}`}
-              aria-pressed={customRange !== null}
-              onClick={enterCustomRange}
-              type="button"
+            <ToggleGroupItem
+              value="custom"
+              className={cn(
+                "usage-range-btn h-auto min-w-0",
+                customRange && "active",
+              )}
             >
               {t("usage.rangeCustom")}
-            </button>
-          </div>
+            </ToggleGroupItem>
+          </ToggleGroup>
           {customRange && (
             <div className="usage-custom-range">
-              <input
+              <Input
                 type="date"
-                className="usage-date-input"
+                className="usage-date-input h-auto w-auto"
                 aria-label={t("usage.customRangeStart")}
                 value={customRange.start}
                 min={MIN_USAGE_DATE}
@@ -155,9 +184,9 @@ export function Toolbar(props: ToolbarProps) {
                 onChange={(e) => updateCustomRange("start", e.currentTarget)}
               />
               <span className="usage-custom-range-sep">~</span>
-              <input
+              <Input
                 type="date"
-                className="usage-date-input"
+                className="usage-date-input h-auto w-auto"
                 aria-label={t("usage.customRangeEnd")}
                 value={customRange.end}
                 min={customRange.start}
@@ -222,8 +251,13 @@ export function Toolbar(props: ToolbarProps) {
       </div>
 
       <div className="usage-chips">
-        <button
-          className={`usage-chip usage-chip-all${props.allProvidersSelected ? " active" : " inactive"}`}
+        <Button
+          variant="ghost"
+          size="sm"
+          className={cn(
+            "usage-chip usage-chip-all active:translate-y-0",
+            props.allProvidersSelected ? "active" : "inactive",
+          )}
           aria-pressed={props.allProvidersSelected}
           onClick={props.onToggleAllProviders}
           type="button"
@@ -232,15 +266,20 @@ export function Toolbar(props: ToolbarProps) {
           <span className="usage-chip-count">
             {props.scannedProviderKeysCount}
           </span>
-        </button>
+        </Button>
         {props.scannedProviderSnapshots.map((snapshot) => {
           const info = props.providerInfo(snapshot.key);
           const active = props.isProviderSelected(snapshot.key);
           const filteredCount = props.providerSessionCount(snapshot.key);
           return (
-            <button
+            <Button
               key={snapshot.key}
-              className={`usage-chip${active ? " active" : " inactive"}`}
+              variant="ghost"
+              size="sm"
+              className={cn(
+                "usage-chip active:translate-y-0",
+                active ? "active" : "inactive",
+              )}
               aria-pressed={active}
               onClick={() => props.onToggleProvider(snapshot.key)}
               style={{ "--provider-accent": info.color } as CSSProperties}
@@ -255,7 +294,7 @@ export function Toolbar(props: ToolbarProps) {
               {filteredCount > 0 && (
                 <span className="usage-chip-count">{filteredCount}</span>
               )}
-            </button>
+            </Button>
           );
         })}
       </div>

@@ -120,7 +120,6 @@ type BackendCommandMap = {
     { providers: string[]; aggressive: boolean },
     number
   >;
-  sync_sources: CommandSpec<{ paths: string[] }, number>;
   get_tree: CommandSpec<undefined, TreeNode[]>;
   get_session_detail: CommandSpec<{ sessionId: string }, SessionDetail>;
   get_session_meta: CommandSpec<{ sessionId: string }, SessionMeta>;
@@ -221,10 +220,6 @@ export async function reindexProviders(
   aggressive = false,
 ): Promise<number> {
   return invokeCommand("reindex_providers", { providers, aggressive });
-}
-
-export async function syncSources(paths: string[]): Promise<number> {
-  return invokeCommand("sync_sources", { paths });
 }
 
 export async function getTree(): Promise<TreeNode[]> {

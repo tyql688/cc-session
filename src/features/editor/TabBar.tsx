@@ -1,4 +1,10 @@
 import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { ChevronsRight } from "lucide-react";
 import {
   type MouseEvent as ReactMouseEvent,
@@ -41,11 +47,8 @@ export function TabBar(props: {
     tabId: string;
   } | null>(null);
   const [overflowing, setOverflowing] = useState(false);
-  const [showOverflowMenu, setShowOverflowMenu] = useState(false);
 
   const scrollRef = useRef<HTMLDivElement>(null);
-  const overflowBtnRef = useRef<HTMLButtonElement>(null);
-  const overflowMenuRef = useRef<HTMLDivElement>(null);
 
   // --- Overflow detection ---
   function checkOverflow() {
@@ -138,18 +141,6 @@ export function TabBar(props: {
     return items;
   }
 
-  // Close overflow menu when clicking outside
-  function handleDocClick(e: MouseEvent) {
-    const target = e.target as Node;
-    if (overflowBtnRef.current?.contains(target)) return;
-    if (overflowMenuRef.current?.contains(target)) return;
-    setShowOverflowMenu(false);
-  }
-  useEffect(() => {
-    document.addEventListener("mousedown", handleDocClick);
-    return () => document.removeEventListener("mousedown", handleDocClick);
-  }, []);
-
   return (
     <div className="tab-bar">
       <div
@@ -223,8 +214,10 @@ export function TabBar(props: {
                 style={{ background: providerColor(tab.provider) }}
               />
               <span className="tab-title">{tab.title}</span>
-              <button
-                className={`tab-close${isActive ? " visible" : ""}`}
+              <Button
+                variant="ghost"
+                size="icon-xs"
+                className={`tab-close active:translate-y-0${isActive ? " visible" : ""}`}
                 aria-label={t("common.closeTab")}
                 onClick={(e) => {
                   e.stopPropagation();
@@ -232,7 +225,7 @@ export function TabBar(props: {
                 }}
               >
                 &times;
-              </button>
+              </Button>
             </div>
           );
         })}
@@ -240,38 +233,39 @@ export function TabBar(props: {
 
       {/* Overflow chevron */}
       {overflowing && (
-        <>
-          <Button
-            ref={overflowBtnRef}
-            variant="ghost"
-            size="icon-xs"
-            className="tab-overflow-btn shrink-0"
-            title={t("tabs.showOpenTabs")}
-            onClick={() => setShowOverflowMenu((v) => !v)}
+        <DropdownMenu>
+          <DropdownMenuTrigger
+            render={
+              <Button
+                variant="ghost"
+                size="icon-xs"
+                className="tab-overflow-btn shrink-0"
+                title={t("tabs.showOpenTabs")}
+              />
+            }
           >
             <ChevronsRight className="size-3.5" aria-hidden="true" />
-          </Button>
-          {showOverflowMenu && (
-            <div ref={overflowMenuRef} className="tab-overflow-menu">
-              {props.tabs.map((tab) => (
-                <button
-                  key={tab.id}
-                  className={`tab-overflow-item${tab.id === props.activeTabId ? " active" : ""}${tab.id === props.previewTabId ? " preview" : ""}`}
-                  onClick={() => {
-                    props.onTabSelect(tab.id);
-                    setShowOverflowMenu(false);
-                  }}
-                >
-                  <span
-                    className="tab-dot"
-                    style={{ background: providerColor(tab.provider) }}
-                  />
-                  <span className="tab-overflow-title">{tab.title}</span>
-                </button>
-              ))}
-            </div>
-          )}
-        </>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent
+            align="end"
+            side="bottom"
+            className="w-64 max-w-80"
+          >
+            {props.tabs.map((tab) => (
+              <DropdownMenuItem
+                key={tab.id}
+                className={`tab-overflow-item${tab.id === props.activeTabId ? " active" : ""}${tab.id === props.previewTabId ? " preview" : ""}`}
+                onClick={() => props.onTabSelect(tab.id)}
+              >
+                <span
+                  className="tab-dot"
+                  style={{ background: providerColor(tab.provider) }}
+                />
+                <span className="tab-overflow-title">{tab.title}</span>
+              </DropdownMenuItem>
+            ))}
+          </DropdownMenuContent>
+        </DropdownMenu>
       )}
 
       <ContextMenu

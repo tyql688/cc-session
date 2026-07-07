@@ -16,7 +16,6 @@ describe("useSessionCommandEvents", () => {
         onResume: () => commands.push("resume"),
         onExport: () => commands.push("export"),
         onFavorite: () => commands.push("favorite"),
-        onWatch: () => commands.push("watch"),
         onDelete: () => commands.push("delete"),
         onSessionSearch: () => commands.push("sessionSearch"),
       }),
@@ -25,7 +24,6 @@ describe("useSessionCommandEvents", () => {
     dispatchSessionCommand(SESSION_COMMAND_EVENTS.resume);
     dispatchSessionCommand(SESSION_COMMAND_EVENTS.exportSession);
     dispatchSessionCommand(SESSION_COMMAND_EVENTS.favorite);
-    dispatchSessionCommand(SESSION_COMMAND_EVENTS.watch);
     dispatchSessionCommand(SESSION_COMMAND_EVENTS.delete);
     dispatchSessionCommand(SESSION_COMMAND_EVENTS.sessionSearch);
 
@@ -33,7 +31,6 @@ describe("useSessionCommandEvents", () => {
       "resume",
       "export",
       "favorite",
-      "watch",
       "delete",
       "sessionSearch",
     ]);
@@ -48,7 +45,6 @@ describe("useSessionCommandEvents", () => {
           onResume: () => commands.push("resume"),
           onExport: () => {},
           onFavorite: () => {},
-          onWatch: () => {},
           onDelete: () => {},
           onSessionSearch: () => {},
         }),
@@ -70,7 +66,6 @@ describe("useSessionCommandEvents", () => {
         onResume: () => commands.push("resume"),
         onExport: () => {},
         onFavorite: () => {},
-        onWatch: () => {},
         onDelete: () => {},
         onSessionSearch: () => {},
       }),

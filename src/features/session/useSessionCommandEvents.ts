@@ -9,7 +9,6 @@ export interface UseSessionCommandEventsOptions {
   onResume: () => void;
   onExport: () => void;
   onFavorite: () => void;
-  onWatch: () => void;
   onDelete: () => void;
   onSessionSearch: () => void;
 }
@@ -39,10 +38,6 @@ export function useSessionCommandEvents(
       [
         SESSION_COMMAND_EVENTS.favorite,
         () => runIfActive(optsRef.current.onFavorite),
-      ],
-      [
-        SESSION_COMMAND_EVENTS.watch,
-        () => runIfActive(optsRef.current.onWatch),
       ],
       [
         SESSION_COMMAND_EVENTS.delete,

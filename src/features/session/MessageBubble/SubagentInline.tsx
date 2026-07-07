@@ -1,5 +1,6 @@
 import { ChevronDown, ExternalLink } from "lucide-react";
 import { useState } from "react";
+import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { useI18n } from "@/i18n/index";
 import { fmtTokens } from "@/lib/formatters";
@@ -86,10 +87,11 @@ export function SubagentInline(props: {
   return (
     <div className="mt-1.5 rounded-lg border border-border-subtle bg-surface-code/50">
       <div className="flex items-center gap-1.5 px-2 py-1">
-        <button
+        <Button
+          variant="ghost"
           type="button"
           onClick={toggle}
-          className="flex min-w-0 flex-1 items-center gap-1.5 text-xs text-text-secondary transition-colors hover:text-text-primary"
+          className="flex h-auto min-w-0 flex-1 justify-start gap-1.5 rounded-none px-0 py-0 text-xs text-text-secondary transition-colors hover:bg-transparent hover:text-text-primary active:translate-y-0"
         >
           <ChevronDown
             className={cn(
@@ -104,16 +106,18 @@ export function SubagentInline(props: {
               {props.label}
             </span>
           )}
-        </button>
+        </Button>
         {meta && (
-          <button
+          <Button
+            variant="ghost"
+            size="icon-xs"
             type="button"
             title={t("tool.openInTab")}
             onClick={() => openSession(meta)}
-            className="shrink-0 rounded p-0.5 text-text-tertiary transition-colors hover:text-text-primary"
+            className="size-5 shrink-0 rounded p-0.5 text-text-tertiary transition-colors hover:text-text-primary active:translate-y-0"
           >
             <ExternalLink className="size-3" aria-hidden="true" />
-          </button>
+          </Button>
         )}
       </div>
       {expanded && (

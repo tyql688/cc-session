@@ -1,4 +1,5 @@
 import { useState, useMemo, useEffect } from "react";
+import { Button } from "@/components/ui/button";
 import type { Message } from "@/lib/types";
 import { useI18n } from "@/i18n/index";
 import { readToolResultText } from "@/lib/tauri";
@@ -367,8 +368,10 @@ export function ToolMessage(props: {
                 (agentChildIds ?? []).length,
               );
               return (
-                <button
-                  className="msg-tool-subagent-link"
+                <Button
+                  variant="ghost"
+                  size="xs"
+                  className="msg-tool-subagent-link h-auto min-w-0 active:translate-y-0"
                   key={childId}
                   onClick={(e) => {
                     e.stopPropagation();
@@ -386,7 +389,7 @@ export function ToolMessage(props: {
                   }
                 >
                   {label}
-                </button>
+                </Button>
               );
             })
           ) : agentPromptTargets.length > 0 ? (
@@ -399,8 +402,10 @@ export function ToolMessage(props: {
                 agentPromptTargets.length,
               );
               return (
-                <button
-                  className="msg-tool-subagent-link"
+                <Button
+                  variant="ghost"
+                  size="xs"
+                  className="msg-tool-subagent-link h-auto min-w-0 active:translate-y-0"
                   key={i}
                   onClick={(e) => {
                     e.stopPropagation();
@@ -414,12 +419,14 @@ export function ToolMessage(props: {
                   title={prompt}
                 >
                   {label}
-                </button>
+                </Button>
               );
             })
           ) : (
-            <button
-              className="msg-tool-subagent-link"
+            <Button
+              variant="ghost"
+              size="xs"
+              className="msg-tool-subagent-link h-auto min-w-0 active:translate-y-0"
               onClick={(e) => {
                 e.stopPropagation();
                 openSubagent(
@@ -432,7 +439,7 @@ export function ToolMessage(props: {
               title={t("tool.openSubagentTitle")}
             >
               {t("tool.openSubagent")}
-            </button>
+            </Button>
           ))}
         {(hasInput() || hasOutput() || resultMetadata) && (
           <span className="tool-expand-indicator">{expanded ? "▾" : "▸"}</span>
@@ -477,8 +484,10 @@ export function ToolMessage(props: {
                 <DiffRows lines={resultMetadata.patchDiff} />
               )}
               {persistedOutputPath() && (
-                <button
-                  className="msg-tool-subagent-link"
+                <Button
+                  variant="ghost"
+                  size="xs"
+                  className="msg-tool-subagent-link h-auto min-w-0 active:translate-y-0"
                   disabled={loadingFullResult}
                   onClick={(event) => {
                     event.stopPropagation();
@@ -489,7 +498,7 @@ export function ToolMessage(props: {
                   {loadingFullResult
                     ? t("common.loading")
                     : t("tool.loadFullResult")}
-                </button>
+                </Button>
               )}
               {fullResultError && (
                 <pre className="msg-tool-input">{fullResultError}</pre>

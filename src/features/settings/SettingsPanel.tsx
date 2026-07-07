@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { useI18n } from "@/i18n/index";
 import { GeneralSettings } from "@/features/settings/GeneralSettings";
 import { DataSourceSettings } from "@/features/settings/DataSourceSettings";
@@ -9,6 +10,7 @@ import {
   listProviderSnapshots,
   refreshProviderSnapshots,
 } from "@/stores/providerSnapshots";
+import { cn } from "@/lib/utils";
 
 type SettingsCategory =
   | "general"
@@ -48,17 +50,37 @@ export function SettingsPanel() {
 
   return (
     <div className="settings-panel">
-      <div className="settings-sidebar">
+      <ToggleGroup
+        className="settings-sidebar"
+        orientation="vertical"
+        spacing={0}
+        value={[activeCategory]}
+        onValueChange={(next) => {
+          const value = next[0];
+          if (
+            value === "general" ||
+            value === "dataSources" ||
+            value === "index" ||
+            value === "keyboard" ||
+            value === "about"
+          ) {
+            setActiveCategory(value);
+          }
+        }}
+      >
         {categories.map((cat) => (
-          <button
+          <ToggleGroupItem
             key={cat.id}
-            className={`settings-nav-item${activeCategory === cat.id ? " active" : ""}`}
-            onClick={() => setActiveCategory(cat.id)}
+            value={cat.id}
+            className={cn(
+              "settings-nav-item h-auto min-w-0 justify-start rounded-none",
+              activeCategory === cat.id && "active",
+            )}
           >
             {t(cat.labelKey)}
-          </button>
+          </ToggleGroupItem>
         ))}
-      </div>
+      </ToggleGroup>
 
       <div className="settings-content">
         {activeCategory === "general" && <GeneralSettings />}

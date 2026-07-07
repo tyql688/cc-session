@@ -1,4 +1,6 @@
 import type { Dispatch, SetStateAction } from "react";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { useI18n } from "@/i18n/index";
 
 export interface SessionSearchProps {
@@ -18,8 +20,8 @@ export function SessionSearch(props: SessionSearchProps) {
 
   return (
     <div className="session-search-bar">
-      <input
-        className="session-search-input"
+      <Input
+        className="session-search-input h-auto"
         type="text"
         placeholder={t("session.searchPlaceholder")}
         value={props.sessionSearch}
@@ -47,22 +49,28 @@ export function SessionSearch(props: SessionSearchProps) {
           return t("session.searchNoMatch");
         })()}
       </span>
-      <button
-        className="session-search-nav"
+      <Button
+        variant="outline"
+        size="icon-xs"
+        className="session-search-nav active:translate-y-0"
         onClick={() => props.navigateMatch(-1)}
         aria-label={t("common.previousMatch")}
       >
         &uarr;
-      </button>
-      <button
-        className="session-search-nav"
+      </Button>
+      <Button
+        variant="outline"
+        size="icon-xs"
+        className="session-search-nav active:translate-y-0"
         onClick={() => props.navigateMatch(1)}
         aria-label={t("common.nextMatch")}
       >
         &darr;
-      </button>
-      <button
-        className="session-search-nav"
+      </Button>
+      <Button
+        variant="outline"
+        size="icon-xs"
+        className="session-search-nav active:translate-y-0"
         onClick={() => {
           props.setSearchBarOpen(false);
           props.setSessionSearch("");
@@ -70,7 +78,7 @@ export function SessionSearch(props: SessionSearchProps) {
         aria-label={t("common.closeSearch")}
       >
         &times;
-      </button>
+      </Button>
     </div>
   );
 }

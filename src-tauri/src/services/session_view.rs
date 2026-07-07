@@ -3,7 +3,7 @@
 //! meta titles. Command handlers in `commands/sessions.rs` stay thin
 //! and delegate here.
 
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::sync::Arc;
 
 use serde::Serialize;
@@ -61,55 +61,19 @@ impl Drop for CancelFlagGuard<'_> {
     }
 }
 
-/// RAII guard that marks `path` as currently loading on construction
-/// and clears it on drop. `sync_sources` consults this set to skip
-/// reparses while a viewer load is in flight (watcher-feedback-loop
-/// suppression). No-op when `path` is empty.
-struct LoadingPathGuard<'a> {
-    state: &'a AppState,
-    path: Option<PathBuf>,
-}
-
-impl<'a> LoadingPathGuard<'a> {
-    fn new(state: &'a AppState, source_path: &str) -> Self {
-        let path: Option<PathBuf> = (!source_path.is_empty()).then(|| PathBuf::from(source_path));
-        if let Some(p) = path.as_ref() {
-            let mut set = match state.loading_paths.lock() {
-                Ok(g) => g,
-                Err(p) => p.into_inner(),
-            };
-            set.insert(p.clone());
-        }
-        Self { state, path }
-    }
-}
-
-impl Drop for LoadingPathGuard<'_> {
-    fn drop(&mut self) {
-        if let Some(p) = self.path.as_ref() {
-            let mut set = match self.state.loading_paths.lock() {
-                Ok(g) => g,
-                Err(p) => p.into_inner(),
-            };
-            set.remove(p);
-        }
-    }
-}
-
-/// Run `work` with both guards installed. Panics in `work` correctly
-/// drop the guards via stack unwinding so the AppState maps don't
-/// leak entries on a failed parse.
+/// Run `work` with a cancel guard installed. Panics in `work` correctly
+/// drop the guard via stack unwinding so the AppState maps don't leak
+/// entries on a failed parse.
 pub(crate) fn with_load_guard<F, R>(
     state: &AppState,
     session_id: &str,
-    source_path: &str,
+    _source_path: &str,
     work: F,
 ) -> R
 where
     F: FnOnce(CancelFlag) -> R,
 {
     let cancel_guard = CancelFlagGuard::new(state, session_id);
-    let _path_guard = LoadingPathGuard::new(state, source_path);
     let flag = cancel_guard.flag().clone();
     load_cancel::run_with(flag.clone(), move || work(flag))
 }

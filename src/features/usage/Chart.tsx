@@ -1,3 +1,5 @@
+import { Button } from "@/components/ui/button";
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { useI18n } from "@/i18n/index";
 import type {
   ChartMetric,
@@ -5,6 +7,7 @@ import type {
   UsageDailyChartData,
 } from "@/lib/usage";
 import type { ProviderChipInfo } from "@/features/usage/Toolbar";
+import { cn } from "@/lib/utils";
 
 export interface ChartProps {
   dailyChartData: UsageDailyChartData;
@@ -31,24 +34,37 @@ export function Chart(props: ChartProps) {
             <div className="usage-section-subtitle">
               {props.activeRangeLabel}
             </div>
-            <div className="usage-metric-toggle">
-              <button
-                className={`usage-metric-btn${props.chartMetric === "tokens" ? " active" : ""}`}
-                aria-pressed={props.chartMetric === "tokens"}
-                onClick={() => props.setChartMetric("tokens")}
-                type="button"
+            <ToggleGroup
+              className="usage-metric-toggle"
+              size="sm"
+              spacing={0}
+              value={[props.chartMetric]}
+              onValueChange={(next) => {
+                const value = next[0];
+                if (value === "tokens" || value === "cost") {
+                  props.setChartMetric(value);
+                }
+              }}
+            >
+              <ToggleGroupItem
+                value="tokens"
+                className={cn(
+                  "usage-metric-btn h-auto min-w-0",
+                  props.chartMetric === "tokens" && "active",
+                )}
               >
                 {t("usage.tokens")}
-              </button>
-              <button
-                className={`usage-metric-btn${props.chartMetric === "cost" ? " active" : ""}`}
-                aria-pressed={props.chartMetric === "cost"}
-                onClick={() => props.setChartMetric("cost")}
-                type="button"
+              </ToggleGroupItem>
+              <ToggleGroupItem
+                value="cost"
+                className={cn(
+                  "usage-metric-btn h-auto min-w-0",
+                  props.chartMetric === "cost" && "active",
+                )}
               >
                 {t("usage.cost")}
-              </button>
-            </div>
+              </ToggleGroupItem>
+            </ToggleGroup>
           </div>
         </div>
         <div className="usage-chart-inspector">
@@ -86,9 +102,13 @@ export function Chart(props: ChartProps) {
                 const max = props.dailyChartData.maxValue;
                 const active = props.hoveredDate === date;
                 return (
-                  <button
+                  <Button
                     key={date}
-                    className={`usage-bar-col${active ? " active" : ""}`}
+                    variant="ghost"
+                    className={cn(
+                      "usage-bar-col h-full items-stretch justify-start rounded-none p-0 active:translate-y-0",
+                      active && "active",
+                    )}
                     onBlur={() => props.setHoveredDate(null)}
                     onFocus={() => props.setHoveredDate(date)}
                     onMouseEnter={() => props.setHoveredDate(date)}
@@ -122,7 +142,7 @@ export function Chart(props: ChartProps) {
                           />
                         ) : null;
                       })}
-                  </button>
+                  </Button>
                 );
               })}
             </div>

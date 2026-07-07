@@ -40,9 +40,6 @@ impl crate::provider::ProviderDescriptor for Descriptor {
     fn avatar_svg(&self) -> &'static str {
         r#"<svg width="24" height="24" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M16 6H8v12h8V6zm4 16H4V2h16v20z" fill="currentColor"/></svg>"#
     }
-    fn watch_strategy(&self) -> crate::provider::WatchStrategy {
-        crate::provider::WatchStrategy::Poll
-    }
 }
 
 pub struct OpenCodeProvider {
@@ -143,7 +140,7 @@ impl SessionProvider for OpenCodeProvider {
         Provider::OpenCode
     }
 
-    fn watch_paths(&self) -> Vec<PathBuf> {
+    fn source_roots(&self) -> Vec<PathBuf> {
         if self.db_path.exists() {
             vec![self.db_path.parent().unwrap_or(&self.db_path).to_path_buf()]
         } else {

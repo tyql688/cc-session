@@ -194,7 +194,6 @@ export interface ProviderSnapshot {
   label: string;
   color: string;
   sort_order: number;
-  watch_strategy: "fs" | "poll";
   path: string;
   exists: boolean;
   session_count: number;

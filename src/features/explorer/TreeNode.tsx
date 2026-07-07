@@ -1,4 +1,5 @@
 import type React from "react";
+import { Button } from "@/components/ui/button";
 import { formatTreeTime } from "@/lib/formatters";
 import type { TreeNode } from "@/lib/types";
 import { useI18n } from "@/i18n/index";
@@ -217,8 +218,9 @@ export function TreeNodeComponent(props: {
 
   return (
     <div className="tree-node-wrapper">
-      <button
-        className={`tree-node tree-node-${props.node.node_type}${isSession() && props.activeSessionId === props.node.id ? " active" : ""}${nodeSelected() ? " selected" : ""}`}
+      <Button
+        variant="ghost"
+        className={`tree-node justify-start rounded-none active:translate-y-0 tree-node-${props.node.node_type}${isSession() && props.activeSessionId === props.node.id ? " active" : ""}${nodeSelected() ? " selected" : ""}`}
         style={{ paddingLeft: `${props.depth * 16 + 8}px` }}
         onClick={handleClick}
         onDoubleClick={handleDblClick}
@@ -308,7 +310,7 @@ export function TreeNodeComponent(props: {
         {props.node.count > 0 && !isLeaf() && (
           <span className="tree-node-count">{props.node.count}</span>
         )}
-      </button>
+      </Button>
 
       {/* Subagent children always visible under parent session */}
       {isSubagentParent() &&

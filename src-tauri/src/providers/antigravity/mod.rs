@@ -6,7 +6,7 @@ use walkdir::WalkDir;
 use crate::models::{Provider, SessionMeta};
 use crate::provider::{
     per_file_deletion_plan, DeletionPlan, LoadedSession, ParsedSession, ProviderDescriptor,
-    ProviderError, SessionProvider, WatchStrategy,
+    ProviderError, SessionProvider,
 };
 
 struct ParentInfo {
@@ -46,10 +46,6 @@ impl ProviderDescriptor for Descriptor {
     fn avatar_svg(&self) -> &'static str {
         r#"<svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="2"/><path d="M12 6L16 10H14V14H10V10H8L12 6Z" fill="currentColor"/><circle cx="12" cy="17" r="1.5" fill="currentColor"/></svg>"#
     }
-
-    fn watch_strategy(&self) -> WatchStrategy {
-        WatchStrategy::Fs
-    }
 }
 
 pub struct AntigravityProvider {
@@ -75,7 +71,7 @@ impl SessionProvider for AntigravityProvider {
         Provider::Antigravity
     }
 
-    fn watch_paths(&self) -> Vec<PathBuf> {
+    fn source_roots(&self) -> Vec<PathBuf> {
         vec![self.brain_dir()]
     }
 

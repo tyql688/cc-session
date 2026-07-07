@@ -1,4 +1,5 @@
 import { lazy, Suspense, useState, useMemo } from "react";
+import { Button } from "@/components/ui/button";
 import type { Message, Provider } from "@/lib/types";
 import { ProviderIcon, UserIcon } from "@/components/icons";
 import { useI18n } from "@/i18n/index";
@@ -115,9 +116,10 @@ function SystemMessage(props: { content: string }) {
   // row; the full text renders only on demand.
   return (
     <div className={`msg-system-block ${config.cls}`}>
-      <button
+      <Button
+        variant="ghost"
         type="button"
-        className="msg-system msg-system-tag msg-system-toggle"
+        className="msg-system msg-system-tag msg-system-toggle h-auto justify-start active:translate-y-0"
         aria-expanded={expanded}
         onClick={() => setExpanded((v) => !v)}
       >
@@ -130,7 +132,7 @@ function SystemMessage(props: { content: string }) {
         >
           {"\u203A"}
         </span>
-      </button>
+      </Button>
       {expanded && <pre className="msg-system-body">{detail}</pre>}
     </div>
   );

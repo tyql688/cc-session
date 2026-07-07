@@ -121,7 +121,7 @@ impl SessionProvider for ClaudeProvider {
         Provider::Claude
     }
 
-    fn watch_paths(&self) -> Vec<PathBuf> {
+    fn source_roots(&self) -> Vec<PathBuf> {
         vec![self.projects_dir()]
     }
 

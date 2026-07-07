@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { Button } from "@/components/ui/button";
 import type { SessionMeta, SessionRef } from "@/lib/types";
 import { useI18n } from "@/i18n/index";
 import { useGroups } from "@/features/editor/editorGroups";
@@ -133,9 +134,10 @@ export function EditorArea(props: {
                   {t("editor.recentSessions")}
                 </p>
                 {props.recentSessions.map((session) => (
-                  <button
+                  <Button
                     key={session.id}
-                    className="editor-empty-session"
+                    variant="ghost"
+                    className="editor-empty-session justify-start whitespace-normal active:translate-y-0"
                     onClick={() => props.onOpenSession(session)}
                   >
                     <span
@@ -167,7 +169,7 @@ export function EditorArea(props: {
                     <span className="editor-empty-session-time">
                       {formatTimestamp(session.updated_at, locale)}
                     </span>
-                  </button>
+                  </Button>
                 ))}
               </div>
             )}

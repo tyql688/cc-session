@@ -4,7 +4,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { Download, Radio, SquareTerminal, Star, Trash2 } from "lucide-react";
+import { Download, SquareTerminal, Star, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { getResumeCommand } from "@/lib/tauri";
@@ -26,10 +26,8 @@ import {
 export function SessionToolbar(props: {
   meta: SessionMeta;
   messages: Message[];
-  watching: boolean;
   starred: boolean | null;
   parseWarningCount: number;
-  onToggleWatch: () => void;
   onToggleFavorite: () => void;
   onResume: () => void;
   onExport: () => void;
@@ -88,30 +86,6 @@ export function SessionToolbar(props: {
         </div>
         <TooltipProvider>
           <div className="session-actions flex items-center gap-1.5">
-            <Tooltip>
-              <TooltipTrigger
-                render={
-                  <Button
-                    variant="ghost"
-                    size="icon-sm"
-                    onClick={props.onToggleWatch}
-                  />
-                }
-              >
-                <Radio
-                  className={cn(
-                    "size-4",
-                    props.watching && "animate-pulse text-success",
-                  )}
-                  aria-hidden="true"
-                />
-              </TooltipTrigger>
-              <TooltipContent side="bottom">
-                {props.watching
-                  ? t("session.watchStop")
-                  : t("session.watchStart")}
-              </TooltipContent>
-            </Tooltip>
             <Tooltip>
               <TooltipTrigger
                 render={

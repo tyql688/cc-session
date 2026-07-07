@@ -1,5 +1,7 @@
 import type React from "react";
 import { useEffect, useRef, useState } from "react";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import type { SessionRef } from "@/lib/types";
 import {
   useSearchQuery,
@@ -12,6 +14,7 @@ import {
 } from "@/features/search/search";
 import { useI18n } from "@/i18n/index";
 import { ProviderIcon } from "@/components/icons";
+import { cn } from "@/lib/utils";
 
 function sanitizeSnippet(html: string): string {
   const escaped = html
@@ -138,9 +141,9 @@ export function SearchOverlay(props: {
               <circle cx="11" cy="11" r="8" />
               <path d="M21 21l-4.35-4.35" />
             </svg>
-            <input
+            <Input
               ref={inputRef}
-              className="search-overlay-input"
+              className="search-overlay-input h-auto border-none px-0 py-0 focus-visible:border-transparent focus-visible:ring-0"
               type="text"
               aria-label={t("search.ariaLabel")}
               placeholder={t("search.placeholder")}
@@ -165,9 +168,13 @@ export function SearchOverlay(props: {
               <div className="search-no-results">{t("search.placeholder")}</div>
             )}
             {results.map((result, i) => (
-              <button
+              <Button
                 key={result.session.id}
-                className={`search-result-item${selectedIndex === i ? " selected" : ""}`}
+                variant="ghost"
+                className={cn(
+                  "search-result-item h-auto justify-start rounded-none whitespace-normal active:translate-y-0",
+                  selectedIndex === i && "selected",
+                )}
                 onMouseDown={(e) => {
                   e.preventDefault();
                   openAt(i);
@@ -192,7 +199,7 @@ export function SearchOverlay(props: {
                     }}
                   />
                 </div>
-              </button>
+              </Button>
             ))}
           </div>
         </div>

@@ -1,3 +1,4 @@
+import { Button } from "@/components/ui/button";
 import {
   Tooltip,
   TooltipContent,
@@ -141,8 +142,9 @@ export function ActivityBar(props: {
               <Tooltip key={item.id}>
                 <TooltipTrigger
                   render={
-                    <button
-                      className={`activity-btn${props.activeView === item.id ? " active" : ""}`}
+                    <Button
+                      variant="ghost"
+                      className={`activity-btn active:translate-y-0${props.activeView === item.id ? " active" : ""}`}
                       onClick={() => props.onViewChange(item.id)}
                       aria-label={item.label}
                     />
@@ -163,8 +165,9 @@ export function ActivityBar(props: {
               <Tooltip key={item.id}>
                 <TooltipTrigger
                   render={
-                    <button
-                      className={`activity-btn${props.activeView === item.id ? " active" : ""}`}
+                    <Button
+                      variant="ghost"
+                      className={`activity-btn active:translate-y-0${props.activeView === item.id ? " active" : ""}`}
                       onClick={() => props.onViewChange(item.id)}
                       aria-label={item.label}
                     />

@@ -23,7 +23,7 @@ use cc_session_lib::commands::{self, AppState};
 use cc_session_lib::db::Database;
 use cc_session_lib::indexer::Indexer;
 use cc_session_lib::models::{Provider, ProviderSnapshot, TrashMeta, TreeNode};
-use cc_session_lib::provider::{self, WatchStrategy};
+use cc_session_lib::provider;
 use serde::de::DeserializeOwned;
 use serde::Deserialize;
 use serde_json::json;
@@ -81,7 +81,6 @@ fn build_app() -> (TempDir, App<MockRuntime>, tauri::WebviewWindow<MockRuntime>)
             1024 * 1024,
         )),
         load_tokens: Arc::new(std::sync::Mutex::new(std::collections::HashMap::new())),
-        loading_paths: Arc::new(std::sync::Mutex::new(std::collections::HashSet::new())),
         promote_in_flight: Arc::new(std::sync::Mutex::new(std::collections::HashSet::new())),
     };
 
@@ -648,17 +647,12 @@ fn assert_provider_snapshots<W: AsRef<Webview<MockRuntime>>>(webview: &W) {
         cc_mirror.path
     );
 
-    let antigravity = snapshots
+    assert!(snapshots
         .iter()
-        .find(|snapshot| snapshot.key == Provider::Antigravity)
-        .expect("antigravity snapshot");
-    let opencode = snapshots
+        .any(|snapshot| snapshot.key == Provider::Antigravity));
+    assert!(snapshots
         .iter()
-        .find(|snapshot| snapshot.key == Provider::OpenCode)
-        .expect("opencode snapshot");
-
-    assert!(matches!(antigravity.watch_strategy, WatchStrategy::Fs));
-    assert!(matches!(opencode.watch_strategy, WatchStrategy::Poll));
+        .any(|snapshot| snapshot.key == Provider::OpenCode));
 }
 
 #[test]

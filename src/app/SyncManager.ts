@@ -1,7 +1,6 @@
 import type { TreeNode } from "@/lib/types";
 import {
   reindex,
-  syncSources,
   getTree,
   getSessionCount,
   reindexProviders,
@@ -9,10 +8,6 @@ import {
   refreshPricingCatalog,
   clearUsageStats,
 } from "@/lib/tauri";
-import {
-  getPollWatchProviders,
-  loadProviderWatchSnapshots,
-} from "@/lib/provider-watch";
 import { i18next } from "@/i18n/index";
 import { toastError, toastInfo } from "@/stores/toast";
 
@@ -26,9 +21,6 @@ export interface SyncCallbacks {
 export function createSyncManager(callbacks: SyncCallbacks) {
   let syncInFlight = false;
   let pendingFullSync = false;
-  const pendingChangedPaths = new Set<string>();
-  let pollTimer: ReturnType<typeof setInterval> | undefined;
-  let pollConfigToken = 0;
 
   async function refreshTree() {
     const [treeData, count] = await Promise.all([getTree(), getSessionCount()]);
@@ -39,20 +31,11 @@ export function createSyncManager(callbacks: SyncCallbacks) {
     window.dispatchEvent(new CustomEvent("usage-data-changed"));
   }
 
-  async function syncFromDisk(options?: {
-    changedPaths?: string[];
-    showSpinner?: boolean;
-  }) {
-    const changedPaths =
-      options?.changedPaths?.filter((path) => path.length > 0) ?? [];
+  async function syncFromDisk(options?: { showSpinner?: boolean }) {
     const showSpinner = options?.showSpinner ?? false;
 
     if (syncInFlight) {
-      if (changedPaths.length > 0 && !pendingFullSync) {
-        for (const path of changedPaths) pendingChangedPaths.add(path);
-      } else {
-        pendingFullSync = true;
-      }
+      pendingFullSync = true;
       return;
     }
 
@@ -62,11 +45,7 @@ export function createSyncManager(callbacks: SyncCallbacks) {
     }
 
     try {
-      if (changedPaths.length > 0) {
-        await syncSources(changedPaths);
-      } else {
-        await reindex();
-      }
+      await reindex();
       await refreshTree();
     } catch (e) {
       toastError(String(e));
@@ -77,12 +56,7 @@ export function createSyncManager(callbacks: SyncCallbacks) {
       }
       if (pendingFullSync) {
         pendingFullSync = false;
-        pendingChangedPaths.clear();
         void syncFromDisk({ showSpinner });
-      } else if (pendingChangedPaths.size > 0) {
-        const queuedPaths = [...pendingChangedPaths];
-        pendingChangedPaths.clear();
-        void syncFromDisk({ changedPaths: queuedPaths });
       }
     }
   }
@@ -108,80 +82,9 @@ export function createSyncManager(callbacks: SyncCallbacks) {
       if (showSpinner) callbacks.setIsLoading(false);
       if (pendingFullSync) {
         pendingFullSync = false;
-        pendingChangedPaths.clear();
         void syncFromDisk({ showSpinner });
-      } else if (pendingChangedPaths.size > 0) {
-        const queuedPaths = [...pendingChangedPaths];
-        pendingChangedPaths.clear();
-        void syncFromDisk({ changedPaths: queuedPaths });
       }
     }
-  }
-
-  /** Poll sync — serialized with FS-event sync via syncInFlight guard. */
-  async function pollSync(providers: string[]) {
-    if (syncInFlight) return;
-
-    syncInFlight = true;
-    try {
-      const indexedCount = await reindexProviders(providers);
-      if (indexedCount > 0) {
-        await refreshTree();
-      }
-    } catch (e) {
-      // Polling failures are transient — log for diagnosis, don't toast
-      console.debug("poll sync failed:", e);
-    } finally {
-      syncInFlight = false;
-      // Drain pending work (FS events queued during poll take priority)
-      if (pendingFullSync) {
-        pendingFullSync = false;
-        pendingChangedPaths.clear();
-        void syncFromDisk();
-      } else if (pendingChangedPaths.size > 0) {
-        const queuedPaths = [...pendingChangedPaths];
-        pendingChangedPaths.clear();
-        void syncFromDisk({ changedPaths: queuedPaths });
-      }
-    }
-  }
-
-  function applyPolling(providers: string[]) {
-    clearInterval(pollTimer);
-    pollTimer = undefined;
-
-    if (providers.length === 0) return;
-
-    pollTimer = setInterval(() => {
-      void pollSync(providers);
-    }, 5000);
-  }
-
-  function providersKey(providers: string[]): string {
-    return [...providers].sort().join("|");
-  }
-
-  function startPolling() {
-    const token = ++pollConfigToken;
-    let activeProviders = getPollWatchProviders();
-    applyPolling(activeProviders);
-
-    const catalogLoad = loadProviderWatchSnapshots();
-    void catalogLoad?.then(() => {
-      if (token !== pollConfigToken) return;
-
-      const nextProviders = getPollWatchProviders();
-      if (providersKey(nextProviders) === providersKey(activeProviders)) return;
-
-      activeProviders = nextProviders;
-      applyPolling(activeProviders);
-    });
-  }
-
-  function stopPolling() {
-    pollConfigToken += 1;
-    clearInterval(pollTimer);
-    pollTimer = undefined;
   }
 
   /**
@@ -246,8 +149,6 @@ export function createSyncManager(callbacks: SyncCallbacks) {
     } finally {
       if (!cacheHit) callbacks.setIsLoading(false);
     }
-
-    startPolling();
   }
 
   return {
@@ -255,6 +156,5 @@ export function createSyncManager(callbacks: SyncCallbacks) {
     syncProviders,
     refreshTree,
     coldStart,
-    stopPolling,
   };
 }

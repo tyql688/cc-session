@@ -356,7 +356,7 @@ mod tests {
         fn provider(&self) -> Provider {
             Provider::Claude
         }
-        fn watch_paths(&self) -> Vec<PathBuf> {
+        fn source_roots(&self) -> Vec<PathBuf> {
             Vec::new()
         }
         fn scan_all(&self) -> Result<Vec<ParsedSession>, ProviderError> {

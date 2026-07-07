@@ -32,6 +32,7 @@ const UsagePanel = lazy(() =>
   import("@/features/usage").then((m) => ({ default: m.UsagePanel })),
 );
 import { KeyboardOverlay } from "@/app/KeyboardOverlay";
+import { Button } from "@/components/ui/button";
 import { Toaster } from "@/components/ui/sonner";
 import {
   trashSession,
@@ -164,11 +165,8 @@ export default function App() {
     if (!sync) return;
 
     let disposed = false;
-    const debouncedChangedPaths = new Set<string>();
-    let unlistenWatcher: UnlistenFn | undefined;
     let unlistenMaintenance: UnlistenFn | undefined;
     let unlistenResized: UnlistenFn | undefined;
-    let debounceTimer: ReturnType<typeof setTimeout> | undefined;
 
     async function refreshStatusBarStats() {
       const [stats, cost, tokens] = await Promise.all([
@@ -291,24 +289,6 @@ export default function App() {
         }
       }
 
-      const uw = await listenBackendEvent("sessions-changed", (payload) => {
-        for (const path of payload ?? []) {
-          if (path.length > 0) {
-            debouncedChangedPaths.add(path);
-          }
-        }
-        clearTimeout(debounceTimer);
-        debounceTimer = setTimeout(() => {
-          const changedPaths = [...debouncedChangedPaths];
-          debouncedChangedPaths.clear();
-          // sync is non-null (guarded at effect top); assertion needed because
-          // TS drops the guard's narrowing inside this nested setTimeout callback.
-          void sync!.syncFromDisk({ changedPaths });
-        }, 500);
-      });
-      if (disposed) uw();
-      else unlistenWatcher = uw;
-
       const um = await listenBackendEvent("maintenance-status", (payload) => {
         if (payload.phase === "started") {
           const message =
@@ -346,14 +326,10 @@ export default function App() {
       document.removeEventListener("keydown", handleGlobalKeyDown);
       window.removeEventListener("usage-data-changed", handleUsageChanged);
       window.removeEventListener("open-subagent", handleOpenSubagent);
-      unlistenWatcher?.();
       unlistenMaintenance?.();
       unlistenResized?.();
-      sync.stopPolling();
       cancelWarmup();
       clearTimeout(updateTimer);
-      clearTimeout(debounceTimer);
-      debouncedChangedPaths.clear();
     };
   }, []);
 
@@ -394,7 +370,9 @@ export default function App() {
           <p style={{ color: "var(--text-secondary)", maxWidth: "500px" }}>
             {err?.message || t("error.message")}
           </p>
-          <button
+          <Button
+            variant="outline"
+            className="active:translate-y-0"
             onClick={() => window.location.reload()}
             style={{
               padding: "8px 16px",
@@ -406,7 +384,7 @@ export default function App() {
             }}
           >
             {t("error.reload")}
-          </button>
+          </Button>
         </div>
       )}
     >

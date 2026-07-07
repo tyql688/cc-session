@@ -277,8 +277,7 @@ fn parent_backfills_child_when_parser_declares_child_ids() {
     let child_id = "22222222-2222-4222-a222-222222222222";
     let parent_id = "11111111-1111-4111-a111-111111111111";
 
-    // 1. Child indexed first with no parent / Unknown project (mirrors the
-    //    watcher firing on the child transcript before the parent's).
+    // 1. Child indexed first with no parent / Unknown project.
     let mut child_meta = sample_meta(child_id);
     child_meta.project_path = String::new();
     child_meta.project_name = "Unknown Project".into();

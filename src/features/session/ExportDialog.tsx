@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { save } from "@tauri-apps/plugin-dialog";
 import { Button } from "@/components/ui/button";
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import {
   Dialog,
   DialogContent,
@@ -69,13 +70,22 @@ export function ExportDialog(props: {
         <DialogHeader>
           <DialogTitle>{t("export.title")}</DialogTitle>
         </DialogHeader>
-        <div className="grid grid-cols-3 gap-2">
+        <ToggleGroup
+          className="grid w-full grid-cols-3 gap-2"
+          value={[format]}
+          onValueChange={(next) => {
+            const value = next[0];
+            if (value === "json" || value === "markdown" || value === "html") {
+              setFormat(value);
+            }
+          }}
+        >
           {FORMAT_OPTIONS.map((opt) => (
-            <button
+            <ToggleGroupItem
               key={opt.value}
-              type="button"
+              value={opt.value}
               className={cn(
-                "flex flex-col items-center gap-0.5 rounded-lg border px-3 py-2.5 text-sm transition-colors",
+                "flex h-auto min-w-0 flex-col items-center gap-0.5 rounded-lg border px-3 py-2.5 text-sm transition-colors",
                 format === opt.value
                   ? "border-primary bg-primary/10 text-foreground"
                   : "border-border text-muted-foreground hover:bg-muted",
@@ -84,9 +94,9 @@ export function ExportDialog(props: {
             >
               <span className="font-medium">{t(opt.labelKey)}</span>
               <span className="text-xs text-muted-foreground">.{opt.ext}</span>
-            </button>
+            </ToggleGroupItem>
           ))}
-        </div>
+        </ToggleGroup>
         <DialogFooter>
           <Button variant="outline" onClick={props.onClose}>
             {t("confirm.cancel")}

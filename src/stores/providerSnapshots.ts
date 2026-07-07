@@ -3,7 +3,6 @@ import { getProviderSnapshots } from "@/lib/tauri";
 import type { Provider, ProviderSnapshot } from "@/lib/types";
 
 type ProviderSnapshotMap = Partial<Record<Provider, ProviderSnapshot>>;
-type ProviderWatchStrategy = ProviderSnapshot["watch_strategy"];
 
 interface ProviderSnapshotState {
   snapshotMap: ProviderSnapshotMap;
@@ -21,7 +20,6 @@ const FALLBACK_PROVIDER_SNAPSHOTS: Record<Provider, ProviderSnapshot> = {
     label: "Claude Code",
     color: "var(--claude)",
     sort_order: 0,
-    watch_strategy: "fs",
     path: "",
     exists: false,
     session_count: 0,
@@ -31,7 +29,6 @@ const FALLBACK_PROVIDER_SNAPSHOTS: Record<Provider, ProviderSnapshot> = {
     label: "CC-Mirror",
     color: "var(--cc-mirror)",
     sort_order: 1,
-    watch_strategy: "fs",
     path: "",
     exists: false,
     session_count: 0,
@@ -41,7 +38,6 @@ const FALLBACK_PROVIDER_SNAPSHOTS: Record<Provider, ProviderSnapshot> = {
     label: "Codex",
     color: "var(--codex)",
     sort_order: 2,
-    watch_strategy: "fs",
     path: "",
     exists: false,
     session_count: 0,
@@ -51,7 +47,6 @@ const FALLBACK_PROVIDER_SNAPSHOTS: Record<Provider, ProviderSnapshot> = {
     label: "Antigravity",
     color: "var(--antigravity)",
     sort_order: 3,
-    watch_strategy: "fs",
     path: "",
     exists: false,
     session_count: 0,
@@ -61,7 +56,6 @@ const FALLBACK_PROVIDER_SNAPSHOTS: Record<Provider, ProviderSnapshot> = {
     label: "OpenCode",
     color: "var(--opencode)",
     sort_order: 5,
-    watch_strategy: "poll",
     path: "",
     exists: false,
     session_count: 0,
@@ -71,7 +65,6 @@ const FALLBACK_PROVIDER_SNAPSHOTS: Record<Provider, ProviderSnapshot> = {
     label: "Kimi Code",
     color: "var(--kimi)",
     sort_order: 6,
-    watch_strategy: "fs",
     path: "",
     exists: false,
     session_count: 0,
@@ -81,7 +74,6 @@ const FALLBACK_PROVIDER_SNAPSHOTS: Record<Provider, ProviderSnapshot> = {
     label: "Cursor CLI",
     color: "var(--cursor)",
     sort_order: 7,
-    watch_strategy: "fs",
     path: "",
     exists: false,
     session_count: 0,
@@ -91,7 +83,6 @@ const FALLBACK_PROVIDER_SNAPSHOTS: Record<Provider, ProviderSnapshot> = {
     label: "Pi",
     color: "var(--pi)",
     sort_order: 8,
-    watch_strategy: "fs",
     path: "",
     exists: false,
     session_count: 0,
@@ -164,25 +155,6 @@ export function getProviderLabel(
 
 export function getProviderColor(provider: Provider): string {
   return getProviderSnapshot(provider).color;
-}
-
-export function getProviderWatchStrategy(
-  provider: Provider,
-): ProviderWatchStrategy {
-  return getProviderSnapshot(provider).watch_strategy;
-}
-
-export function getProvidersForWatchStrategy(
-  strategy: ProviderWatchStrategy,
-): Provider[] {
-  return (
-    Object.entries(activeProviderSnapshotMap()) as [
-      Provider,
-      ProviderSnapshot,
-    ][]
-  )
-    .filter(([, snapshot]) => snapshot.watch_strategy === strategy)
-    .map(([provider]) => provider);
 }
 
 export function getProviderSortOrder(provider: Provider): number {

@@ -57,10 +57,6 @@ export function KeyboardSettings() {
           <kbd>{isMac ? "\u2318" : "Ctrl+"}B</kbd>
         </div>
         <div className="settings-shortcut-row">
-          <span>{t("keyboard.toggleWatch")}</span>
-          <kbd>{isMac ? "\u2318" : "Ctrl+"}L</kbd>
-        </div>
-        <div className="settings-shortcut-row">
           <span>{t("keyboard.deleteSession")}</span>
           <kbd>
             {isMac ? "\u2318" : "Ctrl+"}

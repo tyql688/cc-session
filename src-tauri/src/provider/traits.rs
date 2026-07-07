@@ -1,8 +1,6 @@
 use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 
-use serde::{Deserialize, Serialize};
-
 use crate::models::{Provider, SessionMeta, TrashMeta};
 use crate::pricing::PricingCatalog;
 
@@ -10,14 +8,6 @@ use super::{
     default_compute_token_stats_from_messages, infer_restore_action, DeletionPlan, LoadedSession,
     ParsedSession, ProviderError, RestoreAction, ScanOutcome, SourceState, TokenStatRow,
 };
-
-/// How the frontend should watch for changes from this provider.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "lowercase")]
-pub enum WatchStrategy {
-    Fs,
-    Poll,
-}
 
 /// Static metadata for a provider. Implemented by zero-sized descriptor structs
 /// in each provider module. Accessed via `Provider::descriptor()`.
@@ -52,25 +42,11 @@ pub trait ProviderDescriptor: Send + Sync {
     fn avatar_svg(&self) -> &'static str {
         ""
     }
-
-    /// How the frontend should watch for session changes from this provider.
-    fn watch_strategy(&self) -> WatchStrategy {
-        WatchStrategy::Fs
-    }
 }
 
 pub trait SessionProvider: Send + Sync {
     fn provider(&self) -> Provider;
-    fn watch_paths(&self) -> Vec<PathBuf>;
-    /// Directories the provider wants watched non-recursively — the
-    /// watcher fires on entries created/removed at the dir's top level
-    /// but doesn't follow subdirs. Use this for parent dirs whose
-    /// children mutate rapidly under concurrent external processes
-    /// (e.g. SQLite WAL/SHM churn), where a recursive watch would race
-    /// the OS file-watcher's internal fd tracking. Default empty.
-    fn watch_paths_shallow(&self) -> Vec<PathBuf> {
-        Vec::new()
-    }
+    fn source_roots(&self) -> Vec<PathBuf>;
     fn scan_all(&self) -> Result<Vec<ParsedSession>, ProviderError>;
 
     /// Incremental scan: parse only the source files whose

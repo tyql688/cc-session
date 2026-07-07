@@ -1,3 +1,5 @@
+import { Button } from "@/components/ui/button";
+
 export interface TitleBarProps {
   showWindowControls: boolean;
   isMaximized: boolean;
@@ -39,9 +41,11 @@ export function TitleBar(props: TitleBarProps) {
 
       {props.showWindowControls && (
         <div className="win-controls">
-          <button
+          <Button
+            variant="ghost"
+            size="icon-sm"
             type="button"
-            className="win-ctrl-btn"
+            className="win-ctrl-btn active:translate-y-0"
             onClick={props.onMinimize}
           >
             <svg viewBox="0 0 10 10">
@@ -54,10 +58,12 @@ export function TitleBar(props: TitleBarProps) {
                 strokeWidth="1.2"
               />
             </svg>
-          </button>
-          <button
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon-sm"
             type="button"
-            className="win-ctrl-btn"
+            className="win-ctrl-btn active:translate-y-0"
             onClick={props.onToggleMaximize}
           >
             {props.isMaximized ? (
@@ -91,10 +97,12 @@ export function TitleBar(props: TitleBarProps) {
                 />
               </svg>
             )}
-          </button>
-          <button
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon-sm"
             type="button"
-            className="win-ctrl-btn close"
+            className="win-ctrl-btn close active:translate-y-0"
             onClick={props.onClose}
           >
             <svg viewBox="0 0 10 10">
@@ -115,7 +123,7 @@ export function TitleBar(props: TitleBarProps) {
                 strokeWidth="1.2"
               />
             </svg>
-          </button>
+          </Button>
         </div>
       )}
     </div>

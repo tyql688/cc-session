@@ -276,7 +276,7 @@ impl SessionProvider for CcMirrorProvider {
         Provider::CcMirror
     }
 
-    fn watch_paths(&self) -> Vec<PathBuf> {
+    fn source_roots(&self) -> Vec<PathBuf> {
         self.variants
             .iter()
             .map(|variant| variant.projects_dir.clone())

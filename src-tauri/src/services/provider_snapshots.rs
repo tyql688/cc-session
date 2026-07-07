@@ -23,7 +23,7 @@ impl<'a> ProviderSnapshotService<'a> {
         for provider in Provider::all() {
             let (path, exists) = provider
                 .build_runtime()
-                .map(|runtime| snapshot_path_info(&runtime.watch_paths()))
+                .map(|runtime| snapshot_path_info(&runtime.source_roots()))
                 .unwrap_or_default();
 
             snapshots.push(ProviderSnapshot {
@@ -31,7 +31,6 @@ impl<'a> ProviderSnapshotService<'a> {
                 label: provider.label().to_string(),
                 color: provider.descriptor().color().to_string(),
                 sort_order: provider.descriptor().sort_order(),
-                watch_strategy: provider.descriptor().watch_strategy(),
                 path,
                 exists,
                 session_count: counts.get(provider.key()).copied().unwrap_or(0),
@@ -44,14 +43,14 @@ impl<'a> ProviderSnapshotService<'a> {
 }
 
 fn snapshot_path_info(paths: &[PathBuf]) -> (String, bool) {
-    let Some(path) = common_watch_root(paths).or_else(|| paths.first().cloned()) else {
+    let Some(path) = common_source_root(paths).or_else(|| paths.first().cloned()) else {
         return (String::new(), false);
     };
 
     (path.to_string_lossy().to_string(), path.exists())
 }
 
-fn common_watch_root(paths: &[PathBuf]) -> Option<PathBuf> {
+fn common_source_root(paths: &[PathBuf]) -> Option<PathBuf> {
     let first = paths.first()?;
 
     first
@@ -68,21 +67,21 @@ fn common_watch_root(paths: &[PathBuf]) -> Option<PathBuf> {
 
 #[cfg(test)]
 mod tests {
-    use super::{common_watch_root, snapshot_path_info, ProviderSnapshotService};
+    use super::{common_source_root, snapshot_path_info, ProviderSnapshotService};
     use crate::db::Database;
     use crate::models::Provider;
     use std::path::PathBuf;
     use tempfile::TempDir;
 
     #[test]
-    fn common_watch_root_returns_shared_ancestor() {
+    fn common_source_root_returns_shared_ancestor() {
         let paths = vec![
             PathBuf::from("/tmp/.cc-mirror/a/config/projects"),
             PathBuf::from("/tmp/.cc-mirror/b/config/projects"),
         ];
 
         assert_eq!(
-            common_watch_root(&paths),
+            common_source_root(&paths),
             Some(PathBuf::from("/tmp/.cc-mirror"))
         );
     }

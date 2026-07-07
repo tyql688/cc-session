@@ -33,8 +33,8 @@ pub struct CachedMessages {
 /// Lightweight LRU cache for parsed session message vectors.
 ///
 /// Keyed by canonical `source_path`. Backend session loaders consult this
-/// cache before re-parsing; the watcher invalidates entries when source
-/// files change so window reads always observe a coherent snapshot.
+/// cache before re-parsing and compare source metadata before reusing an
+/// entry.
 pub struct SessionCache {
     inner: Mutex<Inner>,
     counter: AtomicU64,
@@ -125,24 +125,13 @@ impl SessionCache {
         entry
     }
 
-    /// Drop a cache entry by source path. Used when the watcher detects a
-    /// change so the next read re-parses.
+    /// Drop a cache entry by key so the next read re-parses.
     pub fn invalidate(&self, key: &str) {
         let mut inner = match self.inner.lock() {
             Ok(g) => g,
             Err(poisoned) => poisoned.into_inner(),
         };
         inner.map.remove(key);
-    }
-
-    pub(crate) fn invalidate_source(&self, source_path: &str) {
-        let mut inner = match self.inner.lock() {
-            Ok(g) => g,
-            Err(poisoned) => poisoned.into_inner(),
-        };
-        inner
-            .map
-            .retain(|_, entry| entry.source_path != source_path);
     }
 
     pub fn clear(&self) {
@@ -220,34 +209,5 @@ mod tests {
         insert_dummy(&cache, "a", "/tmp/a.jsonl", None);
         cache.invalidate("a");
         assert!(cache.get("a", None).is_none());
-    }
-
-    #[test]
-    fn invalidate_source_removes_all_entries_for_source() {
-        let cache = SessionCache::new(4);
-        insert_dummy(
-            &cache,
-            "codex:s1:/tmp/shared.jsonl",
-            "/tmp/shared.jsonl",
-            None,
-        );
-        insert_dummy(
-            &cache,
-            "codex:s2:/tmp/shared.jsonl",
-            "/tmp/shared.jsonl",
-            None,
-        );
-        insert_dummy(
-            &cache,
-            "codex:s3:/tmp/other.jsonl",
-            "/tmp/other.jsonl",
-            None,
-        );
-
-        cache.invalidate_source("/tmp/shared.jsonl");
-
-        assert!(cache.get("codex:s1:/tmp/shared.jsonl", None).is_none());
-        assert!(cache.get("codex:s2:/tmp/shared.jsonl", None).is_none());
-        assert!(cache.get("codex:s3:/tmp/other.jsonl", None).is_some());
     }
 }

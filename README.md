@@ -36,7 +36,6 @@ Claude Code, Codex, Antigravity, Kimi Code, Cursor CLI, Pi, and more all store t
 - ↩️ **Resume in one click** — drop straight back into any session in your terminal
 - 📊 **Usage analytics** — cost, token, and per-model breakdowns with cache hit/write detail
 - 🎨 **Rich rendering** — Markdown, syntax highlighting, Mermaid diagrams, KaTeX math, inline images, and structured tool-call diffs
-- 👀 **Live watch** — file-based providers auto-refresh via OS watchers; OpenCode uses provider-aware polling
 - 📤 **Export** — JSON, Markdown, or a self-contained HTML file (dark mode, collapsible tools & thinking blocks)
 - 🗃️ **Session management** — rename, favorite, trash/restore, and batch operations
 - ⌨️ **Keyboard-first** — navigate and act without touching the mouse
@@ -52,16 +51,16 @@ Track exactly what you're spending across every provider — daily cost trends, 
 
 ## 🧩 Supported tools
 
-| Provider | Source format | Live watch | Resume |
-|----------|---------------|:----------:|--------|
-| **Claude Code** | JSONL | FS | `claude --resume` |
-| **Codex CLI** | JSONL | FS | `codex resume` |
-| **Antigravity** | JSONL | FS | `agy --conversation` |
-| **Kimi Code** | JSONL | FS | `kimi --session` |
-| **Cursor CLI** | JSONL + SQLite | FS | `cursor agent --resume` |
-| **OpenCode** | SQLite | Poll | `opencode -s` |
-| **CC-Mirror** | JSONL | FS | per-variant |
-| **Pi** | JSONL | FS | `pi --session` |
+| Provider | Source format | Resume |
+|----------|---------------|--------|
+| **Claude Code** | JSONL | `claude --resume` |
+| **Codex CLI** | JSONL | `codex resume` |
+| **Antigravity** | JSONL | `agy --conversation` |
+| **Kimi Code** | JSONL | `kimi --session` |
+| **Cursor CLI** | JSONL + SQLite | `cursor agent --resume` |
+| **OpenCode** | SQLite | `opencode -s` |
+| **CC-Mirror** | JSONL | per-variant |
+| **Pi** | JSONL | `pi --session` |
 
 Across providers, CC Session parses messages, tool calls, thinking/reasoning blocks, token usage, inline images, Markdown, Mermaid diagrams, and KaTeX math wherever the source format supports them — including subagent/child sessions.
 
@@ -109,7 +108,7 @@ cd src-tauri && cargo test       # Rust tests
 cd src-tauri && cargo clippy --all-targets --all-features -- -D warnings
 ```
 
-Code style is documented in [`style/ts.md`](style/ts.md) and [`style/rust.md`](style/rust.md), enforced by Biome, ESLint, Clippy, and a lefthook pre-commit hook. On macOS, file-based live watch uses the `notify` crate's `kqueue` backend for more reliable file-level updates.
+Code style is documented in [`style/ts.md`](style/ts.md) and [`style/rust.md`](style/rust.md), enforced by Biome, ESLint, Clippy, and a lefthook pre-commit hook.
 
 ## 🏗️ Built with
 

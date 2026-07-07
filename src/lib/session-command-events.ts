@@ -3,7 +3,6 @@ export const SESSION_COMMAND_EVENTS = {
   resume: "cc-session:resume",
   exportSession: "cc-session:export",
   favorite: "cc-session:favorite",
-  watch: "cc-session:watch",
   delete: "cc-session:delete",
 } as const;
 

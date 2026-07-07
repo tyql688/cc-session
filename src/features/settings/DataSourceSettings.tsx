@@ -34,8 +34,10 @@ export function DataSourceSettings(props: {
                 {shortenHomePath(info.path)}
               </span>
               {info.exists && (
-                <button
-                  className="settings-open-folder"
+                <Button
+                  variant="ghost"
+                  size="icon-xs"
+                  className="settings-open-folder active:translate-y-0"
                   title={t("settings.openInFinder")}
                   onClick={async () => {
                     try {
@@ -57,7 +59,7 @@ export function DataSourceSettings(props: {
                     <polyline points="15 3 21 3 21 9" />
                     <line x1="10" y1="14" x2="21" y2="3" />
                   </svg>
-                </button>
+                </Button>
               )}
             </div>
           </div>

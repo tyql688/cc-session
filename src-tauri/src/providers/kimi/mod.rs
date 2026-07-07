@@ -120,7 +120,7 @@ impl SessionProvider for KimiProvider {
         Provider::Kimi
     }
 
-    fn watch_paths(&self) -> Vec<PathBuf> {
+    fn source_roots(&self) -> Vec<PathBuf> {
         vec![self.sessions_dir()]
     }
 

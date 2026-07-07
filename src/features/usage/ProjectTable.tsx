@@ -1,10 +1,12 @@
 import { Fragment, useState } from "react";
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { useI18n } from "@/i18n/index";
 import type { ProjectCost } from "@/lib/types";
 import { ROW_LIMIT_OPTIONS, type UsageSortState } from "@/lib/usage";
 import { fmtCost, fmtTokens, sortIcon } from "@/features/usage/formatters";
 import type { LimitOption } from "@/features/usage/usageView";
 import type { ProviderChipInfo } from "@/features/usage/Toolbar";
+import { cn } from "@/lib/utils";
 
 export interface ProjectTableProps {
   visibleProjects: ProjectCost[];
@@ -40,18 +42,31 @@ export function ProjectTable(props: ProjectTableProps) {
             {props.totalProjectCount}
           </div>
         </div>
-        <div className="usage-section-actions">
+        <ToggleGroup
+          className="usage-section-actions"
+          size="sm"
+          spacing={1}
+          value={[String(props.projectLimit)]}
+          onValueChange={(next) => {
+            const value = Number(next[0]);
+            if (ROW_LIMIT_OPTIONS.includes(value as LimitOption)) {
+              props.onLimitChange(value as LimitOption);
+            }
+          }}
+        >
           {ROW_LIMIT_OPTIONS.map((limit) => (
-            <button
+            <ToggleGroupItem
               key={limit}
-              className={`usage-limit-btn${props.projectLimit === limit ? " active" : ""}`}
-              onClick={() => props.onLimitChange(limit)}
-              type="button"
+              value={String(limit)}
+              className={cn(
+                "usage-limit-btn h-auto min-w-0",
+                props.projectLimit === limit && "active",
+              )}
             >
               {limit}
-            </button>
+            </ToggleGroupItem>
           ))}
-        </div>
+        </ToggleGroup>
       </div>
       <div className="usage-table-wrap">
         <table className="usage-table">

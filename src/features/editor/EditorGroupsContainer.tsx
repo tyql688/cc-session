@@ -112,11 +112,6 @@ export function EditorGroupsContainer(props: {
     setRecentVersion((version) => version + 1);
   }, [props.tree]);
 
-  // No direct `sessions-changed` listener here: the App shell already
-  // debounces that event into a sync whose refreshTree() produces a new
-  // `props.tree`, and the effect above bumps `recentVersion` off that. A
-  // second listener would refetch the recent list once per raw event.
-
   function handleResize(leftIdx: number, deltaX: number) {
     const gs = getGroups();
     const left = gs[leftIdx];

@@ -1,5 +1,4 @@
 use std::collections::HashMap;
-use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use anyhow::{anyhow, Context};
@@ -14,7 +13,7 @@ use crate::services::session_view::{
     build_session_turn_outline, session_window_bounds, subagent_meta_title, with_load_guard,
     SessionTurnOutlineEntry,
 };
-use crate::services::{load_session_meta, SessionLifecycleService, SourceSyncService};
+use crate::services::{load_session_meta, SessionLifecycleService};
 
 use super::session_tail::try_tail_fast_path;
 use super::AppState;
@@ -77,52 +76,6 @@ pub async fn reindex_providers(
         state
             .indexer
             .reindex_providers(Some(&filter), aggressive.unwrap_or(false))
-    })
-    .await
-    .context("task join error")?
-    .map_err(CommandError::from)?;
-    Ok(count)
-}
-
-#[tauri::command]
-pub async fn sync_sources(paths: Vec<String>, state: State<'_, AppState>) -> CommandResult<usize> {
-    let state = state.inner().clone();
-    let count = tokio::task::spawn_blocking(move || {
-        let source_sync = SourceSyncService::new(&state.db);
-        let mut unique_paths = std::collections::HashSet::new();
-        let mut synced = 0;
-
-        // Snapshot the in-flight set so we don't trample a session being
-        // viewed: re-parsing the same JSONL while the user is reading it
-        // is the watcher feedback loop we're suppressing.
-        let loading: std::collections::HashSet<PathBuf> = match state.loading_paths.lock() {
-            Ok(g) => g.clone(),
-            Err(p) => p.into_inner().clone(),
-        };
-
-        for path in paths {
-            if path.is_empty() || !unique_paths.insert(path.clone()) {
-                continue;
-            }
-            if loading.contains(Path::new(&path)) {
-                // Skip — an active viewer load owns this file. Don't
-                // invalidate its just-populated cache entry; the mtime
-                // check inside SessionCache::get is sufficient to surface
-                // any later changes once the viewer load completes.
-                log::debug!("sync_sources: skipping loading path '{path}'");
-                continue;
-            }
-            if source_sync.sync_source_path(&path)? {
-                synced += 1;
-            }
-            // Drop the parsed-message cache so the next viewer load
-            // re-parses against the (possibly mutated) source. Belt-and-
-            // suspenders with the mtime check; explicit eviction frees
-            // memory sooner for sessions the user is no longer viewing.
-            state.session_cache.invalidate_source(&path);
-        }
-
-        Ok::<usize, crate::services::ServiceError>(synced)
     })
     .await
     .context("task join error")?

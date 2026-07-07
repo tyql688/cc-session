@@ -48,7 +48,6 @@ const shortcuts: ShortcutCategory[] = [
       { keys: `${shift}${mod}R`, descKey: "keyboard.resumeSession" },
       { keys: `${shift}${mod}E`, descKey: "keyboard.exportSession" },
       { keys: `${mod}B`, descKey: "keyboard.toggleFavorite" },
-      { keys: `${mod}L`, descKey: "keyboard.toggleWatch" },
       { keys: `${mod}⌫`, descKey: "keyboard.deleteSession" },
     ],
   },

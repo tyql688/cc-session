@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { Button } from "@/components/ui/button";
 import type { SessionTurnOutlineEntry } from "@/lib/tauri";
 
 const MIN_TURNS_TO_SHOW = 2;
@@ -106,10 +107,11 @@ export function TimelineMinimap(props: MinimapProps) {
             onMouseEnter={() => setHovered(index)}
             onMouseLeave={() => setHovered(null)}
           >
-            <button
+            <Button
+              variant="ghost"
               type="button"
               aria-label={turn.user_text || `#${turn.ordinal + 1}`}
-              className="timeline-minimap-button"
+              className="timeline-minimap-button h-auto min-h-0 rounded-none active:translate-y-0"
               onClick={() => {
                 setHovered(null);
                 void props.onRevealMessage(turn.message_index);
@@ -119,11 +121,12 @@ export function TimelineMinimap(props: MinimapProps) {
                 className={`timeline-minimap-tick ${tickClass(index)}`}
                 style={{ width: `${tickWidth(index)}px` }}
               />
-            </button>
+            </Button>
             {hovered === index && (
-              <button
+              <Button
+                variant="ghost"
                 type="button"
-                className={`timeline-minimap-card ${cardPosition(index)}`}
+                className={`timeline-minimap-card h-auto items-stretch justify-start whitespace-normal active:translate-y-0 ${cardPosition(index)}`}
                 onClick={() => {
                   setHovered(null);
                   void props.onRevealMessage(turn.message_index);
@@ -137,7 +140,7 @@ export function TimelineMinimap(props: MinimapProps) {
                     {turn.reply_text}
                   </span>
                 )}
-              </button>
+              </Button>
             )}
           </div>
         ))}

@@ -128,15 +128,15 @@ const controls = {
 /**
  * Timeline markdown renders through Streamdown: shiki-highlighted code blocks
  * with a copy control, mermaid diagrams, GFM, KaTeX math, CJK emphasis fixes.
- * This is a viewer — incomplete-markdown parsing and the typing caret are only
- * enabled for the message currently streaming in under live watch.
+ * This is a viewer; the optional streaming mode is reserved for transient
+ * trailing assistant content.
  */
 export const Markdown = memo(function Markdown({
   text,
   streaming = false,
 }: {
   text: string;
-  /** True only under live watch for the trailing assistant message. */
+  /** True while rendering transient trailing assistant content. */
   streaming?: boolean;
 }) {
   const translations = useStreamdownTranslations();

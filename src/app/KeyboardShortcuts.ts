@@ -194,13 +194,6 @@ export function createKeyboardHandler(
       return;
     }
 
-    // Cmd+L: Toggle live watch
-    if (mod && e.key === "l") {
-      e.preventDefault();
-      dispatchSessionCommand(SESSION_COMMAND_EVENTS.watch);
-      return;
-    }
-
     // Cmd+Backspace: Delete session
     if (mod && e.key === "Backspace") {
       e.preventDefault();

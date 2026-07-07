@@ -11,7 +11,6 @@ pub mod providers;
 pub mod services;
 pub mod tool_metadata;
 pub mod trash_state;
-mod watcher;
 
 use std::sync::Arc;
 
@@ -70,95 +69,8 @@ pub mod command_test_helpers {
 use commands::AppState;
 use db::Database;
 use indexer::Indexer;
+#[cfg(any(target_os = "windows", target_os = "linux"))]
 use tauri::Manager;
-
-#[cfg(target_os = "macos")]
-const MACOS_MIN_NOFILE_LIMIT: u64 = 65_536;
-#[cfg(target_os = "macos")]
-const MACOS_OPEN_MAX_COMPAT_LIMIT: u64 = 10_240;
-#[cfg(target_os = "macos")]
-const MACOS_RLIMIT_NOFILE: i32 = 8;
-#[cfg(target_os = "macos")]
-const MACOS_RLIM_INFINITY: u64 = i64::MAX as u64;
-
-#[cfg(target_os = "macos")]
-#[repr(C)]
-#[derive(Clone, Copy, Debug)]
-struct MacosRLimit {
-    rlim_cur: u64,
-    rlim_max: u64,
-}
-
-#[cfg(target_os = "macos")]
-extern "C" {
-    fn getrlimit(resource: i32, rlp: *mut MacosRLimit) -> i32;
-    fn setrlimit(resource: i32, rlp: *const MacosRLimit) -> i32;
-}
-
-#[cfg(target_os = "macos")]
-fn desired_nofile_soft_limit(current: u64, maximum: u64, target: u64) -> u64 {
-    if current >= target {
-        return current;
-    }
-
-    if maximum == MACOS_RLIM_INFINITY {
-        return target;
-    }
-
-    target.min(maximum).max(current)
-}
-
-#[cfg(target_os = "macos")]
-fn raise_file_descriptor_limit_for_macos_watchers() {
-    let mut limit = MacosRLimit {
-        rlim_cur: 0,
-        rlim_max: 0,
-    };
-
-    // SAFETY: getrlimit/setrlimit are called with RLIMIT_NOFILE and a valid
-    // MacosRLimit pointer matching Darwin's rlimit layout.
-    unsafe {
-        if getrlimit(MACOS_RLIMIT_NOFILE, &mut limit) != 0 {
-            log::warn!(
-                "failed to inspect macOS file descriptor limit: {}",
-                std::io::Error::last_os_error()
-            );
-            return;
-        }
-
-        let original = limit;
-        let next =
-            desired_nofile_soft_limit(original.rlim_cur, original.rlim_max, MACOS_MIN_NOFILE_LIMIT);
-        if next <= original.rlim_cur {
-            return;
-        }
-
-        limit.rlim_cur = next;
-        if setrlimit(MACOS_RLIMIT_NOFILE, &limit) == 0 {
-            return;
-        }
-
-        let first_error = std::io::Error::last_os_error();
-        let fallback = desired_nofile_soft_limit(
-            original.rlim_cur,
-            original.rlim_max,
-            MACOS_OPEN_MAX_COMPAT_LIMIT,
-        );
-        if fallback > original.rlim_cur && fallback != next {
-            limit.rlim_cur = fallback;
-            if setrlimit(MACOS_RLIMIT_NOFILE, &limit) == 0 {
-                log::warn!(
-                    "raised macOS file descriptor limit to fallback {fallback} after {next} failed: {first_error}");
-                return;
-            }
-        }
-
-        log::warn!("failed to raise macOS file descriptor limit to {next}: {first_error}");
-    }
-}
-
-#[cfg(not(target_os = "macos"))]
-fn raise_file_descriptor_limit_for_macos_watchers() {}
 
 /// Detect and fix inconsistencies left by interrupted trash operations.
 /// Called once at app startup, after DB is opened.
@@ -218,8 +130,6 @@ fn audit_trash_consistency(db: &db::Database) {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    raise_file_descriptor_limit_for_macos_watchers();
-
     let data_dir = match dirs::data_local_dir() {
         Some(d) => d.join("cc-session"),
         None => {
@@ -259,7 +169,6 @@ pub fn run() {
             32 * 1024 * 1024,
         )),
         load_tokens: Arc::new(std::sync::Mutex::new(std::collections::HashMap::new())),
-        loading_paths: Arc::new(std::sync::Mutex::new(std::collections::HashSet::new())),
         promote_in_flight: Arc::new(std::sync::Mutex::new(std::collections::HashSet::new())),
     };
 
@@ -273,7 +182,6 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             commands::reindex,
             commands::reindex_providers,
-            commands::sync_sources,
             commands::get_tree,
             commands::get_session_detail,
             commands::get_session_meta,
@@ -323,6 +231,9 @@ pub fn run() {
             commands::get_today_tokens,
         ])
         .setup(|app| {
+            #[cfg(not(any(target_os = "windows", target_os = "linux")))]
+            let _ = app;
+
             // On Windows, hide native decorations so the custom titlebar is the only one.
             #[cfg(target_os = "windows")]
             if let Some(win) = app.get_webview_window("main") {
@@ -336,15 +247,6 @@ pub fn run() {
                 let _ = win.set_decorations(false);
             }
 
-            // Provider instances are lightweight (just PathBuf); create a separate
-            // set for the watcher since Indexer consumed the first set.
-            let watcher_providers = provider::all_runtimes();
-            match watcher::start_watcher(app.handle().clone(), &watcher_providers) {
-                Ok(fs_watcher) => {
-                    app.manage(fs_watcher);
-                }
-                Err(e) => log::warn!("failed to start file watcher: {e:#}"),
-            }
             Ok(())
         })
         .run(tauri::generate_context!())
@@ -352,32 +254,4 @@ pub fn run() {
             log::error!("failed to run tauri application: {e}");
             std::process::exit(1);
         });
-}
-
-#[cfg(test)]
-mod tests {
-    #[cfg(target_os = "macos")]
-    #[test]
-    fn nofile_soft_limit_is_raised_without_exceeding_finite_hard_limit() {
-        assert_eq!(
-            super::desired_nofile_soft_limit(256, 1024, super::MACOS_MIN_NOFILE_LIMIT),
-            1024
-        );
-        assert_eq!(
-            super::desired_nofile_soft_limit(
-                256,
-                super::MACOS_RLIM_INFINITY,
-                super::MACOS_MIN_NOFILE_LIMIT
-            ),
-            super::MACOS_MIN_NOFILE_LIMIT
-        );
-        assert_eq!(
-            super::desired_nofile_soft_limit(
-                super::MACOS_MIN_NOFILE_LIMIT + 1,
-                super::MACOS_RLIM_INFINITY,
-                super::MACOS_MIN_NOFILE_LIMIT
-            ),
-            super::MACOS_MIN_NOFILE_LIMIT + 1
-        );
-    }
 }

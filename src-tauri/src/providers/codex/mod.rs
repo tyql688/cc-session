@@ -84,7 +84,7 @@ impl SessionProvider for CodexProvider {
         Provider::Codex
     }
 
-    fn watch_paths(&self) -> Vec<PathBuf> {
+    fn source_roots(&self) -> Vec<PathBuf> {
         vec![self.sessions_dir(), self.archived_sessions_dir()]
     }
 

@@ -36,7 +36,6 @@ import {
   paintVisibleHighlights,
   scrollRangeIntoView,
 } from "@/features/session/search-utils";
-import { useLiveWatch } from "@/features/session/useLiveWatch";
 import { useFavoriteSync } from "@/features/session/useFavoriteSync";
 import { useSessionCommandEvents } from "@/features/session/useSessionCommandEvents";
 import { useRoleFilter } from "@/features/session/createRoleFilter";
@@ -69,7 +68,6 @@ export function SessionView(props: {
   // Absolute session index of messages[0]. Owned here (not by the pagination
   // hook) because processMessages needs it to emit absolute message indices.
   const [windowStart, setWindowStart] = useState(0);
-  const [watching, setWatching] = useState(false);
   const processedEntries = useMemo(
     () => processMessages(messages, windowStart),
     [messages, windowStart],
@@ -99,10 +97,6 @@ export function SessionView(props: {
   const [messagesEl, setMessagesEl] = useState<HTMLDivElement | null>(null);
   const sessionSearchDebounceRef = useRef<(() => void) | undefined>(undefined);
   const prevSessionIdRef = useRef<string | null>(null);
-  // Latest-value mirror of `messages` so reloadSession — captured by the
-  // live-watch effect — reads the current length instead of a stale closure.
-  const messagesStateRef = useRef<Message[]>(messages);
-  messagesStateRef.current = messages;
 
   function withTokenTotals(
     metaData: SessionMeta,
@@ -279,11 +273,6 @@ export function SessionView(props: {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [showExportDialog, setShowExportDialog] = useState(false);
 
-  // Stable memos so the live-watch effect only re-runs when these values
-  // actually change, not on every reloadSession() → setMeta() cycle.
-  const watchProvider = meta.provider;
-  const watchSourcePath = meta.source_path || props.session.source_path || "";
-
   async function refreshOutline(
     sessionId: string,
     version: number,
@@ -312,42 +301,6 @@ export function SessionView(props: {
       console.warn("load session outline failed:", e);
     }
   }
-
-  async function reloadSession() {
-    try {
-      // Refresh meta + tail. Backend cache compares mtime so an actual
-      // file change forces a re-parse; otherwise this is O(1) slicing.
-      const sessionId = props.session.id;
-      const oldCount = messagesStateRef.current.length;
-      const open = await getSessionOpenWindow(
-        sessionId,
-        -INITIAL_TAIL,
-        INITIAL_TAIL,
-      );
-      if (sessionId !== props.session.id) return;
-      const tail = open.window;
-      setMeta(open.meta);
-      setMessages(tail.messages);
-      setParseWarningCount(tail.parse_warning_count ?? 0);
-      setTotalMessages(tail.total);
-      setWindowStart(tail.start);
-      void refreshOutline(sessionId, loadVersionRef.current);
-      // Follow new messages: stick to the newest row when content arrives.
-      if (tail.messages.length > oldCount) {
-        requestAnimationFrame(() => scrollToEnd());
-      }
-    } catch (e) {
-      console.error("live watch reload failed:", e);
-      toastError(`${t("toast.reloadFailed")}: ${errorMessage(e)}`);
-    }
-  }
-
-  useLiveWatch({
-    watching,
-    provider: watchProvider,
-    sourcePath: watchSourcePath,
-    reload: reloadSession,
-  });
 
   const { starred, toggleFavorite: handleToggleFavorite } = useFavoriteSync(
     props.session.id,
@@ -385,7 +338,6 @@ export function SessionView(props: {
     onResume: () => void handleResume(),
     onExport: () => setShowExportDialog(true),
     onFavorite: () => void handleToggleFavorite(),
-    onWatch: () => setWatching((v) => !v),
     onDelete: () => setShowDeleteConfirm(true),
     onSessionSearch: () => {
       setSearchBarOpen(true);
@@ -461,10 +413,8 @@ export function SessionView(props: {
       <SessionToolbar
         meta={meta}
         messages={messages}
-        watching={watching}
         starred={starred}
         parseWarningCount={parseWarningCount}
-        onToggleWatch={() => setWatching((v) => !v)}
         onToggleFavorite={handleToggleFavorite}
         onResume={handleResume}
         onExport={() => setShowExportDialog(true)}

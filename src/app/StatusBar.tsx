@@ -1,4 +1,6 @@
 import { useEffect } from "react";
+import { Button } from "@/components/ui/button";
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { useI18n } from "@/i18n/index";
 import type { Locale } from "@/i18n/index";
 import { useTheme, setTheme, applyTheme, getTheme } from "@/stores/theme";
@@ -10,6 +12,7 @@ import {
 } from "@/features/updater/updater";
 import { fmtTokens } from "@/lib/formatters";
 import type { TodayTokens } from "@/lib/tauri";
+import { cn } from "@/lib/utils";
 
 export function StatusBar(props: {
   sessionCount: number;
@@ -172,8 +175,13 @@ export function StatusBar(props: {
       </div>
       <div className="statusbar-right">
         {updateLabel() !== null && (
-          <button
-            className={`update-badge${isBusy() ? " busy" : ""}`}
+          <Button
+            variant="ghost"
+            size="xs"
+            className={cn(
+              "update-badge active:translate-y-0",
+              isBusy() && "busy",
+            )}
             disabled={isBusy()}
             onClick={() => {
               if (phase === "available") void downloadAndInstall();
@@ -181,30 +189,49 @@ export function StatusBar(props: {
             title={updateLabel() ?? ""}
           >
             {updateLabel()}
-          </button>
+          </Button>
         )}
-        <button
-          className="theme-toggle"
+        <Button
+          variant="ghost"
+          size="icon-xs"
+          className="theme-toggle h-[18px] min-w-0 px-1 active:translate-y-0"
           onClick={cycleTheme}
           title={themeLabel()}
         >
           {themeIcon()}
-        </button>
-        <span className="locale-toggle">
-          <button
-            className={`locale-btn${locale === "en" ? " active" : ""}`}
-            onClick={() => setLocale("en" as Locale)}
+        </Button>
+        <ToggleGroup
+          className="locale-toggle"
+          size="sm"
+          spacing={0}
+          value={[locale]}
+          onValueChange={(next) => {
+            const value = next[0];
+            if (value === "en" || value === "zh") {
+              setLocale(value as Locale);
+            }
+          }}
+        >
+          <ToggleGroupItem
+            value="en"
+            className={cn(
+              "locale-btn h-[18px] min-w-0 px-1 text-[11px]",
+              locale === "en" && "active",
+            )}
           >
             EN
-          </button>
+          </ToggleGroupItem>
           <span className="locale-divider">|</span>
-          <button
-            className={`locale-btn${locale === "zh" ? " active" : ""}`}
-            onClick={() => setLocale("zh" as Locale)}
+          <ToggleGroupItem
+            value="zh"
+            className={cn(
+              "locale-btn h-[18px] min-w-0 px-1 text-[11px]",
+              locale === "zh" && "active",
+            )}
           >
             中
-          </button>
-        </span>
+          </ToggleGroupItem>
+        </ToggleGroup>
       </div>
     </div>
   );

@@ -53,7 +53,7 @@ loses on exactly the three axes we're optimizing for).
 70 Solid-coupled files: `src/stores/*` (→ zustand), `src/i18n/index.ts`
 (→ react-i18next), the 52 `.tsx` components, and the Solid hooks. Three `lib`
 files reach into stores and need small edits (`tauri.ts`→toast,
-`provider-watch.ts`/`tree-builders.ts`→providerSnapshots).
+`tree-builders.ts`→providerSnapshots).
 
 ## Reactivity mapping (Solid → React)
 

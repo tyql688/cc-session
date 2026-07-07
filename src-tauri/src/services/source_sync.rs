@@ -16,15 +16,6 @@ impl<'a> SourceSyncService<'a> {
         Self { db }
     }
 
-    pub(crate) fn sync_source_path(&self, source_path: &str) -> ServiceResult<bool> {
-        let Some(provider) = Provider::from_source_path(source_path) else {
-            return Ok(false);
-        };
-
-        self.sync_provider_source(provider, source_path)?;
-        Ok(true)
-    }
-
     pub(crate) fn sync_provider_source(
         &self,
         provider: Provider,

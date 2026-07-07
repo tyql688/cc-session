@@ -341,43 +341,23 @@ impl SessionProvider for CursorProvider {
         Provider::Cursor
     }
 
-    fn watch_paths(&self) -> Vec<PathBuf> {
-        let mut watched = Vec::new();
+    fn source_roots(&self) -> Vec<PathBuf> {
+        let mut roots = Vec::new();
         let projects = self.projects_dir();
         if projects.exists() {
-            // Watch each project's agent-transcripts subtree so brand-
-            // new transcript dirs trigger reindex without scanning the
-            // whole ~/.cursor/projects/ tree (which also holds
-            // terminals/, worker.log, etc).
+            // Use each project's agent-transcripts subtree as the source
+            // root instead of the broader ~/.cursor/projects tree, which
+            // also holds terminals/, worker.log, etc.
             if let Ok(entries) = std::fs::read_dir(&projects) {
                 for entry in entries.flatten() {
                     let transcripts = entry.path().join("agent-transcripts");
                     if transcripts.is_dir() {
-                        watched.push(transcripts);
+                        roots.push(transcripts);
                     }
                 }
             }
         }
-        // Note: `~/.cursor/acp-sessions/` is intentionally watched
-        // SHALLOW (via `watch_paths_shallow`), not recursively. Each
-        // ACP session is a SQLite store.db + WAL + SHM that Cursor IDE
-        // fsyncs aggressively under concurrent use, and recursing
-        // would have the watcher open fds on every child file —
-        // racing kqueue-1.1.1's internal file-ident map and panicking
-        // the notify thread (kqueue/src/lib.rs:661, unfixed upstream).
-        // A shallow watch on the parent fires only for top-level
-        // entries (new session dirs created/removed), so we still
-        // catch newly-started ACP sessions live.
-        watched
-    }
-
-    fn watch_paths_shallow(&self) -> Vec<PathBuf> {
-        let acp_root = self.home_dir.join(".cursor").join("acp-sessions");
-        if acp_root.is_dir() {
-            vec![acp_root]
-        } else {
-            Vec::new()
-        }
+        roots
     }
 
     fn scan_all(&self) -> Result<Vec<ParsedSession>, ProviderError> {

@@ -1,4 +1,5 @@
 import { type CSSProperties, useState } from "react";
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { useI18n } from "@/i18n/index";
 import type {
   HeatmapCell,
@@ -6,6 +7,7 @@ import type {
   HeatmapMetric,
 } from "@/features/usage/heatmap";
 import { fmtCost, fmtTokens } from "@/features/usage/formatters";
+import { cn } from "@/lib/utils";
 
 const METRICS: HeatmapMetric[] = ["tokens", "cost"];
 const WEEKDAY_ROWS = [0, 1, 2, 3, 4, 5, 6];
@@ -95,41 +97,65 @@ export function ActivityHeatmap(props: ActivityHeatmapProps) {
       <div className="usage-section-header">
         <div className="usage-heatmap-heading">
           <div className="usage-section-title">{headline}</div>
-          <div className="usage-metric-toggle">
+          <ToggleGroup
+            className="usage-metric-toggle"
+            size="sm"
+            spacing={0}
+            value={[props.metric]}
+            onValueChange={(next) => {
+              const value = next[0];
+              if (value === "tokens" || value === "cost") {
+                props.setMetric(value);
+              }
+            }}
+          >
             {METRICS.map((metric) => (
-              <button
+              <ToggleGroupItem
                 key={metric}
-                className={`usage-metric-btn${props.metric === metric ? " active" : ""}`}
-                aria-pressed={props.metric === metric}
-                onClick={() => props.setMetric(metric)}
-                type="button"
+                value={metric}
+                className={cn(
+                  "usage-metric-btn h-auto min-w-0",
+                  props.metric === metric && "active",
+                )}
               >
                 {t(`usage.${metric}`)}
-              </button>
+              </ToggleGroupItem>
             ))}
-          </div>
+          </ToggleGroup>
         </div>
-        <div className="usage-heatmap-years">
-          <button
-            className={`usage-year-btn${props.year === null ? " active" : ""}`}
-            aria-pressed={props.year === null}
-            onClick={() => props.setYear(null)}
-            type="button"
+        <ToggleGroup
+          className="usage-heatmap-years"
+          size="sm"
+          spacing={1}
+          value={[props.year === null ? "trailing" : String(props.year)]}
+          onValueChange={(next) => {
+            const value = next[0];
+            if (!value) return;
+            props.setYear(value === "trailing" ? null : Number(value));
+          }}
+        >
+          <ToggleGroupItem
+            value="trailing"
+            className={cn(
+              "usage-year-btn h-auto min-w-0",
+              props.year === null && "active",
+            )}
           >
             {t("usage.activityYearTrailing")}
-          </button>
+          </ToggleGroupItem>
           {props.availableYears.map((year) => (
-            <button
+            <ToggleGroupItem
               key={year}
-              className={`usage-year-btn${props.year === year ? " active" : ""}`}
-              aria-pressed={props.year === year}
-              onClick={() => props.setYear(year)}
-              type="button"
+              value={String(year)}
+              className={cn(
+                "usage-year-btn h-auto min-w-0",
+                props.year === year && "active",
+              )}
             >
               {year}
-            </button>
+            </ToggleGroupItem>
           ))}
-        </div>
+        </ToggleGroup>
       </div>
 
       <div className="usage-heatmap-inspector">{inspectorText}</div>

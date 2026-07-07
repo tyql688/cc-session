@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { Button } from "@/components/ui/button";
 import { readImageBase64 } from "@/lib/tauri";
 import { cachedLoad } from "@/lib/image-cache";
 import { shortenHomePath } from "@/lib/formatters";
@@ -120,9 +121,10 @@ function InlineImage(props: {
 }) {
   return (
     <div className="msg-image-wrap">
-      <button
+      <Button
+        variant="ghost"
         type="button"
-        className="msg-image-button"
+        className="msg-image-button h-auto p-0 active:translate-y-0"
         onClick={() => props.onPreview(props.src, props.source)}
         title={describeImageSource(props.source)}
       >
@@ -134,7 +136,7 @@ function InlineImage(props: {
           decoding="async"
           draggable={false}
         />
-      </button>
+      </Button>
     </div>
   );
 }
@@ -214,9 +216,11 @@ export function ImagePreview(props: {
           {labelImageSource(props.source!, t)}
         </div>
       )}
-      <button
+      <Button
+        variant="ghost"
+        size="icon-lg"
         type="button"
-        className="image-preview-close"
+        className="image-preview-close active:translate-y-0"
         aria-label={t("common.closePreview")}
         onClick={props.onClose}
       >
@@ -231,7 +235,7 @@ export function ImagePreview(props: {
           <line x1="18" y1="6" x2="6" y2="18" />
           <line x1="6" y1="6" x2="18" y2="18" />
         </svg>
-      </button>
+      </Button>
     </div>
   );
 }
