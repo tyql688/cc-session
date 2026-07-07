@@ -260,14 +260,31 @@ export function SessionView(props: {
   const watchProvider = meta.provider;
   const watchSourcePath = meta.source_path || props.session.source_path || "";
 
-  async function refreshOutline(sessionId: string, version: number) {
+  async function refreshOutline(
+    sessionId: string,
+    version: number,
+    attempt = 0,
+  ) {
     try {
       const nextOutline = await getSessionTurnOutline(sessionId);
       if (version !== loadVersionRef.current || sessionId !== props.session.id)
         return;
       setOutline(nextOutline);
     } catch (e) {
-      if (isLoadCanceledError(e)) return;
+      if (isLoadCanceledError(e)) {
+        // The backend load guard cancels per session id, so a concurrent
+        // window fetch (search jump, minimap reveal) can knock out a slow
+        // outline parse on huge sessions. The session is still open — retry
+        // once things settle instead of silently dropping the minimap.
+        if (attempt < 3 && version === loadVersionRef.current) {
+          setTimeout(() => {
+            if (version === loadVersionRef.current) {
+              void refreshOutline(sessionId, version, attempt + 1);
+            }
+          }, 1200);
+        }
+        return;
+      }
       console.warn("load session outline failed:", e);
     }
   }

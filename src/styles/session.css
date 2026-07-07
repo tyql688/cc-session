@@ -168,6 +168,13 @@
 .session-entry {
   display: flex;
   flex-direction: column;
+  /* Native windowing: off-screen rows skip layout/paint entirely, which is
+   * what makes thousand-message (codex) sessions scrollable. The DOM stays
+   * real, so minimap anchors, search Ranges, and scrollIntoView all keep
+   * working; `auto` in contain-intrinsic-size remembers each row's measured
+   * height after first render so scrollbar/anchor math stays stable. */
+  content-visibility: auto;
+  contain-intrinsic-size: auto 160px;
 }
 
 /* In-session search highlighting (CSS Custom Highlight API — ranges are

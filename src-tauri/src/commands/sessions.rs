@@ -279,7 +279,14 @@ pub async fn get_session_turn_outline(
     tokio::task::spawn_blocking(move || -> anyhow::Result<Vec<SessionTurnOutlineEntry>> {
         let meta = load_session_meta(&state.db, &session_id).map_err(anyhow::Error::msg)?;
         let source_path = meta.source_path.clone();
-        with_load_guard(&state, &session_id, &source_path, |_flag| {
+        // Guard under a dedicated key: window fetches (scroll paging, search
+        // jumps, minimap reveals) cancel by plain session id, and on huge
+        // sessions the multi-second outline parse would lose that race every
+        // time — the minimap simply never appeared. Opening a different
+        // session doesn't need to cancel this either; a stale result is
+        // discarded by the frontend version check.
+        let outline_guard_key = format!("{session_id}#outline");
+        with_load_guard(&state, &outline_guard_key, &source_path, |_flag| {
             let (messages, _, _) = load_messages_cached(&state, &meta)?;
             if load_cancel::is_canceled() {
                 return Err(canceled_error());
