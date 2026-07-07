@@ -244,6 +244,9 @@ export default function App() {
     // initialization on the critical path.
     // WKWebView (Safari engine) has never shipped requestIdleCallback,
     // despite lib.dom typing it — feature-detect and fall back to a timer.
+    // Both delays just keep startup work off the first-paint critical path.
+    const WARMUP_FALLBACK_MS = 1500;
+    const UPDATE_CHECK_DELAY_MS = 2000;
     const warmMarkdown = () => {
       void import("@/features/session/timeline/Markdown");
     };
@@ -256,10 +259,13 @@ export default function App() {
             return () => window.cancelIdleCallback(handle);
           })()
         : (() => {
-            const handle = window.setTimeout(warmMarkdown, 1500);
+            const handle = window.setTimeout(warmMarkdown, WARMUP_FALLBACK_MS);
             return () => window.clearTimeout(handle);
           })();
-    const updateTimer = setTimeout(() => void checkForUpdate(), 2000);
+    const updateTimer = setTimeout(
+      () => void checkForUpdate(),
+      UPDATE_CHECK_DELAY_MS,
+    );
 
     async function setup() {
       // Track maximize state so the custom (Windows/Linux) maximize button can

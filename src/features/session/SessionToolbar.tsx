@@ -86,7 +86,7 @@ export function SessionToolbar(props: {
           </div>
           <div className="breadcrumb-title">{props.meta.title}</div>
         </div>
-        <TooltipProvider delay={400}>
+        <TooltipProvider>
           <div className="session-actions flex items-center gap-1.5">
             <Tooltip>
               <TooltipTrigger

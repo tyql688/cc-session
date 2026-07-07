@@ -99,11 +99,8 @@ export function TrashView(props: { onRefreshTree: () => void }) {
             className={`trash-tree-label${node.node_type === "provider" ? " bold" : ""}`}
             title={isLeaf ? node.label : undefined}
           >
-            {isLeaf
-              ? node.label.length > 50
-                ? `${node.label.slice(0, 47)}...`
-                : node.label
-              : node.label}
+            {/* .trash-tree-label ellipsizes via CSS — no character cap. */}
+            {node.label}
           </span>
 
           {!isLeaf && node.count > 0 && (

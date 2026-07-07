@@ -5,6 +5,9 @@ import { useI18n } from "@/i18n/index";
 import type { TokenUsage } from "@/lib/types";
 import { toastError } from "@/stores/toast";
 
+/** How long a copy button shows its "copied ✓" state before resetting. */
+export const COPY_FEEDBACK_MS = 1500;
+
 export function CopyMessageButton(props: {
   content: string;
   copyText?: string;
@@ -16,7 +19,7 @@ export function CopyMessageButton(props: {
     try {
       await navigator.clipboard.writeText(props.copyText ?? props.content);
       setCopied(true);
-      setTimeout(() => setCopied(false), 1500);
+      setTimeout(() => setCopied(false), COPY_FEEDBACK_MS);
     } catch (error) {
       console.error("Failed to copy message:", error);
       toastError(t("toast.copyFailed"));

@@ -60,7 +60,7 @@ import type {
   UsageStats,
 } from "@/lib/types";
 import {
-  SHORT_PROVIDER_LABELS,
+  shortProviderLabel,
   fmtTokens,
   fmtPct,
   formatProjectPath as formatProjectPathRaw,
@@ -206,7 +206,7 @@ export function useProviderSelection() {
     const snapshot = providerSnapshotMap.get(key as never);
     return {
       color: snapshot?.color ?? `var(--${key})`,
-      label: SHORT_PROVIDER_LABELS[key] ?? snapshot?.label ?? key,
+      label: snapshot ? shortProviderLabel(snapshot.label) : key,
       fullLabel: snapshot?.label ?? key,
     };
   };
@@ -532,7 +532,13 @@ export function useUsageDerived(deps: UsageDerivedDeps) {
     [stats.data, selectedProviderKeys, chartMetric],
   );
 
-  const topModels = useMemo(() => sortedModels.slice(0, 4), [sortedModels]);
+  // The model breakdown card has fixed rows (unlike project/session lists,
+  // which have user-configurable limits) — it's a summary, not a table.
+  const TOP_MODEL_ROWS = 4;
+  const topModels = useMemo(
+    () => sortedModels.slice(0, TOP_MODEL_ROWS),
+    [sortedModels],
+  );
   const maxTopModelCost = useMemo(() => topModels[0]?.cost ?? 0, [topModels]);
 
   const activeRangeLabel = ((): string => {

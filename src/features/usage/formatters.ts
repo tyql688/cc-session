@@ -4,15 +4,13 @@ import {
 } from "@/lib/formatters";
 import type { ChartMetric, UsageSortState } from "@/lib/usage";
 
-export const SHORT_PROVIDER_LABELS: Record<string, string> = {
-  claude: "Claude",
-  "cc-mirror": "CC-Mirror",
-  codex: "Codex",
-  antigravity: "Antigravity",
-  opencode: "OpenCode",
-  kimi: "Kimi",
-  cursor: "Cursor",
-} as const;
+/** Chip-width provider label: the first word of the snapshot label
+ * ("Claude Code" → "Claude", "Cursor CLI" → "Cursor"). Derived instead of
+ * hand-listed, so new providers are covered automatically — the previous
+ * lookup table had already drifted (no "pi" entry). */
+export function shortProviderLabel(fullLabel: string): string {
+  return fullLabel.split(" ")[0];
+}
 
 /** Compact token formatter, shared with the rest of the app. */
 export const fmtTokens = fmtTokensShared;

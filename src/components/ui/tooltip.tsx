@@ -3,7 +3,8 @@ import { Tooltip as TooltipPrimitive } from "@base-ui/react/tooltip";
 import { cn } from "@/lib/utils";
 
 function TooltipProvider({
-  delay = 0,
+  // App-wide hover delay — every provider used to repeat delay={400} inline.
+  delay = 400,
   ...props
 }: TooltipPrimitive.Provider.Props) {
   return (

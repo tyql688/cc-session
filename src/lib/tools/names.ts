@@ -2,6 +2,10 @@ import type { Message, ToolMetadata } from "@/lib/types";
 import { shortenHomePath } from "@/lib/formatters";
 import { firstString } from "@/lib/tools/types";
 
+/** One-line budget for a tool-row summary derived from tool input — the same
+ * cap the value used to be inlined as at every call site. */
+const TOOL_SUMMARY_CHARS = 80;
+
 const TOOL_ICONS: Record<string, string> = {
   Read: "📄",
   Edit: "✏️",
@@ -115,7 +119,7 @@ export function toolSummary(message: Message): string {
           "command",
           "cmd",
           "CommandLine",
-        ]).slice(0, 80);
+        ]).slice(0, TOOL_SUMMARY_CHARS);
       case "Glob":
         return firstString(obj, ["pattern", "DirectoryPath"]);
       case "Grep": {
@@ -147,7 +151,10 @@ export function toolSummary(message: Message): string {
           firstString(obj, ["reason"]),
         ]);
       case "Workflow":
-        return firstString(obj, ["name", "description", "script"]).slice(0, 80);
+        return firstString(obj, ["name", "description", "script"]).slice(
+          0,
+          TOOL_SUMMARY_CHARS,
+        );
       case "StructuredOutput":
         return firstString(obj, [
           "finding_id",
@@ -156,11 +163,11 @@ export function toolSummary(message: Message): string {
           "summary",
           "corrected_root_cause",
           "minimal_fix",
-        ]).slice(0, 80);
+        ]).slice(0, TOOL_SUMMARY_CHARS);
       case "CronCreate":
         return joinParts([
           firstString(obj, ["cron"]),
-          firstString(obj, ["prompt"]).slice(0, 80),
+          firstString(obj, ["prompt"]).slice(0, TOOL_SUMMARY_CHARS),
         ]);
       case "CronDelete":
         return firstString(obj, ["id"]);
@@ -174,7 +181,7 @@ export function toolSummary(message: Message): string {
       case "ReadMediaFile":
         return shortenHomePath(firstString(obj, ["path"]));
       case "JavaScript":
-        return firstString(obj, ["title", "code"]).slice(0, 80);
+        return firstString(obj, ["title", "code"]).slice(0, TOOL_SUMMARY_CHARS);
       case "ComputerUse":
         return joinParts([
           firstString(obj, ["app"]),
@@ -190,7 +197,7 @@ export function toolSummary(message: Message): string {
         ]);
       }
       case "CreateGoal":
-        return firstString(obj, ["objective"]).slice(0, 80);
+        return firstString(obj, ["objective"]).slice(0, TOOL_SUMMARY_CHARS);
       case "SetGoalBudget":
         return joinParts([
           optionalNumber(obj, "value"),
@@ -202,7 +209,7 @@ export function toolSummary(message: Message): string {
         const first = Object.values(obj).find(
           (v) => typeof v === "string" && (v as string).length > 0,
         );
-        return first ? String(first).slice(0, 80) : "";
+        return first ? String(first).slice(0, TOOL_SUMMARY_CHARS) : "";
       }
     }
   } catch (error) {

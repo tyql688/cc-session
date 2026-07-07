@@ -1,12 +1,19 @@
-export type Provider =
-  | "claude"
-  | "codex"
-  | "antigravity"
-  | "opencode"
-  | "kimi"
-  | "cursor"
-  | "cc-mirror"
-  | "pi";
+/** Every supported provider, as the single runtime source of truth — the
+ * `Provider` type derives from this array, so a hand-maintained list
+ * elsewhere (which is how "pi" once went missing from tree grouping) can't
+ * silently drift again. */
+export const PROVIDERS = [
+  "claude",
+  "codex",
+  "antigravity",
+  "opencode",
+  "kimi",
+  "cursor",
+  "cc-mirror",
+  "pi",
+] as const;
+
+export type Provider = (typeof PROVIDERS)[number];
 
 export interface SessionMeta {
   id: string;

@@ -48,17 +48,23 @@ export function EditorGroupsContainer(props: {
     useState<unknown>(null);
   const [childCounts, setChildCounts] = useState<Record<string, number>>({});
 
+  // The welcome page shows WELCOME_RECENT_ROWS sessions, but blocked-path and
+  // sidechain filtering happens client-side — oversample the fetch so the list
+  // still fills up when many of the newest sessions get filtered out.
+  const WELCOME_RECENT_ROWS = 10;
+  const RECENT_FETCH_OVERSAMPLE = 100;
+
   useEffect(() => {
     let cancelled = false;
     setRecentSessionsLoading(true);
     setRecentSessionsErrorRaw(null);
-    listRecentSessions(100)
+    listRecentSessions(RECENT_FETCH_OVERSAMPLE)
       .then((list) => {
         if (cancelled) return;
         setRecentSessions(
           list
             .filter((s) => !isPathBlocked(s.project_path) && !s.is_sidechain)
-            .slice(0, 10),
+            .slice(0, WELCOME_RECENT_ROWS),
         );
         setRecentSessionsLoading(false);
       })

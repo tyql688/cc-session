@@ -1,18 +1,13 @@
 import type { SessionMeta, TrashMeta, TreeNode, Provider } from "@/lib/types";
+import { PROVIDERS } from "@/lib/types";
 import {
   getProviderLabel,
   getProviderSortOrder,
 } from "@/stores/providerSnapshots";
 
-const KNOWN_PROVIDER_KEYS = new Set<string>([
-  "claude",
-  "codex",
-  "antigravity",
-  "opencode",
-  "kimi",
-  "cursor",
-  "cc-mirror",
-]);
+// Derived from the canonical PROVIDERS list — the previous hand-written copy
+// was missing "pi", silently dropping Pi sessions from provider grouping.
+const KNOWN_PROVIDER_KEYS = new Set<string>(PROVIDERS);
 
 function parseProviderKey(provider: string): Provider | null {
   return KNOWN_PROVIDER_KEYS.has(provider) ? (provider as Provider) : null;

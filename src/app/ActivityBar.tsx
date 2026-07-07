@@ -132,7 +132,7 @@ export function ActivityBar(props: {
   const bottomItems = items.filter((i) => i.position === "bottom");
 
   return (
-    <TooltipProvider delay={400}>
+    <TooltipProvider>
       <div className="activity-bar">
         <div className="activity-bar-top">
           {topItems.map((item) => {

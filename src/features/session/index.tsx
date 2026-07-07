@@ -53,7 +53,7 @@ const ROLE_TOGGLE_COLORS: Record<MessageRole, string> = {
     "data-pressed:bg-[color-mix(in_srgb,var(--success)_12%,transparent)] data-pressed:text-success",
   tool: "data-pressed:bg-[color-mix(in_srgb,var(--text-warning)_14%,transparent)] data-pressed:text-warning",
   system:
-    "data-pressed:bg-[color-mix(in_srgb,#8b5cf6_12%,transparent)] data-pressed:text-[#8b5cf6]",
+    "data-pressed:bg-[color-mix(in_srgb,var(--accent-secondary)_12%,transparent)] data-pressed:text-(--accent-secondary)",
 };
 
 export function SessionView(props: {

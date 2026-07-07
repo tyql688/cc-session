@@ -30,6 +30,7 @@ import { useI18n } from "@/i18n/index";
 import { useResolvedTheme } from "@/stores/theme";
 import { openExternalUrl } from "@/lib/external-links";
 import { toastError } from "@/stores/toast";
+import { COPY_FEEDBACK_MS } from "@/features/session/MessageBubble/TokenUsage";
 
 // Models write inline math as $E=mc^2$; the plugin default only accepts $$…$$.
 const math = createMathPlugin({ singleDollarTextMath: true });
@@ -59,7 +60,7 @@ function ExternalLinkModal({ isOpen, onClose, url }: LinkSafetyModalProps) {
 
   useEffect(() => {
     if (!copied) return;
-    const timeout = window.setTimeout(() => setCopied(false), 1500);
+    const timeout = window.setTimeout(() => setCopied(false), COPY_FEEDBACK_MS);
     return () => window.clearTimeout(timeout);
   }, [copied]);
 

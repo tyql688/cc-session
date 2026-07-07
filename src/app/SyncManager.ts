@@ -202,19 +202,22 @@ export function createSyncManager(callbacks: SyncCallbacks) {
 
     toastInfo(t("usage.firstUseBootstrap"));
     // The catalog fetch is a single short HTTP request but flaky networks are
-    // common; retry a couple of times before deferring to the next launch.
-    const attempts = 3;
-    for (let attempt = 1; attempt <= attempts; attempt++) {
+    // common; retry with linear backoff before deferring to the next launch.
+    const PRICING_FETCH_ATTEMPTS = 3;
+    const RETRY_BACKOFF_MS = 2000;
+    for (let attempt = 1; attempt <= PRICING_FETCH_ATTEMPTS; attempt++) {
       try {
         await refreshPricingCatalog();
         await clearUsageStats();
         return;
       } catch (error) {
-        if (attempt === attempts) {
+        if (attempt === PRICING_FETCH_ATTEMPTS) {
           toastError(`${t("usage.firstUseBootstrapFailed")}: ${String(error)}`);
           return;
         }
-        await new Promise((resolve) => setTimeout(resolve, 2000 * attempt));
+        await new Promise((resolve) =>
+          setTimeout(resolve, RETRY_BACKOFF_MS * attempt),
+        );
       }
     }
   }

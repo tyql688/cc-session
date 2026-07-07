@@ -86,10 +86,8 @@ function formatSessionLabel(raw: string, fallback = "Untitled"): string {
     }
   }
 
-  if (label.length > 40) {
-    label = `${label.slice(0, 37)}...`;
-  }
-
+  // No JS truncation: .tree-node-label ellipsizes via CSS, which adapts to
+  // the actual panel width instead of a hardcoded character count.
   return label || fallback;
 }
 
