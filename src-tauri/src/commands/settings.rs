@@ -148,18 +148,27 @@ pub async fn refresh_pricing_catalog(
     let body = serde_json::to_string(&catalog).context("failed to serialize pricing catalog")?;
     let updated_at = chrono::Utc::now().to_rfc3339();
 
-    state
-        .db
-        .set_meta(PRICING_CATALOG_JSON_KEY, &body)
-        .context("failed to store pricing catalog")?;
-    state
-        .db
-        .set_meta(PRICING_CATALOG_UPDATED_AT_KEY, &updated_at)
-        .context("failed to store pricing timestamp")?;
-    state
-        .db
-        .set_meta(PRICING_CATALOG_MODEL_COUNT_KEY, &model_count.to_string())
-        .context("failed to store pricing model count")?;
+    // DB writes can wait on the busy timeout when another instance holds the
+    // write lock — keep them off the async runtime like every other command.
+    let state = state.inner().clone();
+    let stored_updated_at = updated_at.clone();
+    tokio::task::spawn_blocking(move || -> anyhow::Result<()> {
+        state
+            .db
+            .set_meta(PRICING_CATALOG_JSON_KEY, &body)
+            .context("failed to store pricing catalog")?;
+        state
+            .db
+            .set_meta(PRICING_CATALOG_UPDATED_AT_KEY, &stored_updated_at)
+            .context("failed to store pricing timestamp")?;
+        state
+            .db
+            .set_meta(PRICING_CATALOG_MODEL_COUNT_KEY, &model_count.to_string())
+            .context("failed to store pricing model count")?;
+        Ok(())
+    })
+    .await
+    .context("task join error")??;
 
     Ok(PricingCatalogStatus {
         updated_at: Some(updated_at),

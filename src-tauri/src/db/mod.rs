@@ -86,7 +86,8 @@ impl Database {
         write_conn.execute_batch(
             "PRAGMA journal_mode = WAL;
              PRAGMA synchronous = NORMAL;
-             PRAGMA cache_size = -2000;",
+             PRAGMA cache_size = -2000;
+             PRAGMA busy_timeout = 5000;",
         )?;
 
         write_conn.execute_batch(
@@ -578,6 +579,7 @@ impl Database {
             let conn = Connection::open(&db_path)?;
             conn.pragma_update(None, "journal_mode", "WAL")?;
             conn.pragma_update(None, "query_only", "ON")?;
+            conn.pragma_update(None, "busy_timeout", 5000)?;
             read_pool.push(Mutex::new(conn));
         }
 
