@@ -24,9 +24,11 @@ export type ProcessedEntry =
     };
 
 /**
- * Search covers user + assistant dialogue only, so in-session and global search
- * stay consistent. Tool calls/results, thinking, and system messages are
- * excluded from the haystack (here) and from the highlight pass (in index.tsx).
+ * In-session search covers user + assistant dialogue only — deliberately
+ * narrower than global search (which indexes thinking and tool summaries):
+ * tool/thinking blocks render collapsed, so counting hits inside them would
+ * produce matches the highlight pass cannot show or scroll to. Cmd+F finds
+ * what is on screen; the global index digs into the rest.
  */
 export function isSearchableRole(role: MessageRole): boolean {
   return role === "user" || role === "assistant";
