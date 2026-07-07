@@ -356,6 +356,29 @@
   overflow-wrap: anywhere;
 }
 
+.session-focus-toggle {
+  height: 28px;
+  padding: 0 10px;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  background: var(--bg-secondary);
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.session-focus-toggle:hover {
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+}
+
+.session-focus-toggle.active {
+  border-color: color-mix(in srgb, var(--accent) 34%, var(--border-subtle));
+  background: var(--accent-light);
+  color: var(--accent);
+}
+
 /* In-session search bar */
 .session-search-bar {
   display: flex;

@@ -22,19 +22,27 @@ export interface CreateRoleFilterResult {
  */
 export function useRoleFilter(
   processedEntries: ProcessedEntry[],
+  focusMode: boolean,
 ): CreateRoleFilterResult {
   const [hiddenRoles, setHiddenRoles] = useState<Set<MessageRole>>(new Set());
+  const effectiveHiddenRoles = useMemo(() => {
+    if (!focusMode) return hiddenRoles;
+    const next = new Set(hiddenRoles);
+    next.add("tool");
+    next.add("system");
+    return next;
+  }, [hiddenRoles, focusMode]);
 
   // Apply role filtering
   const filteredEntries = useMemo(() => {
-    const hidden = hiddenRoles;
+    const hidden = effectiveHiddenRoles;
     if (hidden.size === 0) return processedEntries;
     return processedEntries.filter((e) => {
       if (e.type === "time-sep") return true;
       if (e.type === "merged-tools") return !hidden.has("tool");
       return !hidden.has(e.msg.role);
     });
-  }, [processedEntries, hiddenRoles]);
+  }, [processedEntries, effectiveHiddenRoles]);
 
   // Role counts for filter toolbar
   const roleCounts = useMemo(() => {
@@ -61,5 +69,10 @@ export function useRoleFilter(
     });
   }
 
-  return { hiddenRoles, roleCounts, filteredEntries, toggleRole };
+  return {
+    hiddenRoles: effectiveHiddenRoles,
+    roleCounts,
+    filteredEntries,
+    toggleRole,
+  };
 }

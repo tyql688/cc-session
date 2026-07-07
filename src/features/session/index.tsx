@@ -21,7 +21,7 @@ import { MessageBubble } from "@/features/session/MessageBubble";
 import { MergedToolRow } from "@/features/session/MergedToolRow";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { ExportDialog } from "@/features/session/ExportDialog";
-import { useTerminalApp } from "@/stores/settings";
+import { setFocusMode, useFocusMode, useTerminalApp } from "@/stores/settings";
 import { toast, toastError } from "@/stores/toast";
 import { errorMessage } from "@/lib/errors";
 import { isSearchableRole, processMessages } from "@/features/session/hooks";
@@ -63,6 +63,7 @@ export function SessionView(props: {
 }) {
   const { t } = useI18n();
   const terminalApp = useTerminalApp();
+  const focusMode = useFocusMode();
   const [messages, setMessages] = useState<Message[]>([]);
   const [outline, setOutline] = useState<SessionTurnOutlineEntry[]>([]);
   // Absolute session index of messages[0]. Owned here (not by the pagination
@@ -116,7 +117,7 @@ export function SessionView(props: {
 
   // Role-filter slice: hiddenRoles + filteredEntries + roleCounts.
   const { hiddenRoles, roleCounts, filteredEntries, toggleRole } =
-    useRoleFilter(processedEntries);
+    useRoleFilter(processedEntries, focusMode);
 
   // Virtualized-scrolling slice: renders only the on-screen rows, pages
   // older messages in from the backend as the viewport nears the top.
@@ -436,6 +437,14 @@ export function SessionView(props: {
 
       {/* Filter toolbar — only show roles that have messages */}
       <div className="flex items-center gap-1 border-b border-border-subtle px-5 py-1.5">
+        <button
+          type="button"
+          className={`session-focus-toggle${focusMode ? " active" : ""}`}
+          aria-pressed={focusMode}
+          onClick={() => setFocusMode(!focusMode)}
+        >
+          {t("session.focus")}
+        </button>
         <ToggleGroup
           multiple
           size="sm"
@@ -465,6 +474,7 @@ export function SessionView(props: {
                 key={role}
                 value={role}
                 className={`gap-1.5 text-muted-foreground ${ROLE_TOGGLE_COLORS[role]}`}
+                disabled={focusMode && (role === "tool" || role === "system")}
               >
                 {role === "user"
                   ? t("session.filterUser")

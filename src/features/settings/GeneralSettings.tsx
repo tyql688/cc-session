@@ -15,6 +15,8 @@ import {
   setTerminalApp,
   useShowOrphans,
   setShowOrphans,
+  useFocusMode,
+  setFocusMode,
 } from "@/stores/settings";
 import type { TerminalApp } from "@/stores/settings";
 import { isMac, isWindows } from "@/lib/platform";
@@ -53,6 +55,7 @@ export function GeneralSettings() {
   const theme = useTheme();
   const terminalApp = useTerminalApp();
   const showOrphans = useShowOrphans();
+  const focusMode = useFocusMode();
 
   const themeLabel: Record<Theme, string> = {
     light: t("settings.themeLight"),
@@ -148,6 +151,17 @@ export function GeneralSettings() {
         <Switch
           checked={showOrphans}
           onCheckedChange={(checked) => setShowOrphans(checked)}
+        />
+      </div>
+
+      <div className="settings-row">
+        <div>
+          <div className="settings-label">{t("settings.focusMode")}</div>
+          <div className="settings-desc">{t("settings.focusModeDesc")}</div>
+        </div>
+        <Switch
+          checked={focusMode}
+          onCheckedChange={(checked) => setFocusMode(checked)}
         />
       </div>
     </div>

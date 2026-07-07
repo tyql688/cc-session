@@ -142,6 +142,7 @@ interface SettingsState {
   disabledProviders: Provider[];
   disabledProvidersError: string | null;
   showOrphans: boolean;
+  focusMode: boolean;
   explorerGrouping: ExplorerGrouping;
   blockedFolders: string[];
   blockedFoldersError: string | null;
@@ -152,6 +153,7 @@ const useSettingsStore = create<SettingsState>(() => ({
   disabledProviders: initialDisabledProviders.value,
   disabledProvidersError: initialDisabledProviders.error,
   showOrphans: readStorage("cc-session-show-orphans") !== "false",
+  focusMode: readStorage("cc-session-focus-mode") === "true",
   explorerGrouping: readStoredExplorerGrouping(),
   blockedFolders: initialBlockedFolders.value,
   blockedFoldersError: initialBlockedFolders.error,
@@ -189,6 +191,11 @@ export function toggleProvider(id: Provider) {
 export function setShowOrphans(v: boolean) {
   useSettingsStore.setState({ showOrphans: v });
   writeStorage("cc-session-show-orphans", String(v));
+}
+
+export function setFocusMode(v: boolean) {
+  useSettingsStore.setState({ focusMode: v });
+  writeStorage("cc-session-focus-mode", String(v));
 }
 
 export function setExplorerGrouping(mode: ExplorerGrouping) {
@@ -236,6 +243,7 @@ export const useDisabledProviders = () =>
 export const useDisabledProvidersError = () =>
   useSettingsStore((s) => s.disabledProvidersError);
 export const useShowOrphans = () => useSettingsStore((s) => s.showOrphans);
+export const useFocusMode = () => useSettingsStore((s) => s.focusMode);
 export const useExplorerGrouping = () =>
   useSettingsStore((s) => s.explorerGrouping);
 export const useBlockedFolders = () =>
