@@ -1,6 +1,7 @@
 mod parser;
 
-use parser::{build_assistant_messages, build_user_messages, ms_to_rfc3339};
+use crate::provider_utils::epoch_ms_to_rfc3339;
+use parser::{build_assistant_messages, build_user_messages};
 
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -270,7 +271,7 @@ impl SessionProvider for OpenCodeProvider {
                     cache_read_input_tokens: cache_read.unwrap_or(0) as u32,
                     cache_creation_input_tokens: cache_write.unwrap_or(0) as u32,
                 };
-                let timestamp = time_created.and_then(ms_to_rfc3339);
+                let timestamp = time_created.and_then(epoch_ms_to_rfc3339);
                 usage_map.entry(sid).or_default().push(UsageEntry {
                     model,
                     usage,
@@ -414,7 +415,9 @@ impl SessionProvider for OpenCodeProvider {
                         messages: usage_entries
                             .into_iter()
                             .map(|entry| Message {
-                                timestamp: entry.timestamp.or_else(|| ms_to_rfc3339(time_updated)),
+                                timestamp: entry
+                                    .timestamp
+                                    .or_else(|| epoch_ms_to_rfc3339(time_updated)),
                                 token_usage: Some(entry.usage),
                                 model: entry.model,
                                 usage_hash: entry.usage_hash,
@@ -526,7 +529,7 @@ impl SessionProvider for OpenCodeProvider {
                 .get("time")
                 .and_then(|t| t.get("created"))
                 .and_then(|c| c.as_i64())
-                .and_then(ms_to_rfc3339);
+                .and_then(epoch_ms_to_rfc3339);
 
             let parts = parts_by_msg.get(msg_id).cloned().unwrap_or_default();
 

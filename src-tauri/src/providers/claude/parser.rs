@@ -1,6 +1,7 @@
 use std::collections::{HashMap, HashSet};
 use std::fs::{self, File};
 use std::io::{BufRead, BufReader};
+use std::ops::ControlFlow;
 use std::path::{Path, PathBuf};
 
 use serde_json::Value;
@@ -127,174 +128,151 @@ enum ScanOutcome {
 /// `flush_pending*` calls so both the full-file and tail-only parsers
 /// can reuse the same dispatch logic.
 fn scan_jsonl_lines<R: BufRead>(reader: R, path: &Path, accum: &mut ScanAccum) -> ScanOutcome {
-    let mut line_index: usize = 0;
-    for line in reader.lines() {
-        // Cooperative cancellation: bail out fast when the user navigated
-        // away mid-load. Checked every 1024 lines so the polling cost is
-        // negligible for normal-size sessions.
-        line_index = line_index.wrapping_add(1);
-        if line_index.is_multiple_of(1024) && crate::services::load_cancel::is_canceled() {
-            log::debug!(
-                "Claude parse canceled at line {line_index} of '{}'",
-                path.display()
-            );
-            return ScanOutcome::Canceled;
-        }
-
-        let line = match line {
-            Ok(l) => l,
-            Err(error) => {
-                log::warn!(
-                    "failed to read Claude session line from '{}': {error}",
+    let stats =
+        crate::provider_utils::for_each_jsonl_record(reader, path, |line_no, entry: Value| {
+            // Cooperative cancellation: bail out fast when the user navigated
+            // away mid-load. Checked every 1024 lines so the polling cost is
+            // negligible for normal-size sessions.
+            if line_no.is_multiple_of(1024) && crate::services::load_cancel::is_canceled() {
+                log::debug!(
+                    "Claude parse canceled at line {line_no} of '{}'",
                     path.display()
                 );
-                continue;
+                return ControlFlow::Break(());
             }
-        };
-        if line.trim().is_empty() {
-            continue;
-        }
 
-        let entry: Value = match serde_json::from_str(&line) {
-            Ok(e) => e,
-            Err(e) => {
-                log::warn!("skipping malformed JSONL in '{}': {e}", path.display());
-                accum.state.parse_warning_count = accum.state.parse_warning_count.saturating_add(1);
-                continue;
-            }
-        };
-
-        if let Some(dedup_hash) = dedup_hash_from_entry(&entry) {
-            if !accum.processed_hashes.insert(dedup_hash) {
-                continue;
-            }
-        }
-
-        let line_type = match entry.get("type").and_then(|t| t.as_str()) {
-            Some(t) => t.to_string(),
-            None => continue,
-        };
-
-        if accum.cwd.is_none() {
-            if let Some(c) = entry.get("cwd").and_then(|c| c.as_str()) {
-                if !c.is_empty() {
-                    accum.cwd = Some(c.to_string());
+            if let Some(dedup_hash) = dedup_hash_from_entry(&entry) {
+                if !accum.processed_hashes.insert(dedup_hash) {
+                    return ControlFlow::Continue(());
                 }
             }
-        }
 
-        if !accum.is_sidechain
-            && entry
-                .get("isSidechain")
-                .and_then(|v| v.as_bool())
-                .unwrap_or(false)
-        {
-            accum.is_sidechain = true;
-        }
+            let line_type = match entry.get("type").and_then(|t| t.as_str()) {
+                Some(t) => t.to_string(),
+                None => return ControlFlow::Continue(()),
+            };
 
-        if accum.cc_version.is_none() {
-            if let Some(v) = entry.get("version").and_then(|v| v.as_str()) {
-                if !v.is_empty() {
-                    accum.cc_version = Some(v.to_string());
+            if accum.cwd.is_none() {
+                if let Some(c) = entry.get("cwd").and_then(|c| c.as_str()) {
+                    if !c.is_empty() {
+                        accum.cwd = Some(c.to_string());
+                    }
                 }
             }
-        }
 
-        if accum.git_branch.is_none() {
-            if let Some(b) = entry.get("gitBranch").and_then(|b| b.as_str()) {
-                if !b.is_empty() && b != "HEAD" {
-                    accum.git_branch = Some(b.to_string());
+            if !accum.is_sidechain
+                && entry
+                    .get("isSidechain")
+                    .and_then(|v| v.as_bool())
+                    .unwrap_or(false)
+            {
+                accum.is_sidechain = true;
+            }
+
+            if accum.cc_version.is_none() {
+                if let Some(v) = entry.get("version").and_then(|v| v.as_str()) {
+                    if !v.is_empty() {
+                        accum.cc_version = Some(v.to_string());
+                    }
                 }
             }
-        }
 
-        if let Some(ts) = entry.get("timestamp").and_then(|t| t.as_str()) {
-            if accum.first_timestamp.is_none() {
-                accum.first_timestamp = Some(ts.to_string());
+            if accum.git_branch.is_none() {
+                if let Some(b) = entry.get("gitBranch").and_then(|b| b.as_str()) {
+                    if !b.is_empty() && b != "HEAD" {
+                        accum.git_branch = Some(b.to_string());
+                    }
+                }
             }
-            accum.last_timestamp = Some(ts.to_string());
-        }
 
-        let timestamp = entry
-            .get("timestamp")
-            .and_then(|t| t.as_str())
-            .map(std::string::ToString::to_string);
-
-        match line_type.as_str() {
-            "user" => {
-                handle_user_message(&entry, &mut accum.state, timestamp);
+            if let Some(ts) = entry.get("timestamp").and_then(|t| t.as_str()) {
+                if accum.first_timestamp.is_none() {
+                    accum.first_timestamp = Some(ts.to_string());
+                }
+                accum.last_timestamp = Some(ts.to_string());
             }
-            "assistant" => {
-                if accum.model.is_none() {
-                    if let Some(m) = entry
-                        .get("message")
-                        .and_then(|msg| msg.get("model"))
-                        .and_then(|m| m.as_str())
-                    {
-                        if !m.is_empty() {
-                            accum.model = Some(m.to_string());
+
+            let timestamp = entry
+                .get("timestamp")
+                .and_then(|t| t.as_str())
+                .map(std::string::ToString::to_string);
+
+            match line_type.as_str() {
+                "user" => {
+                    handle_user_message(&entry, &mut accum.state, timestamp);
+                }
+                "assistant" => {
+                    if accum.model.is_none() {
+                        if let Some(m) = entry
+                            .get("message")
+                            .and_then(|msg| msg.get("model"))
+                            .and_then(|m| m.as_str())
+                        {
+                            if !m.is_empty() {
+                                accum.model = Some(m.to_string());
+                            }
+                        }
+                    }
+                    handle_assistant_message(&entry, &mut accum.state, timestamp);
+                }
+                "summary" => {
+                    handle_summary(&entry, &mut accum.summary_text, &mut accum.state);
+                }
+                "system" => {
+                    handle_system_message(&entry, &mut accum.state, timestamp);
+                }
+                "custom-title" => {
+                    flush_pending(&mut accum.state);
+                    if let Some(t) = entry.get("title").and_then(|t| t.as_str()) {
+                        if !t.trim().is_empty() {
+                            accum.custom_title = Some(t.to_string());
                         }
                     }
                 }
-                handle_assistant_message(&entry, &mut accum.state, timestamp);
-            }
-            "summary" => {
-                handle_summary(&entry, &mut accum.summary_text, &mut accum.state);
-                continue;
-            }
-            "system" => {
-                handle_system_message(&entry, &mut accum.state, timestamp);
-            }
-            "custom-title" => {
-                flush_pending(&mut accum.state);
-                if let Some(t) = entry.get("title").and_then(|t| t.as_str()) {
-                    if !t.trim().is_empty() {
-                        accum.custom_title = Some(t.to_string());
+                "ai-title" => {
+                    flush_pending(&mut accum.state);
+                    if let Some(t) = entry.get("title").and_then(|t| t.as_str()) {
+                        if !t.trim().is_empty() {
+                            accum.ai_title = Some(t.to_string());
+                        }
                     }
                 }
-                continue;
-            }
-            "ai-title" => {
-                flush_pending(&mut accum.state);
-                if let Some(t) = entry.get("title").and_then(|t| t.as_str()) {
-                    if !t.trim().is_empty() {
-                        accum.ai_title = Some(t.to_string());
+                "agent-name" => {
+                    if let Some(name) = entry
+                        .get("agentName")
+                        .or_else(|| entry.get("name"))
+                        .or_else(|| entry.get("title"))
+                        .and_then(|v| v.as_str())
+                        .filter(|s| !s.trim().is_empty())
+                    {
+                        accum.agent_name = Some(name.to_string());
                     }
                 }
-                continue;
-            }
-            "agent-name" => {
-                if let Some(name) = entry
-                    .get("agentName")
-                    .or_else(|| entry.get("name"))
-                    .or_else(|| entry.get("title"))
-                    .and_then(|v| v.as_str())
-                    .filter(|s| !s.trim().is_empty())
-                {
-                    accum.agent_name = Some(name.to_string());
+                "pr-link" => {
+                    flush_pending(&mut accum.state);
+                    handle_pr_link(&entry, &mut accum.state, timestamp);
                 }
-                continue;
-            }
-            "pr-link" => {
-                flush_pending(&mut accum.state);
-                handle_pr_link(&entry, &mut accum.state, timestamp);
-                continue;
-            }
-            "mode" => {
-                handle_mode(&entry, accum, timestamp);
-                continue;
-            }
-            _ => {
-                if preserves_pending_user_message(line_type.as_str()) {
-                    continue;
+                "mode" => {
+                    handle_mode(&entry, accum, timestamp);
                 }
-                flush_pending(&mut accum.state);
-                continue;
+                _ => {
+                    if !preserves_pending_user_message(line_type.as_str()) {
+                        flush_pending(&mut accum.state);
+                    }
+                }
             }
-        }
-    }
+            ControlFlow::Continue(())
+        });
 
-    ScanOutcome::Completed
+    accum.state.parse_warning_count = accum
+        .state
+        .parse_warning_count
+        .saturating_add(stats.parse_error_count);
+    if stats.stopped_early {
+        ScanOutcome::Canceled
+    } else {
+        ScanOutcome::Completed
+    }
 }
 
 /// Extract parent session ID from subagent path.

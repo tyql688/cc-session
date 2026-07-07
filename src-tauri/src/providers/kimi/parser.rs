@@ -48,50 +48,20 @@ pub(crate) use index::SessionIndex;
 /// `metadata.created_at` is also epoch milliseconds. We treat both
 /// uniformly: convert to (epoch_seconds, rfc3339_string).
 fn time_ms_to_parts(ms: i64) -> (i64, String) {
-    let secs = ms.div_euclid(1000);
-    let nanos = (ms.rem_euclid(1000) * 1_000_000) as u32;
-    let rfc = chrono::DateTime::from_timestamp(secs, nanos)
-        .map(|dt| dt.to_rfc3339())
-        .unwrap_or_default();
-    (secs, rfc)
-}
-
-/// Parse ISO-8601 (e.g. state.json's `createdAt`) into epoch seconds.
-fn iso_to_epoch_secs(iso: &str) -> Option<i64> {
-    chrono::DateTime::parse_from_rfc3339(iso)
-        .ok()
-        .map(|dt| dt.timestamp())
+    let rfc = crate::provider_utils::epoch_ms_to_rfc3339(ms).unwrap_or_default();
+    (ms.div_euclid(1000), rfc)
 }
 
 fn scan_lines<R: BufRead>(reader: R, path: &Path, accum: &mut ScanAccum) {
-    for line in reader.lines() {
-        let line = match line {
-            Ok(l) => l,
-            Err(error) => {
-                log::warn!(
-                    "failed to read Kimi wire.jsonl line from '{}': {error}",
-                    path.display()
-                );
-                accum.note_warning();
-                continue;
-            }
-        };
-        if line.trim().is_empty() {
-            continue;
-        }
-        let entry: Value = match serde_json::from_str(&line) {
-            Ok(v) => v,
-            Err(error) => {
-                log::warn!(
-                    "skipping malformed Kimi wire.jsonl line in '{}': {error}",
-                    path.display()
-                );
-                accum.note_warning();
-                continue;
-            }
-        };
+    let stats = crate::provider_utils::for_each_jsonl_record(reader, path, |_, entry: Value| {
         dispatch_line(accum, &entry);
-    }
+        std::ops::ControlFlow::Continue(())
+    });
+    accum.note_warnings(
+        stats
+            .read_error_count
+            .saturating_add(stats.parse_error_count),
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -204,8 +174,14 @@ pub(crate) fn parse_session(path: &Path, index: &SessionIndex) -> Option<ParsedS
         .unwrap_or_else(|| NO_PROJECT.to_string());
     let project_name = project_name_from_path(&project_path);
 
-    let state_created = state.created_at.as_deref().and_then(iso_to_epoch_secs);
-    let state_updated = state.updated_at.as_deref().and_then(iso_to_epoch_secs);
+    let state_created = state
+        .created_at
+        .as_deref()
+        .and_then(crate::provider_utils::parse_rfc3339_epoch_seconds);
+    let state_updated = state
+        .updated_at
+        .as_deref()
+        .and_then(crate::provider_utils::parse_rfc3339_epoch_seconds);
 
     let Some(created_at) = accum.first_time_secs.or(state_created) else {
         log::warn!(

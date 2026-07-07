@@ -510,6 +510,34 @@ impl Database {
             ))?;
         }
 
+        // Migration: the FTS content text now also indexes thinking excerpts
+        // and tool call summaries (see db/sync.rs::indexable_content_text).
+        // `content_text` is only rewritten when a session is re-parsed, so
+        // invalidate every freshness snapshot to force a full reindex; the
+        // FTS triggers propagate the richer text into sessions_fts.
+        // Bump CONTENT_INDEX_VERSION whenever indexable_content_text changes
+        // what it emits.
+        const CONTENT_INDEX_VERSION: &str = "thinking_tool_text_v1";
+        let current_content_index_version: Option<String> = {
+            let mut stmt =
+                write_conn.prepare("SELECT value FROM meta WHERE key = 'content_index_version'")?;
+            stmt.query_row([], |row| row.get(0)).ok()
+        };
+        if current_content_index_version.as_deref() != Some(CONTENT_INDEX_VERSION) {
+            let invalidated_rows =
+                write_conn.execute("UPDATE sessions SET source_mtime = 0", [])?;
+            if invalidated_rows > 0 {
+                log::info!(
+                    "invalidated {invalidated_rows} source snapshots to rebuild search index with thinking/tool content"
+                );
+            }
+            write_conn.execute_batch(&format!(
+                "INSERT INTO meta (key, value)
+                     VALUES ('content_index_version', '{CONTENT_INDEX_VERSION}')
+                 ON CONFLICT(key) DO UPDATE SET value = excluded.value;",
+            ))?;
+        }
+
         let supported_provider_keys: Vec<&str> = crate::models::Provider::all()
             .iter()
             .map(|p| p.key())

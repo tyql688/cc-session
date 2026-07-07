@@ -22,7 +22,7 @@ pub(crate) fn parse_session_file(path: &Path) -> Option<ParsedSession> {
     let (input_tokens, output_tokens, cache_read_tokens, cache_write_tokens) =
         extract_token_totals(&entries, &active_branch);
 
-    let created_at = match parse_rfc3339_epoch_seconds(&header.timestamp) {
+    let created_at = match crate::provider_utils::parse_rfc3339_epoch_seconds(&header.timestamp) {
         Some(ts) => ts,
         None => {
             log::warn!(
@@ -98,13 +98,12 @@ fn parse_entries(path: &Path) -> Option<(PiSessionHeader, Vec<PiEntry>, u32)> {
             return None;
         }
     };
-    let lines: Vec<&str> = content.lines().collect();
-
-    if lines.is_empty() {
+    if content.trim().is_empty() {
         return None;
     }
+    let (header_line, entry_lines) = content.split_once('\n').unwrap_or((content.as_str(), ""));
 
-    let mut header_value: Value = match serde_json::from_str(lines.first()?) {
+    let mut header_value: Value = match serde_json::from_str(header_line) {
         Ok(header) => header,
         Err(error) => {
             log::warn!(
@@ -140,20 +139,18 @@ fn parse_entries(path: &Path) -> Option<(PiSessionHeader, Vec<PiEntry>, u32)> {
         }
     };
     let mut entry_values = Vec::new();
-    let mut parse_warning_count = 0u32;
-    for (i, line) in lines.iter().enumerate().skip(1) {
-        match serde_json::from_str::<Value>(line) {
-            Ok(value) => entry_values.push(value),
-            Err(error) => {
-                parse_warning_count = parse_warning_count.saturating_add(1);
-                log::warn!(
-                    "Failed to parse Pi session entry JSON at line {} in '{}': {error}",
-                    i + 1,
-                    path.display()
-                );
-            }
-        }
-    }
+    let stats = crate::provider_utils::for_each_jsonl_record_from(
+        std::io::Cursor::new(entry_lines),
+        path,
+        2,
+        |_, value: Value| {
+            entry_values.push(value);
+            std::ops::ControlFlow::Continue(())
+        },
+    );
+    let mut parse_warning_count = stats
+        .read_error_count
+        .saturating_add(stats.parse_error_count);
     migrate_pi_entry_values(&mut entry_values, original_version);
 
     let mut entries: Vec<PiEntry> = Vec::new();
@@ -564,16 +561,9 @@ fn get_entry_parent_id(entry: &PiEntry) -> Option<String> {
     }
 }
 
-/// Parse ISO timestamp to Unix seconds for SessionMeta fields.
-fn parse_rfc3339_epoch_seconds(ts: &str) -> Option<i64> {
-    DateTime::parse_from_rfc3339(ts)
-        .ok()
-        .map(|dt| dt.timestamp())
-}
-
 fn parse_millis_datetime(timestamp_millis: u64) -> Option<DateTime<Utc>> {
     let timestamp_millis = i64::try_from(timestamp_millis).ok()?;
-    DateTime::<Utc>::from_timestamp_millis(timestamp_millis)
+    crate::provider_utils::epoch_ms_to_datetime(timestamp_millis)
 }
 
 fn parse_millis_epoch_seconds(timestamp_millis: u64) -> Option<i64> {

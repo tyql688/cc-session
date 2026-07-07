@@ -487,65 +487,123 @@ fn upsert_does_not_relink_when_child_already_has_parent() {
     assert_eq!(loaded.parent_id, Some(true_parent.to_string()));
 }
 
-#[test]
-fn indexable_content_indexes_only_user_and_assistant() {
-    use crate::models::{Message, MessageRole};
-
-    fn msg(
-        role: MessageRole,
-        content: &str,
-        tool_name: Option<&str>,
-        tool_input: Option<&str>,
-    ) -> Message {
-        Message {
-            role,
-            message_kind: None,
-            content: content.to_string(),
-            timestamp: None,
-            tool_name: tool_name.map(str::to_string),
-            tool_input: tool_input.map(str::to_string),
-            tool_metadata: None,
-            token_usage: None,
-            model: None,
-            usage_hash: None,
-        }
+fn indexable_msg(
+    role: crate::models::MessageRole,
+    content: &str,
+    tool_name: Option<&str>,
+    tool_input: Option<&str>,
+) -> crate::models::Message {
+    crate::models::Message {
+        tool_name: tool_name.map(str::to_string),
+        tool_input: tool_input.map(str::to_string),
+        ..crate::models::Message::new(role, content)
     }
+}
+
+#[test]
+fn indexable_content_indexes_dialogue_thinking_and_tools() {
+    use crate::models::MessageRole;
 
     let messages = vec![
-        msg(MessageRole::User, "用户问题", None, None),
-        msg(
-            MessageRole::Assistant,
-            "助手回复",
+        indexable_msg(MessageRole::User, "用户问题", None, None),
+        indexable_msg(MessageRole::Assistant, "助手回复", None, None),
+        indexable_msg(
+            MessageRole::Tool,
+            "工具输出里有中文命中",
             Some("Bash"),
-            Some("grep 配置 src/"),
+            Some(r#"{"command":"grep 配置 src/"}"#),
         ),
-        msg(MessageRole::Tool, "工具输出里有中文命中", None, None),
-        msg(
+        indexable_msg(
             MessageRole::System,
             "[thinking]\n模型在思考问题",
             None,
             None,
         ),
+        indexable_msg(MessageRole::System, "普通系统消息不索引", None, None),
     ];
 
     let text = super::indexable_content_text(&messages, "fallback");
-    // Only user + assistant dialogue is indexed.
     assert!(text.contains("用户问题"));
     assert!(text.contains("助手回复"));
-    // Tool name/input, tool result bodies, thinking, and system are excluded.
-    assert!(!text.contains("Bash"), "tool name must NOT be indexed");
+    // Tool name, input summary, and result body are now indexed.
+    assert!(text.contains("Bash"), "tool name must be indexed");
+    assert!(text.contains("grep 配置"), "tool input must be indexed");
     assert!(
-        !text.contains("grep 配置"),
-        "tool input must NOT be indexed"
+        text.contains("工具输出里有中文命中"),
+        "tool result body must be indexed"
     );
+    // Thinking is indexed with its prefix stripped.
+    assert!(text.contains("模型在思考问题"), "thinking must be indexed");
     assert!(
-        !text.contains("工具输出"),
-        "tool result body must NOT be indexed"
+        !text.contains("[thinking]"),
+        "thinking prefix must be stripped"
     );
-    assert!(
-        !text.contains("模型在思考"),
-        "thinking text must NOT be indexed"
-    );
+    // Plain (non-thinking) system messages stay excluded.
+    assert!(!text.contains("普通系统消息不索引"));
+    assert!(!text.contains("fallback"));
+}
+
+#[test]
+fn indexable_content_truncates_thinking_at_char_boundary() {
+    use crate::models::MessageRole;
+
+    // 1200 multi-byte chars: byte-based truncation at 1000 would panic or
+    // split a character; char-based keeps exactly 1000 chars.
+    let thinking_body: String = "思".repeat(1200);
+    let messages = vec![indexable_msg(
+        MessageRole::System,
+        &format!("[thinking]\n{thinking_body}"),
+        None,
+        None,
+    )];
+
+    let text = super::indexable_content_text(&messages, "");
+    assert_eq!(text.chars().count(), 1000);
+    assert!(text.chars().all(|c| c == '思'));
+}
+
+#[test]
+fn indexable_content_truncates_tool_input_and_output() {
+    use crate::models::MessageRole;
+
+    let long_input = format!(r#"{{"text":"{}"}}"#, "多".repeat(400));
+    let long_output = "出".repeat(400);
+    let messages = vec![indexable_msg(
+        MessageRole::Tool,
+        &long_output,
+        Some("Write"),
+        Some(&long_input),
+    )];
+
+    let text = super::indexable_content_text(&messages, "");
+    let lines: Vec<&str> = text.lines().collect();
+    assert_eq!(lines[0], "Write");
+    assert_eq!(lines[1].chars().count(), 300, "tool input capped at 300");
+    assert_eq!(lines[2].chars().count(), 300, "tool output capped at 300");
+}
+
+#[test]
+fn indexable_content_falls_back_when_nothing_indexable() {
+    use crate::models::MessageRole;
+
+    let messages = vec![indexable_msg(
+        MessageRole::System,
+        "plain system",
+        None,
+        None,
+    )];
+    let text = super::indexable_content_text(&messages, "provider text");
+    assert_eq!(text, "provider text");
+}
+
+#[test]
+fn truncate_chars_is_multibyte_safe_at_boundary() {
+    // "a✓" repeated: boundary falls between 1- and 3-byte chars.
+    let mixed: String = "a✓".repeat(10);
+    assert_eq!(super::truncate_chars(&mixed, 3), "a✓a");
+    assert_eq!(super::truncate_chars(&mixed, 20), mixed.as_str());
+    assert_eq!(super::truncate_chars(&mixed, 21), mixed.as_str());
+    assert_eq!(super::truncate_chars("", 5), "");
 }
 
 #[test]

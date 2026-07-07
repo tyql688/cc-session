@@ -286,7 +286,11 @@ impl ScanAccum {
     }
 
     pub(super) fn note_warning(&mut self) {
-        self.parse_warning_count = self.parse_warning_count.saturating_add(1);
+        self.note_warnings(1);
+    }
+
+    pub(super) fn note_warnings(&mut self, count: u32) {
+        self.parse_warning_count = self.parse_warning_count.saturating_add(count);
     }
 }
 
@@ -808,26 +812,28 @@ fn value_to_id_string(value: &Value) -> Option<String> {
 }
 
 fn parse_usage(value: &Value) -> Option<TokenUsage> {
-    let input_other = value
-        .get("inputOther")
-        .and_then(|v| v.as_u64())
-        .unwrap_or(0) as u32;
-    let output = value.get("output").and_then(|v| v.as_u64()).unwrap_or(0) as u32;
-    let cache_read = value
-        .get("inputCacheRead")
-        .and_then(|v| v.as_u64())
-        .unwrap_or(0) as u32;
-    let cache_creation = value
-        .get("inputCacheCreation")
-        .and_then(|v| v.as_u64())
-        .unwrap_or(0) as u32;
-    if input_other == 0 && output == 0 && cache_read == 0 && cache_creation == 0 {
+    let usage = crate::provider_utils::token_usage_from(
+        value,
+        &crate::provider_utils::UsageKeys {
+            input: &["inputOther"],
+            output: &["output"],
+            cache_read: &["inputCacheRead"],
+            cache_write: &["inputCacheCreation"],
+        },
+    )?;
+    if usage.input_tokens == 0
+        && usage.output_tokens == 0
+        && usage.cache_read_input_tokens == 0
+        && usage.cache_creation_input_tokens == 0
+    {
         return None;
     }
+    // Kimi reports cache reads/writes separately from `inputOther`; the
+    // canonical input_tokens field carries the combined prompt size.
     Some(TokenUsage {
-        input_tokens: input_other + cache_read + cache_creation,
-        output_tokens: output,
-        cache_read_input_tokens: cache_read,
-        cache_creation_input_tokens: cache_creation,
+        input_tokens: usage.input_tokens
+            + usage.cache_read_input_tokens
+            + usage.cache_creation_input_tokens,
+        ..usage
     })
 }

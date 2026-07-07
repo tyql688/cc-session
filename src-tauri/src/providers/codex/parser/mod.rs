@@ -1,5 +1,6 @@
 use std::fs::{self, File};
 use std::io::{BufRead, BufReader};
+use std::ops::ControlFlow;
 use std::path::{Path, PathBuf};
 
 use crate::services::tail_reader::open_tail_reader;
@@ -114,83 +115,70 @@ impl CodexScanAccum {
     /// observes. Called by both `parse_session_file` (full-file) and
     /// `parse_session_tail` (mmap-seeked) — they share the same loop body.
     fn scan_lines<R: BufRead>(&mut self, reader: R, path: &Path) {
-        for line in reader.lines() {
-            let line = match line {
-                Ok(l) => l,
-                Err(error) => {
-                    log::warn!(
-                        "failed to read Codex session line from '{}': {error}",
-                        path.display()
-                    );
-                    continue;
-                }
-            };
-            if line.trim().is_empty() {
-                continue;
+        let stats =
+            crate::provider_utils::for_each_jsonl_record(reader, path, |_, entry: CodexLine| {
+                self.scan_line(&entry, path);
+                ControlFlow::Continue(())
+            });
+        self.parse_warning_count = self
+            .parse_warning_count
+            .saturating_add(stats.parse_error_count);
+    }
+
+    /// Per-record body of `scan_lines`, lifted so the shared JSONL iteration
+    /// helper (`provider_utils::for_each_jsonl_record`) owns the read/parse/
+    /// skip loop. Every original `continue` became a `return` — it was the
+    /// last action taken for the line, so returning advances identically.
+    fn scan_line(&mut self, entry: &CodexLine, path: &Path) {
+        if let Some(ref ts) = entry.timestamp {
+            if self.first_timestamp.is_none() {
+                self.first_timestamp = Some(ts.clone());
             }
+            self.last_timestamp = Some(ts.clone());
+        }
 
-            let entry: CodexLine = match serde_json::from_str(&line) {
-                Ok(e) => e,
-                Err(error) => {
-                    log::warn!(
-                        "skipping malformed Codex JSONL in '{}': {error}",
-                        path.display()
-                    );
-                    self.parse_warning_count = self.parse_warning_count.saturating_add(1);
-                    continue;
-                }
-            };
+        let payload = match entry.payload {
+            Some(ref p) => p,
+            None => return,
+        };
 
-            if let Some(ref ts) = entry.timestamp {
-                if self.first_timestamp.is_none() {
-                    self.first_timestamp = Some(ts.clone());
-                }
-                self.last_timestamp = Some(ts.clone());
-            }
-
-            let payload = match entry.payload {
-                Some(ref p) => p,
-                None => continue,
-            };
-
-            // Skip forked parent context in subagent files. Clear the flag on
-            // the first subagent-owned `task_started` event (its `started_at`
-            // matches the subagent session's creation time). Older transcripts
-            // don't carry that marker — fall back to the textual
-            // `newly spawned agent` cue still present in their function-call
-            // output.
-            if self.skipping_fork_context {
-                if entry.line_type == "event_msg"
-                    && payload.get("type").and_then(|v| v.as_str()) == Some("task_started")
-                {
-                    if let (Some(started_at), Some(sub_sec)) = (
-                        payload.get("started_at").and_then(|v| v.as_i64()),
-                        self.subagent_start_seconds,
-                    ) {
-                        if started_at >= sub_sec {
-                            self.skipping_fork_context = false;
-                            continue;
-                        }
-                    }
-                } else if entry.line_type == "response_item"
-                    && payload.get("type").and_then(|v| v.as_str()) == Some("function_call_output")
-                {
-                    let output = payload.get("output").and_then(|v| v.as_str()).unwrap_or("");
-                    if output.contains("newly spawned agent") {
+        // Skip forked parent context in subagent files. Clear the flag on
+        // the first subagent-owned `task_started` event (its `started_at`
+        // matches the subagent session's creation time). Older transcripts
+        // don't carry that marker — fall back to the textual
+        // `newly spawned agent` cue still present in their function-call
+        // output.
+        if self.skipping_fork_context {
+            if entry.line_type == "event_msg"
+                && payload.get("type").and_then(|v| v.as_str()) == Some("task_started")
+            {
+                if let (Some(started_at), Some(sub_sec)) = (
+                    payload.get("started_at").and_then(|v| v.as_i64()),
+                    self.subagent_start_seconds,
+                ) {
+                    if started_at >= sub_sec {
                         self.skipping_fork_context = false;
+                        return;
                     }
                 }
-                continue;
+            } else if entry.line_type == "response_item"
+                && payload.get("type").and_then(|v| v.as_str()) == Some("function_call_output")
+            {
+                let output = payload.get("output").and_then(|v| v.as_str()).unwrap_or("");
+                if output.contains("newly spawned agent") {
+                    self.skipping_fork_context = false;
+                }
             }
+            return;
+        }
 
-            match entry.line_type.as_str() {
-                "session_meta" => self.handle_session_meta(&entry, payload),
-                "compacted" => self.handle_compacted(&entry, payload),
-                "response_item" => self.handle_response_item(&entry, payload, path),
-                "turn_context" => self.handle_turn_context(payload),
-                "event_msg" => self.handle_event_msg(&entry, payload, path),
-                _ => continue,
-            }
+        match entry.line_type.as_str() {
+            "session_meta" => self.handle_session_meta(entry, payload),
+            "compacted" => self.handle_compacted(entry, payload),
+            "response_item" => self.handle_response_item(entry, payload, path),
+            "turn_context" => self.handle_turn_context(payload),
+            "event_msg" => self.handle_event_msg(entry, payload, path),
+            _ => {}
         }
     }
 

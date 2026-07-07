@@ -7,19 +7,73 @@ use crate::provider::ParsedSession;
 
 use super::Database;
 
-/// Build the FTS content text from typed messages — user + assistant dialogue
-/// only, so global search matches what was actually said. Tool calls/results,
-/// thinking, and system messages are intentionally excluded, keeping global
-/// search consistent with in-session search (see hooks.ts `isSearchableRole`).
-/// Falls back to the provider-supplied content_text when messages carry no real
-/// content (e.g. OpenCode emits Assistant stubs only for token accounting).
+/// Prefix marking thinking content stored as `MessageRole::System`.
+const THINKING_PREFIX: &str = "[thinking]";
+/// Max chars of each thinking block indexed for search.
+const THINKING_INDEX_CHARS: usize = 1000;
+/// Max chars of a tool's input summary / result content indexed for search.
+const TOOL_INDEX_CHARS: usize = 300;
+
+/// Truncate to at most `max_chars` characters on a char boundary (never
+/// slices inside a multi-byte character).
+fn truncate_chars(text: &str, max_chars: usize) -> &str {
+    match text.char_indices().nth(max_chars) {
+        Some((byte_index, _)) => &text[..byte_index],
+        None => text,
+    }
+}
+
+/// Build the FTS content text from typed messages: full user + assistant
+/// dialogue, plus truncated excerpts of thinking blocks (`[thinking]`-prefixed
+/// System messages) and tool calls (tool name + compact input summary + result
+/// snippet), so global search also reaches tool activity and reasoning.
+/// Falls back to the provider-supplied content_text when messages carry no
+/// indexable content (e.g. OpenCode emits Assistant stubs only for token
+/// accounting).
 fn indexable_content_text(messages: &[Message], fallback: &str) -> String {
-    let parts: Vec<&str> = messages
-        .iter()
-        .filter(|m| matches!(m.role, MessageRole::User | MessageRole::Assistant))
-        .map(|m| m.content.as_str())
-        .filter(|c| !c.trim().is_empty())
-        .collect();
+    let mut parts: Vec<String> = Vec::new();
+    for message in messages {
+        match message.role {
+            MessageRole::User | MessageRole::Assistant => {
+                if !message.content.trim().is_empty() {
+                    parts.push(message.content.clone());
+                }
+            }
+            MessageRole::System => {
+                let Some(thinking) = message.content.strip_prefix(THINKING_PREFIX) else {
+                    continue;
+                };
+                let thinking = thinking.trim_start();
+                if !thinking.is_empty() {
+                    parts.push(truncate_chars(thinking, THINKING_INDEX_CHARS).to_string());
+                }
+            }
+            MessageRole::Tool => {
+                let mut piece = String::new();
+                if let Some(name) = message.tool_name.as_deref() {
+                    piece.push_str(name);
+                }
+                if let Some(input) = message.tool_input.as_deref() {
+                    if !input.trim().is_empty() {
+                        if !piece.is_empty() {
+                            piece.push('\n');
+                        }
+                        piece.push_str(truncate_chars(input, TOOL_INDEX_CHARS));
+                    }
+                }
+                let content = message.content.trim();
+                if !content.is_empty() {
+                    if !piece.is_empty() {
+                        piece.push('\n');
+                    }
+                    piece.push_str(truncate_chars(content, TOOL_INDEX_CHARS));
+                }
+                if !piece.is_empty() {
+                    parts.push(piece);
+                }
+            }
+        }
+    }
 
     if parts.is_empty() {
         return fallback.to_string();

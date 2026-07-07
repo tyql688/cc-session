@@ -136,7 +136,7 @@ fn build_tool_message(part: &serde_json::Value, msg_id: &str, timestamp: Option<
         .and_then(|s| s.get("time"))
         .and_then(|t| t.get("start"))
         .and_then(|s| s.as_i64())
-        .and_then(ms_to_rfc3339)
+        .and_then(crate::provider_utils::epoch_ms_to_rfc3339)
         .or_else(|| timestamp.map(str::to_string));
 
     Message {
@@ -181,7 +181,7 @@ pub(super) fn build_assistant_messages(
                             .get("time")
                             .and_then(|t| t.get("start"))
                             .and_then(|s| s.as_i64())
-                            .and_then(ms_to_rfc3339)
+                            .and_then(crate::provider_utils::epoch_ms_to_rfc3339)
                             .or_else(|| timestamp.map(str::to_string));
                         messages.push(Message {
                             timestamp: reasoning_ts,
@@ -293,29 +293,19 @@ pub(super) fn build_assistant_messages(
 /// Extract token usage from an assistant message's `data.tokens` JSON.
 pub(crate) fn extract_tokens(msg_json: &serde_json::Value) -> Option<TokenUsage> {
     let tokens = msg_json.get("tokens")?;
-    let input = tokens.get("input")?.as_u64()? as u32;
-    let output = tokens.get("output")?.as_u64()? as u32;
-    let cache = tokens.get("cache");
-    let cache_read = cache
-        .and_then(|c| c.get("read"))
-        .and_then(|v| v.as_u64())
-        .unwrap_or(0) as u32;
-    let cache_write = cache
-        .and_then(|c| c.get("write"))
-        .and_then(|v| v.as_u64())
-        .unwrap_or(0) as u32;
-    Some(TokenUsage {
-        input_tokens: input,
-        output_tokens: output,
-        cache_read_input_tokens: cache_read,
-        cache_creation_input_tokens: cache_write,
-    })
-}
-
-/// Convert epoch milliseconds to RFC3339 timestamp string.
-pub(crate) fn ms_to_rfc3339(ms: i64) -> Option<String> {
-    chrono::DateTime::from_timestamp(ms / 1000, ((ms % 1000) * 1_000_000) as u32)
-        .map(|dt| dt.to_rfc3339())
+    // `input`/`output` are required — a tokens object missing either is
+    // malformed and yields no usage rather than fabricated zeros.
+    tokens.get("input").and_then(|v| v.as_u64())?;
+    tokens.get("output").and_then(|v| v.as_u64())?;
+    crate::provider_utils::token_usage_from(
+        tokens,
+        &crate::provider_utils::UsageKeys {
+            input: &["input"],
+            output: &["output"],
+            cache_read: &["cache.read"],
+            cache_write: &["cache.write"],
+        },
+    )
 }
 
 #[cfg(test)]

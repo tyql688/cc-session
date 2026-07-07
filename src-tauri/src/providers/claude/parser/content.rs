@@ -61,32 +61,19 @@ pub(super) fn dedup_hash_from_entry(entry: &Value) -> Option<String> {
 
 /// Extract token usage from a message's `usage` field.
 pub(super) fn extract_token_usage(message: &Value) -> Option<TokenUsage> {
-    let usage = message.get("usage")?;
-    let input_tokens = usage
-        .get("input_tokens")
-        .and_then(|v| v.as_u64())
-        .unwrap_or(0) as u32;
-    let output_tokens = usage
-        .get("output_tokens")
-        .and_then(|v| v.as_u64())
-        .unwrap_or(0) as u32;
-    let cache_creation_input_tokens = usage
-        .get("cache_creation_input_tokens")
-        .and_then(|v| v.as_u64())
-        .unwrap_or(0) as u32;
-    let cache_read_input_tokens = usage
-        .get("cache_read_input_tokens")
-        .and_then(|v| v.as_u64())
-        .unwrap_or(0) as u32;
-    if input_tokens == 0 && output_tokens == 0 {
+    let usage = crate::provider_utils::token_usage_from(
+        message.get("usage")?,
+        &crate::provider_utils::UsageKeys {
+            input: &["input_tokens"],
+            output: &["output_tokens"],
+            cache_read: &["cache_read_input_tokens"],
+            cache_write: &["cache_creation_input_tokens"],
+        },
+    )?;
+    if usage.input_tokens == 0 && usage.output_tokens == 0 {
         return None;
     }
-    Some(TokenUsage {
-        input_tokens,
-        output_tokens,
-        cache_creation_input_tokens,
-        cache_read_input_tokens,
-    })
+    Some(usage)
 }
 
 /// Extract text content from a message object.

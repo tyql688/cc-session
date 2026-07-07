@@ -155,29 +155,11 @@ fn scan_antigravity_lines<R: BufRead>(
     conversation_id: &str,
     accum: &mut AntigravityScanAccum,
 ) {
-    for (line_idx, line) in reader.lines().enumerate() {
-        let line_str = match line {
-            Ok(s) => s,
-            Err(_) => {
-                accum.parse_warning_count += 1;
-                continue;
-            }
-        };
-        if line_str.trim().is_empty() {
-            continue;
-        }
-        match serde_json::from_str::<Step>(&line_str) {
-            Ok(step) => accum.process_step(&step, conversation_id),
-            Err(e) => {
-                log::warn!(
-                    "Malformed step at line {} in {}: {e}",
-                    line_idx + 1,
-                    path.display()
-                );
-                accum.parse_warning_count += 1;
-            }
-        }
-    }
+    let stats = crate::provider_utils::for_each_jsonl_record(reader, path, |_, step: Step| {
+        accum.process_step(&step, conversation_id);
+        std::ops::ControlFlow::Continue(())
+    });
+    accum.parse_warning_count += stats.read_error_count + stats.parse_error_count;
 }
 
 /// Tail-only parse result. Mirrors `ClaudeTailResult` / `CodexTailResult`:
