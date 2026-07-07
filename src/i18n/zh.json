@@ -359,10 +359,6 @@
     "activityDayTooltip": "{date} · {value}",
     "activityLess": "少",
     "activityMore": "多",
-    "activityNoData": "暂无活跃记录",
-    "trends": "关键词趋势",
-    "trendsSubtitle": "近 90 天匹配会话数",
-    "trendsPlaceholder": "输入关键词后回车添加",
-    "trendsEmpty": "添加关键词以查看其随时间的出现趋势"
+    "activityNoData": "暂无活跃记录"
   }
 }

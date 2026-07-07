@@ -672,15 +672,3 @@ pub struct SessionCostRow {
     pub tokens: u64,
     pub cost: f64,
 }
-
-#[derive(Debug, Clone, serde::Serialize)]
-pub struct TrendPoint {
-    pub day: String,
-    pub count: u32,
-}
-
-#[derive(Debug, Clone, serde::Serialize)]
-pub struct TrendSeries {
-    pub keyword: String,
-    pub points: Vec<TrendPoint>,
-}

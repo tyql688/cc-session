@@ -359,10 +359,6 @@
     "activityDayTooltip": "{value} on {date}",
     "activityLess": "Less",
     "activityMore": "More",
-    "activityNoData": "No activity yet",
-    "trends": "Keyword Trends",
-    "trendsSubtitle": "Matching sessions, last 90 days",
-    "trendsPlaceholder": "Type a keyword and press Enter",
-    "trendsEmpty": "Add keywords to chart how often they appear over time"
+    "activityNoData": "No activity yet"
   }
 }
