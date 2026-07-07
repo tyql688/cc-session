@@ -292,6 +292,7 @@ pub fn run() {
             commands::get_child_sessions,
             commands::get_child_session_counts,
             commands::search_sessions,
+            commands::search_trends,
             commands::rename_session,
             commands::delete_session,
             commands::get_session_count,

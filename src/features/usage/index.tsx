@@ -32,6 +32,7 @@ import { Toolbar } from "@/features/usage/Toolbar";
 import { SummaryCards } from "@/features/usage/SummaryCards";
 import { ActivityHeatmap } from "@/features/usage/ActivityHeatmap";
 import { Chart } from "@/features/usage/Chart";
+import { TrendsCard } from "@/features/usage/TrendsCard";
 import { TopModels } from "@/features/usage/TopModels";
 import { ModelTable } from "@/features/usage/ModelTable";
 import { ProjectTable } from "@/features/usage/ProjectTable";
@@ -227,6 +228,8 @@ export function UsagePanel() {
                 fmtChartValue={fmtChartValue}
                 providerInfo={providerInfo}
               />
+
+              <TrendsCard />
               <TopModels
                 topModels={topModels}
                 maxTopModelCost={maxTopModelCost}

@@ -2,10 +2,13 @@ use std::collections::HashMap;
 
 use rusqlite::params;
 
-use crate::models::{SearchFilters, SearchResult, SessionMeta, TokenTotals};
+use crate::models::{SearchFilters, SearchResult, SessionMeta, TokenTotals, TrendPoint, TrendSeries};
 
 use super::super::row_mapper::row_to_session_meta;
-use super::search::{build_fts_query, list_sessions_from_query, search_with_fts, search_with_like};
+use super::search::{
+    build_fts_query, keyword_trend_counts, list_sessions_from_query, search_with_fts,
+    search_with_like,
+};
 use super::Database;
 
 impl Database {
@@ -72,6 +75,35 @@ impl Database {
              FROM sessions ORDER BY updated_at DESC",
             [],
         )
+    }
+
+    pub fn keyword_trends(
+        &self,
+        keywords: &[String],
+        days: u32,
+    ) -> Result<Vec<TrendSeries>, rusqlite::Error> {
+        let conn = self.lock_read()?;
+        let now_ms = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_millis() as i64)
+            .unwrap_or(0);
+        let since_ms = now_ms - i64::from(days) * 86_400_000;
+        let mut series = Vec::new();
+        for keyword in keywords {
+            let trimmed = keyword.trim();
+            if trimmed.is_empty() {
+                continue;
+            }
+            let points = keyword_trend_counts(&conn, trimmed, since_ms)?
+                .into_iter()
+                .map(|(day, count)| TrendPoint { day, count })
+                .collect();
+            series.push(TrendSeries {
+                keyword: trimmed.to_string(),
+                points,
+            });
+        }
+        Ok(series)
     }
 
     pub fn search_filtered(

@@ -65,7 +65,8 @@
     "subagent": "子代理",
     "duration": "持续时间",
     "parseWarningBadge": "{count} 行解析失败",
-    "parseWarningTooltip": "有 {count} 行无法解析已跳过，其余消息完整"
+    "parseWarningTooltip": "有 {count} 行无法解析已跳过，其余消息完整",
+    "copyResumeCommand": "复制恢复命令"
   },
   "toast": {
     "copied": "已复制到剪贴板",
@@ -90,7 +91,8 @@
     "refreshUsageOk": "用量已刷新",
     "reloadFailed": "会话重新加载失败",
     "subagentNotFound": "找不到对应的子代理会话",
-    "subagentLoadFailed": "加载子会话失败"
+    "subagentLoadFailed": "加载子会话失败",
+    "resumeCommandCopied": "恢复命令已复制"
   },
   "favorites": {
     "title": "收藏",
@@ -357,6 +359,10 @@
     "activityDayTooltip": "{date} · {value}",
     "activityLess": "少",
     "activityMore": "多",
-    "activityNoData": "暂无活跃记录"
+    "activityNoData": "暂无活跃记录",
+    "trends": "关键词趋势",
+    "trendsSubtitle": "近 90 天匹配会话数",
+    "trendsPlaceholder": "输入关键词后回车添加",
+    "trendsEmpty": "添加关键词以查看其随时间的出现趋势"
   }
 }

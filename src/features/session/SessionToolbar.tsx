@@ -4,9 +4,11 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { Download, Radio, Star, Trash2 } from "lucide-react";
+import { Download, Radio, SquareTerminal, Star, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { getResumeCommand } from "@/lib/tauri";
+import { toast, toastError } from "@/stores/toast";
 import type { SessionMeta, Message } from "@/lib/types";
 import { useI18n } from "@/i18n/index";
 import {
@@ -34,6 +36,16 @@ export function SessionToolbar(props: {
   onDelete: () => void;
 }) {
   const { t, locale } = useI18n();
+
+  const copyResumeCommand = async () => {
+    try {
+      const command = await getResumeCommand(props.meta.id);
+      await navigator.clipboard.writeText(command);
+      toast(t("toast.resumeCommandCopied"));
+    } catch (error) {
+      toastError(String(error));
+    }
+  };
   // Re-render when provider snapshots finish loading so the label reflects the
   // resolved provider name (mirrors the Solid reactive snapshot read).
   useProviderSnapshotVersion();
@@ -128,9 +140,27 @@ export function SessionToolbar(props: {
               </TooltipContent>
             </Tooltip>
             {!(props.meta.is_sidechain && props.meta.provider === "kimi") && (
-              <Button size="sm" onClick={props.onResume}>
-                {t("session.resume")}
-              </Button>
+              <>
+                <Tooltip>
+                  <TooltipTrigger
+                    render={
+                      <Button
+                        variant="ghost"
+                        size="icon-sm"
+                        onClick={() => void copyResumeCommand()}
+                      />
+                    }
+                  >
+                    <SquareTerminal className="size-4" aria-hidden="true" />
+                  </TooltipTrigger>
+                  <TooltipContent side="bottom">
+                    {t("session.copyResumeCommand")}
+                  </TooltipContent>
+                </Tooltip>
+                <Button size="sm" onClick={props.onResume}>
+                  {t("session.resume")}
+                </Button>
+              </>
             )}
             <Button variant="outline" size="sm" onClick={props.onExport}>
               <Download className="size-3.5" aria-hidden="true" />

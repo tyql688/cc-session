@@ -297,3 +297,13 @@ export interface SessionCostRow {
   tokens: number;
   cost: number;
 }
+
+export interface TrendPoint {
+  day: string;
+  count: number;
+}
+
+export interface TrendSeries {
+  keyword: string;
+  points: TrendPoint[];
+}

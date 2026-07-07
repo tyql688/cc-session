@@ -65,7 +65,8 @@
     "subagent": "Subagent",
     "duration": "Duration",
     "parseWarningBadge": "{count} parse warning(s)",
-    "parseWarningTooltip": "{count} line(s) could not be parsed and were skipped — the rest of the session is intact"
+    "parseWarningTooltip": "{count} line(s) could not be parsed and were skipped — the rest of the session is intact",
+    "copyResumeCommand": "Copy resume command"
   },
   "toast": {
     "copied": "Copied to clipboard",
@@ -90,7 +91,8 @@
     "refreshUsageOk": "Usage refreshed",
     "reloadFailed": "Failed to reload session",
     "subagentNotFound": "Subagent session not found",
-    "subagentLoadFailed": "Failed to load child sessions"
+    "subagentLoadFailed": "Failed to load child sessions",
+    "resumeCommandCopied": "Resume command copied"
   },
   "favorites": {
     "title": "Favorites",
@@ -357,6 +359,10 @@
     "activityDayTooltip": "{value} on {date}",
     "activityLess": "Less",
     "activityMore": "More",
-    "activityNoData": "No activity yet"
+    "activityNoData": "No activity yet",
+    "trends": "Keyword Trends",
+    "trendsSubtitle": "Matching sessions, last 90 days",
+    "trendsPlaceholder": "Type a keyword and press Enter",
+    "trendsEmpty": "Add keywords to chart how often they appear over time"
   }
 }

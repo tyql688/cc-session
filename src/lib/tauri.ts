@@ -16,6 +16,7 @@ import type {
   UsageStats,
   ActivityCalendar,
   Message,
+  TrendSeries,
 } from "@/lib/types";
 
 /// Sentinel returned by the backend when a load was cancelled mid-flight.
@@ -139,6 +140,10 @@ type BackendCommandMap = {
   cancel_session_load: CommandSpec<{ sessionId: string }, void>;
   resolve_persisted_output: CommandSpec<{ path: string }, string>;
   search_sessions: CommandSpec<{ filters: SearchFilters }, SearchResult[]>;
+  search_trends: CommandSpec<
+    { keywords: string[]; days: number },
+    TrendSeries[]
+  >;
   rename_session: CommandSpec<{ sessionId: string; newTitle: string }, void>;
   get_session_count: CommandSpec<undefined, number>;
   export_session: CommandSpec<
@@ -284,6 +289,13 @@ export async function searchSessions(
   filters: SearchFilters,
 ): Promise<SearchResult[]> {
   return invokeCommand("search_sessions", { filters });
+}
+
+export async function searchTrends(
+  keywords: string[],
+  days: number,
+): Promise<TrendSeries[]> {
+  return invokeCommand("search_trends", { keywords, days });
 }
 
 export async function renameSession(
