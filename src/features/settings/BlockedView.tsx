@@ -1,3 +1,5 @@
+import { X } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import { useI18n } from "@/i18n/index";
 import {
   removeBlockedFolder,
@@ -34,26 +36,17 @@ export function BlockedView(props: { onRefreshTree?: () => void }) {
                   <path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z" />
                 </svg>
                 <span className="blocked-item-label">{short}</span>
-                <button
-                  className="blocked-item-btn"
+                <Button
+                  variant="ghost"
+                  size="icon-xs"
                   title={t("settings.unblock")}
                   onClick={() => {
                     removeBlockedFolder(folder);
                     props.onRefreshTree?.();
                   }}
                 >
-                  <svg
-                    width="12"
-                    height="12"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="1.5"
-                    viewBox="0 0 24 24"
-                  >
-                    <line x1="18" y1="6" x2="6" y2="18" />
-                    <line x1="6" y1="6" x2="18" y2="18" />
-                  </svg>
-                </button>
+                  <X className="size-3" aria-hidden="true" />
+                </Button>
               </div>
             );
           })}

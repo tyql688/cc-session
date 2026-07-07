@@ -1,3 +1,4 @@
+import { Button } from "@/components/ui/button";
 import { invoke } from "@tauri-apps/api/core";
 import { useI18n } from "@/i18n/index";
 import { shortenHomePath } from "@/lib/formatters";
@@ -65,14 +66,19 @@ export function DataSourceSettings(props: {
               {info.session_count} {t("status.sessions")}
             </span>
             {info.exists && (
-              <button
-                className={`settings-btn${disabledProviders.includes(info.key) ? " settings-btn-danger" : ""}`}
+              <Button
+                variant={
+                  disabledProviders.includes(info.key)
+                    ? "destructive"
+                    : "outline"
+                }
+                size="sm"
                 onClick={() => toggleProvider(info.key)}
               >
                 {disabledProviders.includes(info.key)
                   ? t("settings.disabled")
                   : t("settings.enabled")}
-              </button>
+              </Button>
             )}
             {!info.exists && (
               <span className="settings-stat text-danger">

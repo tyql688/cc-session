@@ -93,32 +93,6 @@
   color: var(--accent);
 }
 
-.settings-btn {
-  padding: 6px 16px;
-  border-radius: 6px;
-  font-size: 12px;
-  font-weight: 500;
-  cursor: pointer;
-  font-family: inherit;
-  border: 0.5px solid var(--border);
-  background: var(--bg-sidebar);
-  color: var(--text-primary);
-  transition: all 0.15s;
-}
-
-.settings-btn:hover {
-  background: var(--accent-light);
-  border-color: var(--accent);
-  color: var(--accent);
-}
-.settings-btn-danger {
-  color: var(--danger-strong);
-  border-color: var(--danger-strong-border);
-}
-.settings-btn-danger:hover {
-  background: rgba(229, 62, 62, 0.08);
-}
-
 .settings-stat {
   font-size: 12px;
   color: var(--text-secondary);

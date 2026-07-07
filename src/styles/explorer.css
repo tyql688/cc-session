@@ -152,28 +152,6 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.blocked-item-btn {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 20px;
-  height: 20px;
-  border: none;
-  background: transparent;
-  color: var(--text-tertiary);
-  border-radius: 3px;
-  cursor: pointer;
-  flex-shrink: 0;
-  opacity: 0;
-  transition: opacity 0.1s;
-}
-.blocked-item:hover .blocked-item-btn {
-  opacity: 1;
-}
-.blocked-item-btn:hover {
-  background: var(--bg-tab-hover);
-  color: var(--danger-strong);
-}
 
 /* Favorites View — reuses .explorer-tree styles */
 .favorites-view {

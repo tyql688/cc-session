@@ -1,3 +1,4 @@
+import { Button } from "@/components/ui/button";
 import { useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { useI18n } from "@/i18n/index";
@@ -75,14 +76,15 @@ export function AboutSettings() {
           <span className="settings-stat" title={versionError ?? undefined}>
             {version ?? "—"}
           </span>
-          <button
-            className="settings-btn"
+          <Button
+            variant="outline"
+            size="sm"
             disabled={isDisabled()}
             onClick={handleClick}
             title={phase === "error" ? (errorDetail ?? "") : ""}
           >
             {buttonLabel()}
-          </button>
+          </Button>
         </div>
       </div>
 

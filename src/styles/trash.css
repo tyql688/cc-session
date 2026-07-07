@@ -28,23 +28,6 @@
   font-size: 13px;
 }
 
-.trash-empty-btn {
-  border: 0.5px solid var(--danger-strong-border);
-  background: transparent;
-  color: var(--danger-strong);
-  font-size: 11px;
-  font-weight: 500;
-  padding: 4px 10px;
-  border-radius: 5px;
-  cursor: pointer;
-  transition: all 0.15s;
-  font-family: inherit;
-}
-
-.trash-empty-btn:hover {
-  background: rgba(229, 62, 62, 0.06);
-}
-
 .trash-list {
   flex: 1;
   overflow-y: auto;
@@ -133,33 +116,4 @@
 
 .trash-tree-node:hover .trash-tree-actions {
   opacity: 1;
-}
-
-.trash-action-btn {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 24px;
-  height: 24px;
-  border: none;
-  background: transparent;
-  color: var(--text-tertiary);
-  border-radius: 4px;
-  cursor: pointer;
-  transition: all 0.15s;
-}
-
-.trash-action-btn:hover {
-  background: var(--bg-tab-hover);
-  color: var(--text-primary);
-}
-
-.trash-action-btn-restore:hover {
-  color: var(--success-strong);
-  background: rgba(16, 185, 129, 0.1);
-}
-
-.trash-action-btn-danger:hover {
-  color: var(--danger-strong);
-  background: rgba(229, 62, 62, 0.1);
 }

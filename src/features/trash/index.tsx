@@ -1,3 +1,5 @@
+import { RotateCcw, Trash2 } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import type { TreeNode } from "@/lib/types";
 import { ProviderDot } from "@/components/icons";
 import { useI18n } from "@/i18n/index";
@@ -108,8 +110,10 @@ export function TrashView(props: { onRefreshTree: () => void }) {
             <>
               <span className="tree-node-count">{node.count}</span>
               <div className="trash-tree-actions">
-                <button
-                  className="trash-action-btn trash-action-btn-restore"
+                <Button
+                  variant="ghost"
+                  size="icon-xs"
+                  className="text-success hover:text-success"
                   onClick={(e) => {
                     e.stopPropagation();
                     setRestoreTarget(node);
@@ -117,20 +121,12 @@ export function TrashView(props: { onRefreshTree: () => void }) {
                   }}
                   title={t("trash.restore")}
                 >
-                  <svg
-                    width="12"
-                    height="12"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                    viewBox="0 0 24 24"
-                  >
-                    <polyline points="1 4 1 10 7 10" />
-                    <path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10" />
-                  </svg>
-                </button>
-                <button
-                  className="trash-action-btn trash-action-btn-danger"
+                  <RotateCcw className="size-3" aria-hidden="true" />
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="icon-xs"
+                  className="text-destructive hover:text-destructive"
                   onClick={(e) => {
                     e.stopPropagation();
                     setDeleteAllTarget(node);
@@ -138,18 +134,8 @@ export function TrashView(props: { onRefreshTree: () => void }) {
                   }}
                   title={t("trash.permanentDelete")}
                 >
-                  <svg
-                    width="12"
-                    height="12"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                    viewBox="0 0 24 24"
-                  >
-                    <line x1="18" y1="6" x2="6" y2="18" />
-                    <line x1="6" y1="6" x2="18" y2="18" />
-                  </svg>
-                </button>
+                  <Trash2 className="size-3" aria-hidden="true" />
+                </Button>
               </div>
             </>
           )}
@@ -160,46 +146,30 @@ export function TrashView(props: { onRefreshTree: () => void }) {
                 {formatAbsoluteTime(trashItem.trashed_at)}
               </span>
               <div className="trash-tree-actions">
-                <button
-                  className="trash-action-btn trash-action-btn-restore"
+                <Button
+                  variant="ghost"
+                  size="icon-xs"
+                  className="text-success hover:text-success"
                   onClick={(e) => {
                     e.stopPropagation();
                     handleRestore(node.id);
                   }}
                   title={t("trash.restore")}
                 >
-                  <svg
-                    width="12"
-                    height="12"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                    viewBox="0 0 24 24"
-                  >
-                    <polyline points="1 4 1 10 7 10" />
-                    <path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10" />
-                  </svg>
-                </button>
-                <button
-                  className="trash-action-btn trash-action-btn-danger"
+                  <RotateCcw className="size-3" aria-hidden="true" />
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="icon-xs"
+                  className="text-destructive hover:text-destructive"
                   onClick={(e) => {
                     e.stopPropagation();
                     handlePermanentDelete(node.id);
                   }}
                   title={t("trash.permanentDelete")}
                 >
-                  <svg
-                    width="12"
-                    height="12"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                    viewBox="0 0 24 24"
-                  >
-                    <line x1="18" y1="6" x2="6" y2="18" />
-                    <line x1="6" y1="6" x2="18" y2="18" />
-                  </svg>
-                </button>
+                  <Trash2 className="size-3" aria-hidden="true" />
+                </Button>
               </div>
             </>
           )}
@@ -224,12 +194,13 @@ export function TrashView(props: { onRefreshTree: () => void }) {
           )}
         </span>
         {trashItems && trashItems.length > 0 && (
-          <button
-            className="trash-empty-btn"
+          <Button
+            variant="destructive"
+            size="xs"
             onClick={() => setShowEmptyConfirm(true)}
           >
             {t("trash.emptyTrash")}
-          </button>
+          </Button>
         )}
       </div>
 

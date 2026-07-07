@@ -1,3 +1,4 @@
+import { Button } from "@/components/ui/button";
 import type { CSSProperties } from "react";
 import { useI18n } from "@/i18n/index";
 import type { MaintenanceJob, ProviderSnapshot } from "@/lib/types";
@@ -164,8 +165,9 @@ export function Toolbar(props: ToolbarProps) {
               />
             </div>
           )}
-          <button
-            className="usage-action-btn"
+          <Button
+            variant="outline"
+            size="sm"
             onClick={props.onRefreshPricing}
             disabled={
               props.isRefreshingPricing || props.activeMaintenanceJob !== null
@@ -175,9 +177,9 @@ export function Toolbar(props: ToolbarProps) {
             {props.isRefreshingPricing
               ? "..."
               : t("settings.refreshPricingCatalog")}
-          </button>
-          <button
-            className="usage-action-btn usage-action-btn-primary"
+          </Button>
+          <Button
+            size="sm"
             onClick={props.onRequestRefreshUsage}
             disabled={props.activeMaintenanceJob !== null}
             type="button"
@@ -185,7 +187,7 @@ export function Toolbar(props: ToolbarProps) {
             {props.activeMaintenanceJob === "refresh_usage"
               ? "..."
               : t("usage.refreshUsage")}
-          </button>
+          </Button>
         </div>
       </div>
 

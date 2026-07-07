@@ -1,3 +1,4 @@
+import { Button } from "@/components/ui/button";
 import { useCallback, useEffect, useState } from "react";
 import { useI18n } from "@/i18n/index";
 import type { IndexStats } from "@/lib/types";
@@ -67,15 +68,16 @@ export function IndexSettings(props: { onIndexChanged: () => void }) {
       </div>
 
       <div className="settings-row settings-row-spaced">
-        <button className="settings-btn" onClick={handleRebuildIndex}>
+        <Button variant="outline" size="sm" onClick={handleRebuildIndex}>
           {t("settings.rebuildIndex")}
-        </button>
-        <button
-          className="settings-btn settings-btn-danger"
+        </Button>
+        <Button
+          variant="destructive"
+          size="sm"
           onClick={() => setShowClearIndexConfirm(true)}
         >
           {t("settings.clearIndex")}
-        </button>
+        </Button>
       </div>
 
       <div className="settings-help-text">{t("settings.rebuildIndexNote")}</div>
