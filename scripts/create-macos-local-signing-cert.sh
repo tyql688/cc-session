@@ -10,7 +10,7 @@
 
 set -euo pipefail
 
-NAME="${1:-CC Session Local Code Signing}"
+NAME="${1:-SessionView Local Code Signing}"
 PASSWORD="${2:-$(openssl rand -base64 24)}"
 OUT_DIR="${3:-.macos-signing}"
 

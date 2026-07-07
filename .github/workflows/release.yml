@@ -145,8 +145,8 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          APP="src-tauri/target/${{ matrix.target }}/release/bundle/macos/CC Session.app"
-          [ -d "$APP" ] || APP="src-tauri/target/release/bundle/macos/CC Session.app"
+          APP="src-tauri/target/${{ matrix.target }}/release/bundle/macos/SessionView.app"
+          [ -d "$APP" ] || APP="src-tauri/target/release/bundle/macos/SessionView.app"
 
           REQUIREMENT="$(codesign -dr - "$APP" 2>&1)"
           echo "$REQUIREMENT"
@@ -174,13 +174,13 @@ jobs:
           }
 
           # macOS
-          for f in "$BD"/dmg/*.dmg;         do copy "$f" "CC-Session-$V-macOS.dmg"; done
-          for f in "$BD"/macos/*.tar.gz;     do copy "$f" "CC-Session-$V-macOS.tar.gz"; done
+          for f in "$BD"/dmg/*.dmg;         do copy "$f" "SessionView-$V-macOS.dmg"; done
+          for f in "$BD"/macos/*.tar.gz;     do copy "$f" "SessionView-$V-macOS.tar.gz"; done
           # Windows
-          for f in "$BD"/nsis/*-setup.exe;   do copy "$f" "CC-Session-$V-Windows.exe"; done
+          for f in "$BD"/nsis/*-setup.exe;   do copy "$f" "SessionView-$V-Windows.exe"; done
           # Linux
-          for f in "$BD"/appimage/*.AppImage; do copy "$f" "CC-Session-$V-Linux-x86_64.AppImage"; done
-          for f in "$BD"/deb/*.deb;           do copy "$f" "CC-Session-$V-Linux-x86_64.deb"; done
+          for f in "$BD"/appimage/*.AppImage; do copy "$f" "SessionView-$V-Linux-x86_64.AppImage"; done
+          for f in "$BD"/deb/*.deb;           do copy "$f" "SessionView-$V-Linux-x86_64.deb"; done
 
           echo "--- release-assets ---"
           ls -la release-assets/
@@ -267,7 +267,7 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ github.ref_name }}
-          name: CC Session ${{ github.ref_name }}
+          name: SessionView ${{ github.ref_name }}
           draft: true
           prerelease: false
           body: |
@@ -275,9 +275,9 @@ jobs:
 
             ### Downloads
 
-            - **macOS**: `CC-Session-${{ github.ref_name }}-macOS.dmg`
-            - **Windows**: `CC-Session-${{ github.ref_name }}-Windows.exe`
-            - **Linux**: `CC-Session-${{ github.ref_name }}-Linux-x86_64.AppImage` / `.deb`
+            - **macOS**: `SessionView-${{ github.ref_name }}-macOS.dmg`
+            - **Windows**: `SessionView-${{ github.ref_name }}-Windows.exe`
+            - **Linux**: `SessionView-${{ github.ref_name }}-Linux-x86_64.AppImage` / `.deb`
 
             > `.tar.gz` files are for Tauri auto-updater only.
           files: release-assets/*

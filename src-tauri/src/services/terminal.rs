@@ -340,7 +340,7 @@ fn launch_windows_cmd(command: &str, cwd: Option<&str>) -> anyhow::Result<()> {
     // Name includes a timestamp so a recycled PID never picks up a stale file.
     let nanos = std::time::UNIX_EPOCH.elapsed().map_or(0, |d| d.as_nanos());
     let bat_path =
-        std::env::temp_dir().join(format!("cc_session_{}_{nanos}.bat", std::process::id()));
+        std::env::temp_dir().join(format!("sessionview_{}_{nanos}.bat", std::process::id()));
     let mut bat = String::from("@echo off\r\n");
     if let Some(dir) = cwd {
         if !dir.is_empty() {

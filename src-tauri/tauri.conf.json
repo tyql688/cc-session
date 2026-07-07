@@ -1,8 +1,8 @@
 {
   "$schema": "https://raw.githubusercontent.com/nicegui/tauri-v2-schema/main/tauri.conf.json",
-  "productName": "CC Session",
+  "productName": "SessionView",
   "version": "0.5.3",
-  "identifier": "com.cc-session.app",
+  "identifier": "com.sessionview.app",
   "build": {
     "frontendDist": "../dist",
     "devUrl": "http://localhost:1420",
@@ -12,7 +12,7 @@
   "app": {
     "windows": [
       {
-        "title": "CC Session — Session Explorer",
+        "title": "SessionView — Session Explorer",
         "width": 1200,
         "height": 750,
         "resizable": true,
@@ -60,7 +60,7 @@
     "updater": {
       "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDk5RjBEOERCRTgwQjg1RTIKUldUaWhRdm8yOWp3bVNjUlViUGFORTNyNGN5Z2p3ckduZlNMWTc3bW41ZTdwQ1MvVmVFTkloZU8K",
       "endpoints": [
-        "https://github.com/tyql688/cc-session/releases/latest/download/latest.json"
+        "https://github.com/tyql688/sessionview/releases/latest/download/latest.json"
       ]
     }
   }

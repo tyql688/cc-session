@@ -11,14 +11,14 @@
 If you discover a security vulnerability, please report it responsibly:
 
 1. **Do not** open a public issue
-2. Use [GitHub Security Advisories](https://github.com/tyql688/cc-session/security/advisories/new) to report privately
+2. Use [GitHub Security Advisories](https://github.com/tyql688/sessionview/security/advisories/new) to report privately
 3. Include a description of the vulnerability and steps to reproduce
 
 You can expect an initial response within 72 hours.
 
 ## Scope
 
-CC Session is a desktop app that reads local AI coding session files. Security concerns include:
+SessionView is a desktop app that reads local AI coding session files. Security concerns include:
 
 - Path traversal when reading session files or images
 - XSS in rendered markdown or HTML exports

@@ -15,14 +15,14 @@ pub struct SharedDeletion {
 pub fn trash_dir() -> anyhow::Result<PathBuf> {
     let dir = data_local_dir()
         .context("failed to resolve local data dir")?
-        .join("cc-session")
+        .join("sessionview")
         .join("trash");
     std::fs::create_dir_all(&dir).context("failed to create trash directory")?;
     Ok(dir)
 }
 
 fn data_local_dir() -> Option<PathBuf> {
-    std::env::var_os("CC_SESSION_TEST_DATA_DIR")
+    std::env::var_os("SESSIONVIEW_TEST_DATA_DIR")
         .map(PathBuf::from)
         .or_else(dirs::data_local_dir)
 }

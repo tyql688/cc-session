@@ -131,7 +131,7 @@ fn audit_trash_consistency(db: &db::Database) {
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let data_dir = match dirs::data_local_dir() {
-        Some(d) => d.join("cc-session"),
+        Some(d) => d.join("sessionview"),
         None => {
             log::error!("failed to resolve local data dir");
             std::process::exit(1);

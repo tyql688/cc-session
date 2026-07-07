@@ -1,7 +1,7 @@
 interface:
   display_name: "Release"
-  short_description: "Prepare and run CC Session releases"
-  default_prompt: "Use $release to prepare the next CC Session release."
+  short_description: "Prepare and run SessionView releases"
+  default_prompt: "Use $release to prepare the next SessionView release."
 
 policy:
   allow_implicit_invocation: true

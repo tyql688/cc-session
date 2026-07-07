@@ -11,7 +11,7 @@ fn canceled_error_serializes_with_cancel_sentinel() {
     let command: CommandError = canceled_error().into();
     let serialized = format!("{:#}", command.0);
     assert_eq!(serialized, CANCEL_ERROR);
-    assert!(serialized.contains("__cc_session_load_canceled__"));
+    assert!(serialized.contains("__sessionview_load_canceled__"));
 }
 
 #[test]

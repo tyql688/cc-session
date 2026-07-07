@@ -16,7 +16,7 @@ body:
       label: Steps to reproduce
       description: How can we reproduce this?
       placeholder: |
-        1. Open CC Session
+        1. Open SessionView
         2. Navigate to ...
         3. Click ...
         4. See error

@@ -28,11 +28,8 @@ export function TitleBar(props: TitleBarProps) {
         }
       }}
     >
-      <div className="titlebar-center">
-        <span className="app-name">
-          <span className="app-name-bracket">&lt;</span>cc-session
-          <span className="app-name-bracket">/&gt;</span>
-        </span>
+      <div className="titlebar-center" aria-hidden="true">
+        <span className="app-name">SessionView</span>
       </div>
       <div className="titlebar-right" />
 

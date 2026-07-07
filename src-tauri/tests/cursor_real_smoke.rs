@@ -10,9 +10,9 @@
 
 #![cfg(test)]
 
-use cc_session_lib::models::{MessageRole, Provider};
-use cc_session_lib::provider::SessionProvider;
-use cc_session_lib::providers::cursor::CursorProvider;
+use sessionview_lib::models::{MessageRole, Provider};
+use sessionview_lib::provider::SessionProvider;
+use sessionview_lib::providers::cursor::CursorProvider;
 
 #[test]
 #[ignore]

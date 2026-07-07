@@ -423,13 +423,13 @@ fn summarizes_recent_claude_and_codex_tool_names() {
     let workflow = metadata(
         Provider::Claude,
         "Workflow",
-        json!({ "script": "cargo test --package ccsession" }),
+        json!({ "script": "cargo test --package sessionview" }),
     );
     assert_eq!(workflow.category, "tool");
     assert_eq!(workflow.display_name, "workflow");
     assert_eq!(
         workflow.summary.as_deref(),
-        Some("cargo test --package ccsession")
+        Some("cargo test --package sessionview")
     );
 
     let node = metadata(
@@ -509,7 +509,7 @@ fn enriches_recent_tool_result_shapes() {
     let mut web_search = build_tool_metadata(ToolCallFacts {
         provider: Provider::Claude,
         raw_name: "WebSearch",
-        input: Some(&json!({ "query": "ccsession tools" })),
+        input: Some(&json!({ "query": "sessionview tools" })),
         call_id: Some("toolu_web"),
         assistant_id: None,
     });
@@ -517,7 +517,7 @@ fn enriches_recent_tool_result_shapes() {
         &mut web_search,
         ToolResultFacts {
             raw_result: Some(&json!({
-                "query": "ccsession tools",
+                "query": "sessionview tools",
                 "searchCount": 1,
                 "results": [{ "title": "result" }]
             })),

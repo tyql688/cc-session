@@ -127,8 +127,8 @@ impl Database {
 
     /// Pre-fetch the `(source_path, size, mtime)` snapshot the indexer
     /// uses to decide which sources can skip parsing. Returned `mtime` is
-    /// provider-specific; rows that pre-date the migration have `mtime = 0`,
-    /// which forces a reparse the first time they're seen.
+    /// provider-specific; `mtime = 0` means unknown and forces a reparse
+    /// the first time the row is seen.
     /// Rows with empty `source_path` (synthetic / detached sessions)
     /// are excluded — they wouldn't survive a file-level check anyway.
     pub(crate) fn source_states_for_provider(

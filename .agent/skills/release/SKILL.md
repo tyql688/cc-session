@@ -1,6 +1,6 @@
 ---
 name: release
-description: Prepare or execute a CC Session release. Use when the user asks to plan a release, bump a version, update release notes, prepare CHANGELOG.md, inspect changes since the last tag, run scripts/release.sh, or publish a version tag.
+description: Prepare or execute a SessionView release. Use when the user asks to plan a release, bump a version, update release notes, prepare CHANGELOG.md, inspect changes since the last tag, run scripts/release.sh, or publish a version tag.
 ---
 
 # Release

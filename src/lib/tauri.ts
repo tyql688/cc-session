@@ -21,7 +21,7 @@ import type {
 /// Sentinel returned by the backend when a load was cancelled mid-flight.
 /// Callers decide what it means: silence when a newer load superseded the
 /// request, retry/error when the canceled request was still the current one.
-const LOAD_CANCELED_SENTINEL = "__cc_session_load_canceled__";
+const LOAD_CANCELED_SENTINEL = "__sessionview_load_canceled__";
 
 export function isLoadCanceledError(err: unknown): boolean {
   if (err == null) return false;

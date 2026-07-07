@@ -16,18 +16,18 @@
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use cc_session_lib::db::Database;
-use cc_session_lib::indexer::Indexer;
-use cc_session_lib::provider;
+use sessionview_lib::db::Database;
+use sessionview_lib::indexer::Indexer;
+use sessionview_lib::provider;
 
 #[test]
 #[ignore]
 fn wipe_stale_parent_links_and_reindex() {
     let data_dir = dirs::data_local_dir()
         .expect("data_local_dir")
-        .join("cc-session");
+        .join("sessionview");
     if !data_dir.is_dir() {
-        eprintln!("skip: no cc-session data dir at {data_dir:?}");
+        eprintln!("skip: no sessionview data dir at {data_dir:?}");
         return;
     }
 

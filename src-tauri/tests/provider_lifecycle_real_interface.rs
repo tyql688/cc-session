@@ -19,14 +19,14 @@ use std::sync::atomic::AtomicBool;
 use std::sync::{Arc, Mutex};
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use cc_session_lib::commands::{self, AppState};
-use cc_session_lib::db::Database;
-use cc_session_lib::indexer::Indexer;
-use cc_session_lib::models::{Provider, ProviderSnapshot, TrashMeta, TreeNode};
-use cc_session_lib::provider;
 use serde::de::DeserializeOwned;
 use serde::Deserialize;
 use serde_json::json;
+use sessionview_lib::commands::{self, AppState};
+use sessionview_lib::db::Database;
+use sessionview_lib::indexer::Indexer;
+use sessionview_lib::models::{Provider, ProviderSnapshot, TrashMeta, TreeNode};
+use sessionview_lib::provider;
 use tauri::ipc::{CallbackFn, InvokeBody};
 use tauri::test::{
     get_ipc_response, mock_builder, mock_context, noop_assets, MockRuntime, INVOKE_KEY,
@@ -75,8 +75,8 @@ fn build_app() -> (TempDir, App<MockRuntime>, tauri::WebviewWindow<MockRuntime>)
         db,
         indexer,
         maintenance_running: Arc::new(AtomicBool::new(false)),
-        session_cache: Arc::new(cc_session_lib::services::SessionCache::new(4)),
-        persisted_output_cache: Arc::new(cc_session_lib::services::PersistedOutputCache::new(
+        session_cache: Arc::new(sessionview_lib::services::SessionCache::new(4)),
+        persisted_output_cache: Arc::new(sessionview_lib::services::PersistedOutputCache::new(
             4,
             1024 * 1024,
         )),
@@ -224,14 +224,14 @@ fn discover_cc_mirror_commands() -> Vec<String> {
 }
 
 fn generate_real_sessions(root: &Path, run_id: &str) -> (Vec<SessionExpectation>, Vec<String>) {
-    let claude_marker = format!("ccsession-real-{run_id}-claude");
-    let codex_marker = format!("ccsession-real-{run_id}-codex");
-    let opencode_marker = format!("ccsession-real-{run_id}-opencode");
-    let antigravity_marker = format!("ccsession-real-{run_id}-antigravity");
-    let kimi_marker = format!("ccsession-real-{run_id}-kimi");
-    let cc_mirror_restore_marker = format!("ccsession-real-{run_id}-cc-mirror-restore");
-    let cc_mirror_delete_marker = format!("ccsession-real-{run_id}-cc-mirror-delete");
-    let cc_mirror_purge_marker = format!("ccsession-real-{run_id}-cc-mirror-purge");
+    let claude_marker = format!("sessionview-real-{run_id}-claude");
+    let codex_marker = format!("sessionview-real-{run_id}-codex");
+    let opencode_marker = format!("sessionview-real-{run_id}-opencode");
+    let antigravity_marker = format!("sessionview-real-{run_id}-antigravity");
+    let kimi_marker = format!("sessionview-real-{run_id}-kimi");
+    let cc_mirror_restore_marker = format!("sessionview-real-{run_id}-cc-mirror-restore");
+    let cc_mirror_delete_marker = format!("sessionview-real-{run_id}-cc-mirror-delete");
+    let cc_mirror_purge_marker = format!("sessionview-real-{run_id}-cc-mirror-purge");
 
     let claude_dir = create_workspace(root, &claude_marker);
     let codex_dir = create_workspace(root, &codex_marker);

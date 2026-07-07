@@ -34,7 +34,7 @@ pub(crate) fn extract_image_paths(messages: &[Message]) -> Vec<String> {
 
 /// Resolve the app data directory for image caching.
 pub(crate) fn image_cache_data_dir() -> Option<PathBuf> {
-    dirs::data_local_dir().map(|d| d.join("cc-session"))
+    dirs::data_local_dir().map(|d| d.join("sessionview"))
 }
 
 // ---------------------------------------------------------------------------

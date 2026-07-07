@@ -3,13 +3,13 @@ use std::path::PathBuf;
 
 use tempfile::TempDir;
 
-use cc_session_lib::models::{Message, MessageKind, MessageRole, Provider};
-use cc_session_lib::provider::{SessionProvider, SourceState};
-use cc_session_lib::providers::antigravity::AntigravityProvider;
-use cc_session_lib::providers::claude::ClaudeProvider;
-use cc_session_lib::providers::codex::CodexProvider;
-use cc_session_lib::providers::kimi::KimiProvider;
-use cc_session_lib::providers::opencode::OpenCodeProvider;
+use sessionview_lib::models::{Message, MessageKind, MessageRole, Provider};
+use sessionview_lib::provider::{SessionProvider, SourceState};
+use sessionview_lib::providers::antigravity::AntigravityProvider;
+use sessionview_lib::providers::claude::ClaudeProvider;
+use sessionview_lib::providers::codex::CodexProvider;
+use sessionview_lib::providers::kimi::KimiProvider;
+use sessionview_lib::providers::opencode::OpenCodeProvider;
 
 fn fixtures_dir() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
@@ -17,7 +17,7 @@ fn fixtures_dir() -> PathBuf {
         .join("fixtures")
 }
 
-fn parse_temp_claude_jsonl(content: &str) -> cc_session_lib::provider::ParsedSession {
+fn parse_temp_claude_jsonl(content: &str) -> sessionview_lib::provider::ParsedSession {
     let dir = TempDir::new().expect("temp dir must be created");
     let path = dir.path().join("claude-temp.jsonl");
     fs::write(&path, content).expect("temp claude fixture must be written");
@@ -221,8 +221,8 @@ fn claude_parses_system_subtypes() {
         .parse_session(&path)
         .expect("claude fixture must parse");
 
-    use cc_session_lib::models::MessageRole;
-    let system_msgs: Vec<&cc_session_lib::models::Message> = session
+    use sessionview_lib::models::MessageRole;
+    let system_msgs: Vec<&sessionview_lib::models::Message> = session
         .messages
         .iter()
         .filter(|m| m.role == MessageRole::System && !m.content.starts_with("[thinking]"))
@@ -714,7 +714,7 @@ const NATIVE_BASIC_ID: &str = "session_11111111-1111-4111-a111-111111111111";
 const NATIVE_SUBAGENT_PARENT_ID: &str = "session_22222222-2222-4222-a222-222222222222";
 const LEGACY_MIGRATED_ID: &str = "ses_33333333-3333-4333-a333-333333333333";
 
-fn parse_fixture_session(session_id: &str) -> cc_session_lib::provider::ParsedSession {
+fn parse_fixture_session(session_id: &str) -> sessionview_lib::provider::ParsedSession {
     let provider = kimi_fixture_provider();
     let sessions = provider.scan_all().expect("kimi fixture scan must succeed");
     sessions
@@ -842,7 +842,7 @@ fn kimi_subagent_is_separate_session_with_parent_link() {
 
 #[test]
 fn kimi_deletion_plan_trashes_parent_and_subagents_individually() {
-    use cc_session_lib::provider::FileAction;
+    use sessionview_lib::provider::FileAction;
     let provider = kimi_fixture_provider();
     let parent = parse_fixture_session(NATIVE_SUBAGENT_PARENT_ID);
     let child = parse_fixture_session(&format!("{NATIVE_SUBAGENT_PARENT_ID}:agent-0"));
@@ -864,7 +864,7 @@ fn kimi_deletion_plan_trashes_parent_and_subagents_individually() {
 
 #[test]
 fn kimi_deletion_plan_for_parent_skips_whole_session_dir_when_unknown_agent_present() {
-    use cc_session_lib::provider::FileAction;
+    use sessionview_lib::provider::FileAction;
     // Build an isolated session tree in a TempDir so we can drop a
     // stray un-indexed agent next to the parent's `main` without
     // racing the shared fixture used by other tests. Mirrors the
@@ -944,7 +944,7 @@ fn kimi_deletion_plan_for_parent_skips_whole_session_dir_when_unknown_agent_pres
 
 #[test]
 fn kimi_deletion_plan_for_subagent_only_removes_its_own_dir() {
-    use cc_session_lib::provider::FileAction;
+    use sessionview_lib::provider::FileAction;
     let provider = kimi_fixture_provider();
     let child = parse_fixture_session(&format!("{NATIVE_SUBAGENT_PARENT_ID}:agent-0"));
     let plan = provider.deletion_plan(&child.meta, &[]);
@@ -1018,8 +1018,8 @@ fn kimi_load_messages_round_trips_through_source_path() {
 
 #[test]
 fn kimi_resume_command_strips_subagent_suffix() {
-    use cc_session_lib::provider::ProviderDescriptor;
-    let descriptor = &cc_session_lib::providers::kimi::Descriptor;
+    use sessionview_lib::provider::ProviderDescriptor;
+    let descriptor = &sessionview_lib::providers::kimi::Descriptor;
     let parent_cmd = descriptor
         .resume_command(NATIVE_BASIC_ID, None)
         .expect("parent resume command");
@@ -1039,7 +1039,7 @@ fn kimi_parse_session_tail_returns_only_last_n_messages() {
     let s = parse_fixture_session(NATIVE_BASIC_ID);
     let path = std::path::PathBuf::from(&s.meta.source_path);
     let tail =
-        cc_session_lib::providers::kimi::parser::parse_session_tail(&path, 2).expect("tail parse");
+        sessionview_lib::providers::kimi::parser::parse_session_tail(&path, 2).expect("tail parse");
     assert!(tail.messages.len() <= 2);
     // The tail must end with the assistant's final text (last emitted).
     let last = tail.messages.last().expect("non-empty tail");
@@ -1065,7 +1065,7 @@ fn test_antigravity_model_extraction() {
     fs::write(&transcript_path, lines.join("\n")).unwrap();
 
     let parsed =
-        cc_session_lib::providers::antigravity::parser::parse_session_file(&transcript_path)
+        sessionview_lib::providers::antigravity::parser::parse_session_file(&transcript_path)
             .expect("must parse");
 
     assert_eq!(parsed.meta.model.as_deref(), Some("gemini-3.5-flash"));
@@ -1103,7 +1103,7 @@ fn antigravity_transcript_fixture_path() -> PathBuf {
 #[test]
 fn antigravity_tool_calls_map_to_canonical_names_and_decode_args() {
     let path = antigravity_transcript_fixture_path();
-    let parsed = cc_session_lib::providers::antigravity::parser::parse_session_file(&path)
+    let parsed = sessionview_lib::providers::antigravity::parser::parse_session_file(&path)
         .expect("antigravity fixture must parse");
 
     let tools: Vec<&Message> = parsed
@@ -1177,7 +1177,7 @@ fn antigravity_user_message_includes_uploaded_image_markers() {
     fs::write(&transcript_path, line).unwrap();
 
     let parsed =
-        cc_session_lib::providers::antigravity::parser::parse_session_file(&transcript_path)
+        sessionview_lib::providers::antigravity::parser::parse_session_file(&transcript_path)
             .expect("antigravity image transcript must parse");
     let user_msg = parsed
         .messages
@@ -1220,7 +1220,7 @@ fn antigravity_parse_session_tail_returns_only_last_n_messages() {
     fs::write(&transcript_path, content).unwrap();
 
     let tail =
-        cc_session_lib::providers::antigravity::parser::parse_session_tail(&transcript_path, 20)
+        sessionview_lib::providers::antigravity::parser::parse_session_tail(&transcript_path, 20)
             .expect("tail parse");
     assert_eq!(tail.messages.len(), 20);
     let first = tail.messages.first().expect("first").content.clone();
@@ -1253,7 +1253,7 @@ fn antigravity_parse_session_tail_returns_full_file_when_smaller_than_window() {
     fs::write(&transcript_path, content).unwrap();
 
     let tail =
-        cc_session_lib::providers::antigravity::parser::parse_session_tail(&transcript_path, 100)
+        sessionview_lib::providers::antigravity::parser::parse_session_tail(&transcript_path, 100)
             .expect("tail parse");
     assert_eq!(
         tail.messages.len(),
@@ -1398,7 +1398,7 @@ fn antigravity_real_local_sessions_smoke() {
     // Every declared child id must point at a session we actually parsed,
     // and that session must end up flagged as a sidechain with parent_id set.
     use std::collections::HashMap;
-    let by_id: HashMap<&str, &cc_session_lib::provider::ParsedSession> =
+    let by_id: HashMap<&str, &sessionview_lib::provider::ParsedSession> =
         sessions.iter().map(|s| (s.meta.id.as_str(), s)).collect();
 
     for parent in &sessions {
@@ -2060,7 +2060,7 @@ fn assert_has_tool_metadata<'a>(
     provider: &str,
     messages: &'a [Message],
     canonical_name: &str,
-) -> &'a cc_session_lib::models::ToolMetadata {
+) -> &'a sessionview_lib::models::ToolMetadata {
     messages
         .iter()
         .find_map(|message| {
@@ -2081,24 +2081,24 @@ fn assert_has_tool_metadata<'a>(
 fn real_generated_tool_metadata_smoke_test() {
     let codex_provider = CodexProvider::new().expect("home dir must be available");
     let codex = codex_provider
-        .parse_session_file(&required_env_path("CCSESSION_REAL_CODEX_JSONL"))
+        .parse_session_file(&required_env_path("SESSIONVIEW_REAL_CODEX_JSONL"))
         .expect("real Codex transcript must parse");
     assert_real_tool_metadata("Codex", &codex.messages, "Bash", true);
 
-    let antigravity = cc_session_lib::providers::antigravity::parser::parse_session_file(
-        &required_env_path("CCSESSION_REAL_ANTIGRAVITY_JSONL"),
+    let antigravity = sessionview_lib::providers::antigravity::parser::parse_session_file(
+        &required_env_path("SESSIONVIEW_REAL_ANTIGRAVITY_JSONL"),
     )
     .expect("real Antigravity transcript must parse");
     assert_real_tool_metadata("Antigravity", &antigravity.messages, "Read", true);
 
-    let kimi_path = required_env_path("CCSESSION_REAL_KIMI_WIRE");
+    let kimi_path = required_env_path("SESSIONVIEW_REAL_KIMI_WIRE");
     let kimi_provider = KimiProvider::new().expect("home dir must be available");
     let kimi_loaded = kimi_provider
         .load_messages("", &kimi_path.to_string_lossy())
         .expect("real Kimi transcript must parse");
     assert_real_tool_metadata("Kimi", &kimi_loaded.messages, "Read", true);
 
-    let opencode_db = std::env::var_os("CCSESSION_REAL_OPENCODE_DB")
+    let opencode_db = std::env::var_os("SESSIONVIEW_REAL_OPENCODE_DB")
         .map(PathBuf::from)
         .unwrap_or_else(|| {
             dirs::home_dir()
@@ -2106,7 +2106,7 @@ fn real_generated_tool_metadata_smoke_test() {
                 .join(".local/share/opencode/opencode.db")
         });
     let opencode_session =
-        std::env::var("CCSESSION_REAL_OPENCODE_SESSION").expect("real OpenCode session id");
+        std::env::var("SESSIONVIEW_REAL_OPENCODE_SESSION").expect("real OpenCode session id");
     let opencode_provider = OpenCodeProvider::with_db_path(opencode_db.clone());
     let opencode_messages = opencode_provider
         .load_messages(&opencode_session, &opencode_db.to_string_lossy())
@@ -2119,17 +2119,17 @@ fn real_generated_tool_metadata_smoke_test() {
 fn round2_generated_tool_metadata_smoke_test() {
     let codex_provider = CodexProvider::new().expect("home dir must be available");
     let codex = codex_provider
-        .parse_session_file(&required_env_path("CCSESSION_ROUND2_CODEX_JSONL"))
+        .parse_session_file(&required_env_path("SESSIONVIEW_ROUND2_CODEX_JSONL"))
         .expect("round2 Codex transcript must parse");
     assert_real_tool_metadata("Codex round2", &codex.messages, "Bash", true);
 
-    let antigravity = cc_session_lib::providers::antigravity::parser::parse_session_file(
-        &required_env_path("CCSESSION_ROUND2_ANTIGRAVITY_JSONL"),
+    let antigravity = sessionview_lib::providers::antigravity::parser::parse_session_file(
+        &required_env_path("SESSIONVIEW_ROUND2_ANTIGRAVITY_JSONL"),
     )
     .expect("round2 Antigravity transcript must parse");
     assert_has_tool_metadata("Antigravity round2", &antigravity.messages, "Read");
 
-    let kimi_path = required_env_path("CCSESSION_ROUND2_KIMI_WIRE");
+    let kimi_path = required_env_path("SESSIONVIEW_ROUND2_KIMI_WIRE");
     let kimi_provider = KimiProvider::new().expect("home dir must be available");
     let kimi_loaded = kimi_provider
         .load_messages("", &kimi_path.to_string_lossy())
@@ -2143,7 +2143,7 @@ fn round2_generated_tool_metadata_smoke_test() {
         Some("file_patch")
     );
 
-    let opencode_db = std::env::var_os("CCSESSION_ROUND2_OPENCODE_DB")
+    let opencode_db = std::env::var_os("SESSIONVIEW_ROUND2_OPENCODE_DB")
         .map(PathBuf::from)
         .unwrap_or_else(|| {
             dirs::home_dir()
@@ -2151,7 +2151,7 @@ fn round2_generated_tool_metadata_smoke_test() {
                 .join(".local/share/opencode/opencode.db")
         });
     let opencode_session =
-        std::env::var("CCSESSION_ROUND2_OPENCODE_SESSION").expect("round2 OpenCode session id");
+        std::env::var("SESSIONVIEW_ROUND2_OPENCODE_SESSION").expect("round2 OpenCode session id");
     let opencode_provider = OpenCodeProvider::with_db_path(opencode_db.clone());
     let opencode_messages = opencode_provider
         .load_messages(&opencode_session, &opencode_db.to_string_lossy())

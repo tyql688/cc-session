@@ -5,7 +5,7 @@
 //! boundary. Each variant reproduces the original flat message verbatim
 //! (the inner cause is captured as a `String`, NOT `#[source]`, so the
 //! serialized `{:#}` text the frontend toast sees is byte-identical to
-//! the pre-migration behaviour — see `tests` at the bottom of this file
+//! the previous flat-string behaviour — see `tests` at the bottom of this file
 //! and `crate::error::CommandError`).
 //!
 //! `Anyhow(anyhow::Error)` is the transparent passthrough used for errors
@@ -266,7 +266,7 @@ mod tests {
     /// through `ServiceError` the substring must survive untouched).
     #[test]
     fn cancel_sentinel_substring_survives_passthrough() {
-        let err: ServiceError = "__cc_session_load_canceled__".to_string().into();
-        assert!(rendered(err).contains("__cc_session_load_canceled__"));
+        let err: ServiceError = "__sessionview_load_canceled__".to_string().into();
+        assert!(rendered(err).contains("__sessionview_load_canceled__"));
     }
 }

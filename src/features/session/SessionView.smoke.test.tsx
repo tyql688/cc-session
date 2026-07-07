@@ -7,7 +7,7 @@ import { SESSION_COMMAND_EVENTS } from "@/lib/session-command-events";
 import { processMessages } from "@/features/session/hooks";
 import { findFirstMatchingEntryIndex } from "@/features/session/search-utils";
 
-const LOAD_CANCELED_SENTINEL = "__cc_session_load_canceled__";
+const LOAD_CANCELED_SENTINEL = "__sessionview_load_canceled__";
 
 // Minimal synthetic session payloads. The backend is fully mocked: `invoke`
 // dispatches on the Tauri command name so the session-load effect resolves

@@ -1,16 +1,16 @@
 [package]
-name = "cc-session"
+name = "sessionview"
 version = "0.5.3"
 description = "High-performance desktop session explorer for local AI coding sessions"
 authors = ["yury <yury.zero.21@gmail.com>"]
 edition = "2021"
 
 [lib]
-name = "cc_session_lib"
+name = "sessionview_lib"
 crate-type = ["lib", "cdylib", "staticlib"]
 
 [[bin]]
-name = "cc-session"
+name = "sessionview"
 path = "src/main.rs"
 
 [dependencies]

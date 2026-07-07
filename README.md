@@ -3,7 +3,7 @@
 </p>
 
 <p align="center">
-  <img src="assets/logo-text.svg" alt="CC Session" width="240">
+  <img src="assets/logo-text.svg" alt="SessionView" width="240">
 </p>
 
 <p align="center">
@@ -11,21 +11,21 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/tyql688/cc-session/releases/latest"><img alt="Latest Release" src="https://img.shields.io/github/v/release/tyql688/cc-session?style=flat-square&color=blue"></a>
-  <a href="https://github.com/tyql688/cc-session/actions/workflows/ci.yml"><img alt="CI" src="https://img.shields.io/github/actions/workflow/status/tyql688/cc-session/ci.yml?branch=master&style=flat-square"></a>
+  <a href="https://github.com/tyql688/sessionview/releases/latest"><img alt="Latest Release" src="https://img.shields.io/github/v/release/tyql688/sessionview?style=flat-square&color=blue"></a>
+  <a href="https://github.com/tyql688/sessionview/actions/workflows/ci.yml"><img alt="CI" src="https://img.shields.io/github/actions/workflow/status/tyql688/sessionview/ci.yml?branch=master&style=flat-square"></a>
   <img alt="Platform" src="https://img.shields.io/badge/platform-macOS%20%7C%20Windows%20%7C%20Linux-lightgrey?style=flat-square">
-  <a href="LICENSE"><img alt="License" src="https://img.shields.io/github/license/tyql688/cc-session?style=flat-square"></a>
+  <a href="LICENSE"><img alt="License" src="https://img.shields.io/github/license/tyql688/sessionview?style=flat-square"></a>
 </p>
 
 <p align="center">
-  <a href="assets/show.png"><img src="assets/show.png" alt="CC Session — session browser" width="860"></a>
+  <a href="assets/show.png"><img src="assets/show.png" alt="SessionView — session browser" width="860"></a>
 </p>
 
 ---
 
-## Why CC Session?
+## Why SessionView?
 
-Claude Code, Codex, Antigravity, Kimi Code, Cursor CLI, Pi, and more all store their session data locally — but each in its own format, in its own folder, with no way to look back. **CC Session brings every provider together in one fast, native app:** read full conversation histories, search across all of them at once, export clean archives, and jump straight back into any session in your terminal.
+Claude Code, Codex, Antigravity, Kimi Code, Cursor CLI, Pi, and more all store their session data locally — but each in its own format, in its own folder, with no way to look back. **SessionView brings every provider together in one fast, native app:** read full conversation histories, search across all of them at once, export clean archives, and jump straight back into any session in your terminal.
 
 > 💡 **One window for every local coding session** — no more digging through `~/.claude`, `~/.codex`, and a dozen other folders.
 
@@ -46,7 +46,7 @@ Claude Code, Codex, Antigravity, Kimi Code, Cursor CLI, Pi, and more all store t
 Track exactly what you're spending across every provider — daily cost trends, per-model token totals, and cache efficiency, all in one dashboard.
 
 <p align="center">
-  <a href="assets/usage.png"><img src="assets/usage.png" alt="CC Session — usage analytics" width="860"></a>
+  <a href="assets/usage.png"><img src="assets/usage.png" alt="SessionView — usage analytics" width="860"></a>
 </p>
 
 ## 🧩 Supported tools
@@ -62,11 +62,11 @@ Track exactly what you're spending across every provider — daily cost trends, 
 | **CC-Mirror** | JSONL | per-variant |
 | **Pi** | JSONL | `pi --session` |
 
-Across providers, CC Session parses messages, tool calls, thinking/reasoning blocks, token usage, inline images, Markdown, Mermaid diagrams, and KaTeX math wherever the source format supports them — including subagent/child sessions.
+Across providers, SessionView parses messages, tool calls, thinking/reasoning blocks, token usage, inline images, Markdown, Mermaid diagrams, and KaTeX math wherever the source format supports them — including subagent/child sessions.
 
 ## 📥 Install
 
-Grab the latest build from [**Releases**](https://github.com/tyql688/cc-session/releases):
+Grab the latest build from [**Releases**](https://github.com/tyql688/sessionview/releases):
 
 | Platform | File |
 |----------|------|
@@ -77,12 +77,12 @@ Grab the latest build from [**Releases**](https://github.com/tyql688/cc-session/
 > **macOS Gatekeeper:** the app isn't code-signed, so macOS may block it on first launch. Clear the quarantine flag:
 >
 > ```bash
-> xattr -cr "/Applications/CC Session.app"
+> xattr -cr "/Applications/SessionView.app"
 > ```
 
 ## 🚀 Quick start
 
-1. Install and open CC Session
+1. Install and open SessionView
 2. Let it index your local provider data
 3. Browse a session, search across your history, or resume right where you left off
 
@@ -91,8 +91,8 @@ Grab the latest build from [**Releases**](https://github.com/tyql688/cc-session/
 Requires [Rust](https://rustup.rs/) and [Node.js](https://nodejs.org/) 22.12+.
 
 ```bash
-git clone https://github.com/tyql688/cc-session.git
-cd cc-session
+git clone https://github.com/tyql688/sessionview.git
+cd sessionview
 npm install
 npm run tauri build              # Production build
 npx tauri build --bundles dmg    # DMG only

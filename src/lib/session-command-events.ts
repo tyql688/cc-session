@@ -1,9 +1,9 @@
 export const SESSION_COMMAND_EVENTS = {
-  sessionSearch: "cc-session:session-search",
-  resume: "cc-session:resume",
-  exportSession: "cc-session:export",
-  favorite: "cc-session:favorite",
-  delete: "cc-session:delete",
+  sessionSearch: "sessionview:session-search",
+  resume: "sessionview:resume",
+  exportSession: "sessionview:export",
+  favorite: "sessionview:favorite",
+  delete: "sessionview:delete",
 } as const;
 
 export type SessionCommandEvent = (typeof SESSION_COMMAND_EVENTS)[keyof typeof SESSION_COMMAND_EVENTS];

@@ -110,21 +110,21 @@ function parseStoredStringArray<T extends string>(
 export type ExplorerGrouping = "provider" | "directory";
 
 function readStoredExplorerGrouping(): ExplorerGrouping {
-  const raw = readStorage("cc-session-explorer-grouping");
+  const raw = readStorage("sessionview-explorer-grouping");
   if (raw === null || raw === "provider") return "provider";
   if (raw === "directory") return "directory";
   console.warn(`Ignoring invalid explorer grouping setting: ${raw}`);
   return "provider";
 }
 
-const storedTerminal = readStorage("cc-session-terminal") as TerminalApp | null;
+const storedTerminal = readStorage("sessionview-terminal") as TerminalApp | null;
 const initialDisabledProviders = parseStoredStringArray<Provider>(
-  "cc-session-disabled-providers",
+  "sessionview-disabled-providers",
   "disabled providers setting",
   (value): value is Provider => VALID_PROVIDERS.includes(value as Provider),
 );
 const initialBlockedFolders = parseStoredStringArray<string>(
-  "cc-session-blocked-folders",
+  "sessionview-blocked-folders",
   "blocked folders setting",
   (value): value is string => value.length > 0,
 );
@@ -144,8 +144,8 @@ const useSettingsStore = create<SettingsState>(() => ({
   terminalApp: storedTerminal || "terminal",
   disabledProviders: initialDisabledProviders.value,
   disabledProvidersError: initialDisabledProviders.error,
-  showOrphans: readStorage("cc-session-show-orphans") !== "false",
-  focusMode: readStorage("cc-session-focus-mode") === "true",
+  showOrphans: readStorage("sessionview-show-orphans") !== "false",
+  focusMode: readStorage("sessionview-focus-mode") === "true",
   explorerGrouping: readStoredExplorerGrouping(),
   blockedFolders: initialBlockedFolders.value,
   blockedFoldersError: initialBlockedFolders.error,
@@ -157,7 +157,7 @@ if (!storedTerminal) {
     .then((detected) => {
       if (VALID_TERMINALS.includes(detected as TerminalApp)) {
         useSettingsStore.setState({ terminalApp: detected as TerminalApp });
-        writeStorage("cc-session-terminal", detected);
+        writeStorage("sessionview-terminal", detected);
       }
     })
     .catch((error) => {
@@ -167,7 +167,7 @@ if (!storedTerminal) {
 
 export function setTerminalApp(t: TerminalApp) {
   useSettingsStore.setState({ terminalApp: t });
-  writeStorage("cc-session-terminal", t);
+  writeStorage("sessionview-terminal", t);
 }
 
 export function toggleProvider(id: Provider) {
@@ -177,22 +177,22 @@ export function toggleProvider(id: Provider) {
     disabledProviders: next,
     disabledProvidersError: null,
   });
-  writeStorage("cc-session-disabled-providers", JSON.stringify(next));
+  writeStorage("sessionview-disabled-providers", JSON.stringify(next));
 }
 
 export function setShowOrphans(v: boolean) {
   useSettingsStore.setState({ showOrphans: v });
-  writeStorage("cc-session-show-orphans", String(v));
+  writeStorage("sessionview-show-orphans", String(v));
 }
 
 export function setFocusMode(v: boolean) {
   useSettingsStore.setState({ focusMode: v });
-  writeStorage("cc-session-focus-mode", String(v));
+  writeStorage("sessionview-focus-mode", String(v));
 }
 
 export function setExplorerGrouping(mode: ExplorerGrouping) {
   useSettingsStore.setState({ explorerGrouping: mode });
-  writeStorage("cc-session-explorer-grouping", mode);
+  writeStorage("sessionview-explorer-grouping", mode);
 }
 
 export function addBlockedFolder(path: string) {
@@ -203,7 +203,7 @@ export function addBlockedFolder(path: string) {
     blockedFolders: next,
     blockedFoldersError: null,
   });
-  writeStorage("cc-session-blocked-folders", JSON.stringify(next));
+  writeStorage("sessionview-blocked-folders", JSON.stringify(next));
 }
 
 export function removeBlockedFolder(path: string) {
@@ -213,7 +213,7 @@ export function removeBlockedFolder(path: string) {
     blockedFolders: next,
     blockedFoldersError: null,
   });
-  writeStorage("cc-session-blocked-folders", JSON.stringify(next));
+  writeStorage("sessionview-blocked-folders", JSON.stringify(next));
 }
 
 export function isPathBlocked(path: string): boolean {

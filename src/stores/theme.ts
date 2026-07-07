@@ -7,7 +7,7 @@ function readStoredTheme(): Theme {
     return "system";
   }
   try {
-    const stored = localStorage.getItem("cc-session-theme");
+    const stored = localStorage.getItem("sessionview-theme");
     return stored === "light" || stored === "dark" ? stored : "system";
   } catch (error) {
     console.error("Failed to read theme from localStorage:", error);
@@ -20,7 +20,7 @@ function writeStoredTheme(theme: Theme): void {
     return;
   }
   try {
-    localStorage.setItem("cc-session-theme", theme);
+    localStorage.setItem("sessionview-theme", theme);
   } catch (error) {
     console.error("Failed to write theme to localStorage:", error);
   }

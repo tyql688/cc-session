@@ -63,7 +63,7 @@ pub(super) fn extract_messages(entries: &[PiEntry], branch: &[String]) -> Vec<Me
     messages
 }
 
-/// Convert Pi agent messages to CC Session messages.
+/// Convert Pi agent messages to SessionView messages.
 fn push_agent_messages(
     msg: &PiAgentMessage,
     messages: &mut Vec<Message>,

@@ -1,4 +1,4 @@
-# Git hooks for cc-session (JS + Rust). Installed via the `prepare` npm script.
+# Git hooks for sessionview (JS + Rust). Installed via the `prepare` npm script.
 # Hooks give fast local feedback; CI (.github/workflows/ci.yml) remains the
 # authoritative gate. Bypass a hook with `git commit/push --no-verify`.
 

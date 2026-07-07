@@ -94,5 +94,5 @@ git push && git push origin "$TAG"
 
 echo ""
 echo "Done! GitHub Actions will build the release."
-echo "Check: https://github.com/tyql688/cc-session/actions"
-echo "Release draft: https://github.com/tyql688/cc-session/releases"
+echo "Check: https://github.com/tyql688/sessionview/actions"
+echo "Release draft: https://github.com/tyql688/sessionview/releases"

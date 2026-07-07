@@ -4,10 +4,10 @@
 use serde::Deserialize;
 use serde_json::{json, Value};
 
-use cc_session_lib::models::{
+use sessionview_lib::models::{
     Message, MessageRole, Provider, SessionDetail, SessionMeta, TokenUsage, ToolMetadata,
 };
-use cc_session_lib::tool_metadata::{
+use sessionview_lib::tool_metadata::{
     build_tool_metadata, enrich_tool_metadata, ToolCallFacts, ToolResultFacts,
 };
 
@@ -28,7 +28,7 @@ fn test_render_tool_detail_golden() {
         serde_json::from_str(&data).unwrap_or_else(|e| panic!("failed to parse fixture: {e}"));
 
     for case in &cases {
-        let html = cc_session_lib::exporter_test_helpers::render_tool_detail_pub(
+        let html = sessionview_lib::exporter_test_helpers::render_tool_detail_pub(
             &case.tool_name,
             &case.tool_input,
         );
@@ -228,7 +228,7 @@ fn test_render_session_html_uses_tool_metadata() {
         ),
     ]);
 
-    let html = cc_session_lib::exporter_test_helpers::render_session_html_pub(&detail);
+    let html = sessionview_lib::exporter_test_helpers::render_session_html_pub(&detail);
     assert!(html.contains("tool-line-diff"));
     assert!(html.contains("tool-diff-line remove"));
     assert!(html.contains("tool-diff-line add"));
@@ -250,7 +250,7 @@ fn test_render_session_html_skips_usage_only_assistant_placeholders() {
         assistant_message("Visible reply"),
     ]);
 
-    let html = cc_session_lib::exporter_test_helpers::render_session_html_pub(&detail);
+    let html = sessionview_lib::exporter_test_helpers::render_session_html_pub(&detail);
 
     assert_eq!(html.matches("msg-assistant").count(), 1);
     assert!(html.contains("Visible reply"));
@@ -264,7 +264,7 @@ fn test_render_session_markdown_skips_usage_only_assistant_placeholders() {
         assistant_message("Visible reply"),
     ]);
 
-    let markdown = cc_session_lib::exporter_test_helpers::render_session_markdown_pub(&detail);
+    let markdown = sessionview_lib::exporter_test_helpers::render_session_markdown_pub(&detail);
 
     assert_eq!(markdown.matches("### Assistant").count(), 1);
     assert!(markdown.contains("Visible reply"));
@@ -276,7 +276,7 @@ fn test_render_tool_detail_shortens_home_paths_in_patch_headers() {
         "patch": "*** Begin Patch\n*** Update File: /Users/alice/project/src/app.ts\n@@\n-old\n+new\n*** End Patch\n"
     })
     .to_string();
-    let html = cc_session_lib::exporter_test_helpers::render_tool_detail_pub("Edit", &input);
+    let html = sessionview_lib::exporter_test_helpers::render_tool_detail_pub("Edit", &input);
 
     assert!(html.contains("*** Update File: ~/project/src/app.ts"));
     assert!(!html.contains("/Users/alice"));

@@ -492,8 +492,8 @@ mod tests {
     fn project_costs_count_distinct_sessions_exactly() {
         let rows = vec![
             UsageProjectModelDetailRow {
-                project_path: "/tmp/drama/ccsession".to_string(),
-                project_name: "drama/ccsession".to_string(),
+                project_path: "/tmp/drama/sessionview".to_string(),
+                project_name: "drama/sessionview".to_string(),
                 provider: "claude".to_string(),
                 session_id: "session-a".to_string(),
                 turns: 12,
@@ -504,8 +504,8 @@ mod tests {
                 cost_usd: 1.0,
             },
             UsageProjectModelDetailRow {
-                project_path: "/tmp/drama/ccsession".to_string(),
-                project_name: "drama/ccsession".to_string(),
+                project_path: "/tmp/drama/sessionview".to_string(),
+                project_name: "drama/sessionview".to_string(),
                 provider: "claude".to_string(),
                 session_id: "session-a".to_string(),
                 turns: 8,
@@ -516,8 +516,8 @@ mod tests {
                 cost_usd: 0.5,
             },
             UsageProjectModelDetailRow {
-                project_path: "/tmp/drama/ccsession".to_string(),
-                project_name: "drama/ccsession".to_string(),
+                project_path: "/tmp/drama/sessionview".to_string(),
+                project_name: "drama/sessionview".to_string(),
                 provider: "claude".to_string(),
                 session_id: "session-b".to_string(),
                 turns: 4,
@@ -532,7 +532,7 @@ mod tests {
         let project_costs = build_project_costs(rows);
         assert_eq!(project_costs.len(), 1);
         assert_eq!(project_costs[0].sessions, 2);
-        assert_eq!(project_costs[0].project_path, "/tmp/drama/ccsession");
+        assert_eq!(project_costs[0].project_path, "/tmp/drama/sessionview");
         assert_eq!(project_costs[0].turns, 24);
         assert_eq!(project_costs[0].tokens, 260);
     }
@@ -592,8 +592,8 @@ mod tests {
         let rows = vec![
             UsageSessionModelDetailRow {
                 session_id: "session-a".to_string(),
-                project_path: "/tmp/drama/ccsession".to_string(),
-                project_name: "drama/ccsession".to_string(),
+                project_path: "/tmp/drama/sessionview".to_string(),
+                project_name: "drama/sessionview".to_string(),
                 provider: "claude".to_string(),
                 updated_at: 1_700_000_000,
                 model: "sonnet-4-6".to_string(),
@@ -606,8 +606,8 @@ mod tests {
             },
             UsageSessionModelDetailRow {
                 session_id: "session-a".to_string(),
-                project_path: "/tmp/drama/ccsession".to_string(),
-                project_name: "drama/ccsession".to_string(),
+                project_path: "/tmp/drama/sessionview".to_string(),
+                project_name: "drama/sessionview".to_string(),
                 provider: "claude".to_string(),
                 updated_at: 1_700_000_000,
                 model: "opus-4-6".to_string(),
@@ -623,7 +623,7 @@ mod tests {
         let recent_sessions = build_recent_sessions(rows);
         assert_eq!(recent_sessions.len(), 1);
         assert_eq!(recent_sessions[0].model, "opus-4-6");
-        assert_eq!(recent_sessions[0].project_path, "/tmp/drama/ccsession");
+        assert_eq!(recent_sessions[0].project_path, "/tmp/drama/sessionview");
         assert_eq!(recent_sessions[0].turns, 8);
         assert_eq!(recent_sessions[0].tokens, 1_740);
     }

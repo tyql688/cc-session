@@ -89,18 +89,18 @@ export function AboutSettings() {
         <div className="settings-label">{t("settings.github")}</div>
         <a
           className="settings-stat link-accent"
-          href="https://github.com/tyql688/cc-session"
+          href="https://github.com/tyql688/sessionview"
           onClick={(e) => {
             e.preventDefault();
             void invokeWithToast(
               invoke<void>("open_external", {
-                url: "https://github.com/tyql688/cc-session",
+                url: "https://github.com/tyql688/sessionview",
               }),
               "open GitHub link",
             );
           }}
         >
-          cc-session
+          sessionview
         </a>
       </div>
     </div>

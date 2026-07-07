@@ -21,7 +21,7 @@ use super::AppState;
 /// Sentinel error returned when a load was cancelled mid-flight. Mapped
 /// to a typed string the frontend can ignore (rather than show as an
 /// error toast).
-const CANCEL_ERROR: &str = "__cc_session_load_canceled__";
+const CANCEL_ERROR: &str = "__sessionview_load_canceled__";
 
 pub(super) fn canceled_error() -> anyhow::Error {
     anyhow!(CANCEL_ERROR)

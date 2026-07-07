@@ -2,7 +2,7 @@
 
 ## [0.6.0] - Unreleased
 
-0.6.0 is the React release of CC Session. The frontend has been rebuilt around
+0.6.0 is the React release of SessionView. The frontend has been rebuilt around
 React 19, zustand, react-i18next, Base UI primitives, and React Compiler, with a
 stronger session viewer, cleaner navigation, and a more reliable indexing path.
 

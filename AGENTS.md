@@ -1,4 +1,4 @@
-# CC Session
+# SessionView
 
 Desktop app for browsing AI coding sessions. Tauri 2.0 + React 19 + Rust + SQLite FTS5.
 

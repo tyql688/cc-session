@@ -309,8 +309,8 @@ fn parent_backfills_child_when_parser_declares_child_ids() {
     //    populates this from INVOKE_SUBAGENT step content). The child row
     //    must be back-filled with parent_id + inherited project metadata.
     let mut parent_meta = sample_meta(parent_id);
-    parent_meta.project_path = "/tmp/ccsession".into();
-    parent_meta.project_name = "ccsession".into();
+    parent_meta.project_path = "/tmp/sessionview".into();
+    parent_meta.project_name = "sessionview".into();
 
     db.sync_provider_snapshot(
         &Provider::Antigravity,
@@ -331,8 +331,8 @@ fn parent_backfills_child_when_parser_declares_child_ids() {
     let loaded_child_after = db.get_session(child_id).unwrap().unwrap();
     assert_eq!(loaded_child_after.parent_id, Some(parent_id.to_string()));
     assert!(loaded_child_after.is_sidechain);
-    assert_eq!(loaded_child_after.project_path, "/tmp/ccsession");
-    assert_eq!(loaded_child_after.project_name, "ccsession");
+    assert_eq!(loaded_child_after.project_path, "/tmp/sessionview");
+    assert_eq!(loaded_child_after.project_name, "sessionview");
 
     // 3. A later incremental sync of the child (no parent info) must not
     //    clobber parent_id / is_sidechain / project metadata.
@@ -355,8 +355,8 @@ fn parent_backfills_child_when_parser_declares_child_ids() {
     let loaded_child_final = db.get_session(child_id).unwrap().unwrap();
     assert_eq!(loaded_child_final.parent_id, Some(parent_id.to_string()));
     assert!(loaded_child_final.is_sidechain);
-    assert_eq!(loaded_child_final.project_path, "/tmp/ccsession");
-    assert_eq!(loaded_child_final.project_name, "ccsession");
+    assert_eq!(loaded_child_final.project_path, "/tmp/sessionview");
+    assert_eq!(loaded_child_final.project_name, "sessionview");
 }
 
 #[test]

@@ -1,4 +1,4 @@
-export const TAB_DRAG_MIME = "application/x-cc-session-tab";
+export const TAB_DRAG_MIME = "application/x-sessionview-tab";
 export const TAB_DRAG_FALLBACK_MIME = "text/plain";
 
 export interface TabDragPayload {

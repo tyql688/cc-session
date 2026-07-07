@@ -1,7 +1,7 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "Default permissions for CC Session",
+  "description": "Default permissions for SessionView",
   "windows": ["main"],
   "permissions": [
     "core:default",

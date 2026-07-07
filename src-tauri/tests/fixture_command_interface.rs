@@ -3,10 +3,10 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 
-use cc_session_lib::command_test_helpers;
-use cc_session_lib::db::Database;
-use cc_session_lib::models::{Provider, ProviderSnapshot, SessionDetail, SessionMeta, TrashMeta};
-use cc_session_lib::providers::claude::parser::parse_session_file;
+use sessionview_lib::command_test_helpers;
+use sessionview_lib::db::Database;
+use sessionview_lib::models::{Provider, ProviderSnapshot, SessionDetail, SessionMeta, TrashMeta};
+use sessionview_lib::providers::claude::parser::parse_session_file;
 use tempfile::TempDir;
 
 static ENV_LOCK: Mutex<()> = Mutex::new(());
@@ -63,7 +63,7 @@ fn override_home_env(home: &Path) -> Vec<EnvOverride> {
 
 fn override_data_env(data_home: &Path) -> Vec<EnvOverride> {
     vec![
-        EnvOverride::set("CC_SESSION_TEST_DATA_DIR", data_home),
+        EnvOverride::set("SESSIONVIEW_TEST_DATA_DIR", data_home),
         EnvOverride::set("XDG_DATA_HOME", data_home),
         EnvOverride::set("LOCALAPPDATA", data_home),
         EnvOverride::set("APPDATA", data_home),

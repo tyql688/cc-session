@@ -13,11 +13,11 @@
 use std::sync::Arc;
 use std::time::Instant;
 
-use cc_session_lib::db::Database;
-use cc_session_lib::indexer::Indexer;
+use sessionview_lib::db::Database;
+use sessionview_lib::indexer::Indexer;
 
 fn live_data_dir() -> Option<std::path::PathBuf> {
-    let dir = dirs::data_local_dir()?.join("cc-session");
+    let dir = dirs::data_local_dir()?.join("sessionview");
     dir.join("sessions.db").exists().then_some(dir)
 }
 
@@ -25,7 +25,7 @@ fn live_data_dir() -> Option<std::path::PathBuf> {
 #[ignore] // real local data; run manually with --ignored --nocapture
 fn forced_usage_refresh_timing_on_db_copy() {
     let Some(live_dir) = live_data_dir() else {
-        eprintln!("no live cc-session database found; skipping");
+        eprintln!("no live sessionview database found; skipping");
         return;
     };
 
@@ -62,7 +62,7 @@ fn forced_usage_refresh_timing_on_db_copy() {
 
     let indexer = Indexer::new(
         Arc::clone(&db),
-        cc_session_lib::provider::all_runtimes(),
+        sessionview_lib::provider::all_runtimes(),
         temp.path().to_path_buf(),
     );
 

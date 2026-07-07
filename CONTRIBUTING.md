@@ -1,4 +1,4 @@
-# Contributing to CC Session
+# Contributing to SessionView
 
 Thanks for your interest in contributing! This guide will help you get started.
 
@@ -13,8 +13,8 @@ Thanks for your interest in contributing! This guide will help you get started.
 ### Getting Started
 
 ```bash
-git clone https://github.com/tyql688/cc-session.git
-cd cc-session
+git clone https://github.com/tyql688/sessionview.git
+cd sessionview
 npm install
 npm run tauri dev
 ```
@@ -38,7 +38,7 @@ npm run knip                  # Release dead-code/dependency audit
 
 ### Reporting Bugs
 
-1. Search [existing issues](https://github.com/tyql688/cc-session/issues) first
+1. Search [existing issues](https://github.com/tyql688/sessionview/issues) first
 2. Open a new issue using the **Bug Report** template
 3. Include: OS, app version, steps to reproduce, expected vs actual behavior
 
