@@ -1,8 +1,10 @@
 use std::process::Command;
 
-pub fn launch_terminal(target: &str, command: &str, cwd: Option<&str>) -> Result<(), String> {
+use anyhow::Context;
+
+pub fn launch_terminal(target: &str, command: &str, cwd: Option<&str>) -> anyhow::Result<()> {
     if command.trim().is_empty() {
-        return Err("Command is empty".to_string());
+        anyhow::bail!("Command is empty");
     }
 
     #[cfg(target_os = "macos")]
@@ -43,12 +45,12 @@ pub fn launch_terminal(target: &str, command: &str, cwd: Option<&str>) -> Result
 
     #[cfg(not(any(target_os = "macos", target_os = "windows", target_os = "linux")))]
     {
-        Err("Terminal launch is not supported on this platform".to_string())
+        anyhow::bail!("Terminal launch is not supported on this platform")
     }
 }
 
 #[cfg(target_os = "macos")]
-fn launch_macos_terminal(command: &str, cwd: Option<&str>) -> Result<(), String> {
+fn launch_macos_terminal(command: &str, cwd: Option<&str>) -> anyhow::Result<()> {
     let full_command = build_shell_command(command, cwd);
     let escaped = escape_osascript(&full_command);
     // Use "do script" without "in window" to always create a new tab
@@ -65,17 +67,17 @@ end tell"#
         .arg("-e")
         .arg(script)
         .status()
-        .map_err(|e| format!("Failed to launch Terminal: {e}"))?;
+        .context("Failed to launch Terminal")?;
 
     if status.success() {
         Ok(())
     } else {
-        Err("Terminal command execution failed".to_string())
+        anyhow::bail!("Terminal command execution failed")
     }
 }
 
 #[cfg(target_os = "macos")]
-fn launch_iterm(command: &str, cwd: Option<&str>) -> Result<(), String> {
+fn launch_iterm(command: &str, cwd: Option<&str>) -> anyhow::Result<()> {
     let full_command = build_shell_command(command, cwd);
     let escaped = escape_osascript(&full_command);
     let script = format!(
@@ -101,28 +103,28 @@ end tell"#
         .arg("-e")
         .arg(script)
         .status()
-        .map_err(|e| format!("Failed to launch iTerm: {e}"))?;
+        .context("Failed to launch iTerm")?;
 
     if status.success() {
         Ok(())
     } else {
-        Err("iTerm command execution failed".to_string())
+        anyhow::bail!("iTerm command execution failed")
     }
 }
 
 #[cfg(target_os = "macos")]
-fn launch_ghostty(command: &str, cwd: Option<&str>) -> Result<(), String> {
+fn launch_ghostty(command: &str, cwd: Option<&str>) -> anyhow::Result<()> {
     let args = build_ghostty_args(command, cwd);
 
     let status = Command::new("open")
         .args(args.iter().map(String::as_str))
         .status()
-        .map_err(|e| format!("Failed to launch Ghostty: {e}"))?;
+        .context("Failed to launch Ghostty")?;
 
     if status.success() {
         Ok(())
     } else {
-        Err("Failed to launch Ghostty. Make sure it is installed.".to_string())
+        anyhow::bail!("Failed to launch Ghostty. Make sure it is installed.")
     }
 }
 
@@ -163,7 +165,7 @@ fn ghostty_raw_input(command: &str) -> String {
 }
 
 #[cfg(target_os = "macos")]
-fn launch_warp(command: &str, cwd: Option<&str>) -> Result<(), String> {
+fn launch_warp(command: &str, cwd: Option<&str>) -> anyhow::Result<()> {
     let full_command = build_shell_command(command, cwd);
     let escaped = escape_osascript(&full_command);
     let script = format!(
@@ -181,17 +183,17 @@ end tell"#
         .arg("-e")
         .arg(script)
         .status()
-        .map_err(|e| format!("Failed to launch Warp: {e}"))?;
+        .context("Failed to launch Warp")?;
 
     if status.success() {
         Ok(())
     } else {
-        Err("Failed to launch Warp. Make sure it is installed.".to_string())
+        anyhow::bail!("Failed to launch Warp. Make sure it is installed.")
     }
 }
 
 #[cfg(target_os = "macos")]
-fn launch_kitty(command: &str, cwd: Option<&str>) -> Result<(), String> {
+fn launch_kitty(command: &str, cwd: Option<&str>) -> anyhow::Result<()> {
     let shell = std::env::var("SHELL").unwrap_or_else(|_| "/bin/zsh".to_string());
 
     let mut cmd = Command::new("open");
@@ -205,19 +207,17 @@ fn launch_kitty(command: &str, cwd: Option<&str>) -> Result<(), String> {
 
     cmd.arg("-e").arg(&shell).arg("-c").arg(command);
 
-    let status = cmd
-        .status()
-        .map_err(|e| format!("Failed to launch Kitty: {e}"))?;
+    let status = cmd.status().context("Failed to launch Kitty")?;
 
     if status.success() {
         Ok(())
     } else {
-        Err("Failed to launch Kitty. Make sure it is installed.".to_string())
+        anyhow::bail!("Failed to launch Kitty. Make sure it is installed.")
     }
 }
 
 #[cfg(target_os = "macos")]
-fn launch_wezterm(command: &str, cwd: Option<&str>) -> Result<(), String> {
+fn launch_wezterm(command: &str, cwd: Option<&str>) -> anyhow::Result<()> {
     let full_command = build_shell_command(command, None);
     let shell = std::env::var("SHELL").unwrap_or_else(|_| "/bin/zsh".to_string());
 
@@ -236,17 +236,17 @@ fn launch_wezterm(command: &str, cwd: Option<&str>) -> Result<(), String> {
     let status = Command::new("open")
         .args(&args)
         .status()
-        .map_err(|e| format!("Failed to launch WezTerm: {e}"))?;
+        .context("Failed to launch WezTerm")?;
 
     if status.success() {
         Ok(())
     } else {
-        Err("Failed to launch WezTerm.".to_string())
+        anyhow::bail!("Failed to launch WezTerm.")
     }
 }
 
 #[cfg(target_os = "macos")]
-fn launch_alacritty(command: &str, cwd: Option<&str>) -> Result<(), String> {
+fn launch_alacritty(command: &str, cwd: Option<&str>) -> anyhow::Result<()> {
     let full_command = build_shell_command(command, None);
     let shell = std::env::var("SHELL").unwrap_or_else(|_| "/bin/zsh".to_string());
 
@@ -265,12 +265,12 @@ fn launch_alacritty(command: &str, cwd: Option<&str>) -> Result<(), String> {
     let status = Command::new("open")
         .args(&args)
         .status()
-        .map_err(|e| format!("Failed to launch Alacritty: {e}"))?;
+        .context("Failed to launch Alacritty")?;
 
     if status.success() {
         Ok(())
     } else {
-        Err("Failed to launch Alacritty.".to_string())
+        anyhow::bail!("Failed to launch Alacritty.")
     }
 }
 
@@ -311,7 +311,7 @@ use std::os::windows::process::CommandExt;
 const CREATE_NO_WINDOW: u32 = 0x08000000;
 
 #[cfg(target_os = "windows")]
-fn launch_windows_terminal(command: &str, cwd: Option<&str>) -> Result<(), String> {
+fn launch_windows_terminal(command: &str, cwd: Option<&str>) -> anyhow::Result<()> {
     // Windows Terminal: `wt cmd /K <bat_command>`
     // Uses cmd as inner shell so it works regardless of WT default profile.
     let bat_cmd = build_cmd_command(command, cwd);
@@ -319,7 +319,7 @@ fn launch_windows_terminal(command: &str, cwd: Option<&str>) -> Result<(), Strin
 }
 
 #[cfg(target_os = "windows")]
-fn launch_windows_powershell(command: &str, cwd: Option<&str>) -> Result<(), String> {
+fn launch_windows_powershell(command: &str, cwd: Option<&str>) -> anyhow::Result<()> {
     let ps_cmd = build_powershell_command(command, cwd);
     run_windows_start(
         &["powershell", "-NoExit", "-Command", &ps_cmd],
@@ -328,7 +328,7 @@ fn launch_windows_powershell(command: &str, cwd: Option<&str>) -> Result<(), Str
 }
 
 #[cfg(target_os = "windows")]
-fn launch_windows_cmd(command: &str, cwd: Option<&str>) -> Result<(), String> {
+fn launch_windows_cmd(command: &str, cwd: Option<&str>) -> anyhow::Result<()> {
     // Write a temp .bat file to avoid `&&` being parsed by the outer cmd in
     // `cmd /C start "" cmd /K "cd /d ... && ..."`.
     let bat_path = std::env::temp_dir().join(format!("cc_session_{}.bat", std::process::id()));
@@ -340,7 +340,7 @@ fn launch_windows_cmd(command: &str, cwd: Option<&str>) -> Result<(), String> {
     }
     bat.push_str(command);
     bat.push_str("\r\n");
-    std::fs::write(&bat_path, &bat).map_err(|e| format!("failed to write temp script: {e}"))?;
+    std::fs::write(&bat_path, &bat).context("failed to write temp script")?;
 
     let bat_str = bat_path.to_string_lossy().to_string();
     run_windows_start(&["cmd", "/K", &bat_str], "Command Prompt")
@@ -349,12 +349,12 @@ fn launch_windows_cmd(command: &str, cwd: Option<&str>) -> Result<(), String> {
 /// Launch a Windows terminal via `cmd /C start` with CREATE_NO_WINDOW to avoid
 /// a flash of a console window from the parent process.
 #[cfg(target_os = "windows")]
-fn run_windows_start(args: &[&str], terminal_name: &str) -> Result<(), String> {
+fn run_windows_start(args: &[&str], terminal_name: &str) -> anyhow::Result<()> {
     let mut cmd = Command::new("cmd");
     cmd.arg("/C").arg("start").arg("").args(args);
     cmd.creation_flags(CREATE_NO_WINDOW);
     cmd.spawn()
-        .map_err(|e| format!("failed to launch {terminal_name}: {e}"))?;
+        .with_context(|| format!("failed to launch {terminal_name}"))?;
     Ok(())
 }
 
@@ -399,19 +399,19 @@ fn launch_linux_generic(
     args_builder: impl FnOnce(&str, &str) -> Vec<String>,
     command: &str,
     cwd: Option<&str>,
-) -> Result<(), String> {
+) -> anyhow::Result<()> {
     let full = linux_shell_command(command, cwd);
     let shell = std::env::var("SHELL").unwrap_or_else(|_| "/bin/bash".to_string());
     let args = args_builder(&shell, &full);
     Command::new(terminal)
         .args(&args)
         .spawn()
-        .map_err(|e| format!("failed to launch {terminal}: {e}"))?;
+        .with_context(|| format!("failed to launch {terminal}"))?;
     Ok(())
 }
 
 #[cfg(target_os = "linux")]
-fn launch_linux_gnome_terminal(command: &str, cwd: Option<&str>) -> Result<(), String> {
+fn launch_linux_gnome_terminal(command: &str, cwd: Option<&str>) -> anyhow::Result<()> {
     launch_linux_generic(
         "gnome-terminal",
         |shell, full| vec!["--".into(), shell.into(), "-c".into(), full.into()],
@@ -421,7 +421,7 @@ fn launch_linux_gnome_terminal(command: &str, cwd: Option<&str>) -> Result<(), S
 }
 
 #[cfg(target_os = "linux")]
-fn launch_linux_konsole(command: &str, cwd: Option<&str>) -> Result<(), String> {
+fn launch_linux_konsole(command: &str, cwd: Option<&str>) -> anyhow::Result<()> {
     launch_linux_generic(
         "konsole",
         |shell, full| vec!["-e".into(), shell.into(), "-c".into(), full.into()],
@@ -431,7 +431,7 @@ fn launch_linux_konsole(command: &str, cwd: Option<&str>) -> Result<(), String> 
 }
 
 #[cfg(target_os = "linux")]
-fn launch_linux_xterm(command: &str, cwd: Option<&str>) -> Result<(), String> {
+fn launch_linux_xterm(command: &str, cwd: Option<&str>) -> anyhow::Result<()> {
     launch_linux_generic(
         "xterm",
         |shell, full| vec!["-e".into(), shell.into(), "-c".into(), full.into()],
@@ -441,7 +441,7 @@ fn launch_linux_xterm(command: &str, cwd: Option<&str>) -> Result<(), String> {
 }
 
 #[cfg(target_os = "linux")]
-fn launch_linux_alacritty(command: &str, cwd: Option<&str>) -> Result<(), String> {
+fn launch_linux_alacritty(command: &str, cwd: Option<&str>) -> anyhow::Result<()> {
     let full = linux_shell_command(command, None);
     let shell = std::env::var("SHELL").unwrap_or_else(|_| "/bin/bash".to_string());
     let mut cmd = Command::new("alacritty");
@@ -451,13 +451,12 @@ fn launch_linux_alacritty(command: &str, cwd: Option<&str>) -> Result<(), String
         }
     }
     cmd.args(["-e", &shell, "-c", &full]);
-    cmd.spawn()
-        .map_err(|e| format!("failed to launch alacritty: {e}"))?;
+    cmd.spawn().context("failed to launch alacritty")?;
     Ok(())
 }
 
 #[cfg(target_os = "linux")]
-fn launch_linux_kitty(command: &str, cwd: Option<&str>) -> Result<(), String> {
+fn launch_linux_kitty(command: &str, cwd: Option<&str>) -> anyhow::Result<()> {
     let shell = std::env::var("SHELL").unwrap_or_else(|_| "/bin/bash".to_string());
     let mut cmd = Command::new("kitty");
     if let Some(dir) = cwd {
@@ -466,13 +465,12 @@ fn launch_linux_kitty(command: &str, cwd: Option<&str>) -> Result<(), String> {
         }
     }
     cmd.args(["-e", &shell, "-c", command]);
-    cmd.spawn()
-        .map_err(|e| format!("failed to launch kitty: {e}"))?;
+    cmd.spawn().context("failed to launch kitty")?;
     Ok(())
 }
 
 #[cfg(target_os = "linux")]
-fn launch_linux_wezterm(command: &str, cwd: Option<&str>) -> Result<(), String> {
+fn launch_linux_wezterm(command: &str, cwd: Option<&str>) -> anyhow::Result<()> {
     let full = linux_shell_command(command, None);
     let shell = std::env::var("SHELL").unwrap_or_else(|_| "/bin/bash".to_string());
     let mut cmd = Command::new("wezterm");
@@ -483,13 +481,12 @@ fn launch_linux_wezterm(command: &str, cwd: Option<&str>) -> Result<(), String> 
         }
     }
     cmd.args(["--", &shell, "-c", &full]);
-    cmd.spawn()
-        .map_err(|e| format!("failed to launch wezterm: {e}"))?;
+    cmd.spawn().context("failed to launch wezterm")?;
     Ok(())
 }
 
 #[cfg(target_os = "linux")]
-fn launch_linux_default(command: &str, cwd: Option<&str>) -> Result<(), String> {
+fn launch_linux_default(command: &str, cwd: Option<&str>) -> anyhow::Result<()> {
     // Try common terminals in order of popularity
     let terminals = ["gnome-terminal", "konsole", "xfce4-terminal", "xterm"];
 
@@ -505,8 +502,5 @@ fn launch_linux_default(command: &str, cwd: Option<&str>) -> Result<(), String> 
         }
     }
 
-    Err(
-        "no supported terminal emulator found; install gnome-terminal, konsole, or xterm"
-            .to_string(),
-    )
+    anyhow::bail!("no supported terminal emulator found; install gnome-terminal, konsole, or xterm")
 }

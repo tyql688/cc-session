@@ -290,7 +290,7 @@ pub async fn export_session(
     let state = state.inner().clone();
     tokio::task::spawn_blocking(move || -> anyhow::Result<()> {
         let detail = load_detail(&session_id, &state.db)?;
-        exporter::export(&detail, &format, &output_path).map_err(|e| anyhow!(e))?;
+        exporter::export(&detail, &format, &output_path)?;
         Ok(())
     })
     .await

@@ -1,3 +1,4 @@
+use anyhow::Context;
 use notify::{Config, Event, RecommendedWatcher, RecursiveMode, Watcher};
 
 use crate::provider::SessionProvider;
@@ -15,7 +16,7 @@ const DEBOUNCE_MS: u64 = 500;
 pub fn start_watcher(
     app: AppHandle,
     providers: &[Box<dyn SessionProvider>],
-) -> Result<RecommendedWatcher, String> {
+) -> anyhow::Result<RecommendedWatcher> {
     let watch_paths: Vec<PathBuf> = providers
         .iter()
         .flat_map(|p| p.watch_paths())
@@ -86,7 +87,7 @@ pub fn start_watcher(
                 }
             }
         })
-        .map_err(|e| format!("failed to spawn debounce thread: {e}"))?;
+        .context("failed to spawn debounce thread")?;
 
     let mut watcher = RecommendedWatcher::new(
         move |res: Result<Event, notify::Error>| {
@@ -108,7 +109,7 @@ pub fn start_watcher(
         },
         Config::default(),
     )
-    .map_err(|e| format!("failed to create file watcher: {e}"))?;
+    .context("failed to create file watcher")?;
 
     let mut watched_count = 0usize;
     for path in &watch_paths {
@@ -134,7 +135,7 @@ pub fn start_watcher(
     }
 
     if !watch_paths.is_empty() && watched_count == 0 && shallow_watched_count == 0 {
-        return Err("failed to watch any provider directory".to_string());
+        anyhow::bail!("failed to watch any provider directory");
     }
 
     log::info!(

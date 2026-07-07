@@ -1,6 +1,7 @@
 use std::fs;
 use std::path::Path;
 
+use anyhow::Context;
 use base64::engine::general_purpose::STANDARD as BASE64;
 use base64::Engine as _;
 
@@ -480,9 +481,9 @@ pub fn render(detail: &SessionDetail) -> String {
     )
 }
 
-pub fn export_html(detail: &SessionDetail, output_path: &Path) -> Result<(), String> {
+pub fn export_html(detail: &SessionDetail, output_path: &Path) -> anyhow::Result<()> {
     let html = super::redact_home_path(&render(detail));
-    fs::write(output_path, html).map_err(|e| format!("failed to write file: {e}"))?;
+    fs::write(output_path, html).context("failed to write file")?;
     Ok(())
 }
 

@@ -1,5 +1,7 @@
 use std::path::{Path, PathBuf};
 
+use anyhow::Context;
+
 use crate::models::{SessionMeta, TrashMeta};
 
 use super::{ChildPlan, DeletionPlan, FileAction, ProviderError, RestoreAction, SessionProvider};
@@ -15,7 +17,7 @@ pub fn execute_trash(
     provider_key: &str,
     trash_dir: &Path,
     ts: i64,
-) -> Result<Vec<TrashMeta>, String> {
+) -> anyhow::Result<Vec<TrashMeta>> {
     let mut records = Vec::new();
 
     // Main session
@@ -23,10 +25,9 @@ pub fn execute_trash(
         FileAction::Remove => {
             let src = Path::new(&meta.source_path);
             if src.exists() {
-                match move_to_trash(src, trash_dir, ts) {
-                    Ok(TrashResult::Moved { trash_file }) => trash_file,
-                    Err(e) => return Err(format!("failed to move parent to trash: {e}")),
-                }
+                let TrashResult::Moved { trash_file } =
+                    move_to_trash(src, trash_dir, ts).context("failed to move parent to trash")?;
+                trash_file
             } else {
                 String::new()
             }
@@ -51,12 +52,9 @@ pub fn execute_trash(
             FileAction::Remove => {
                 let src = Path::new(&child.source_path);
                 if src.exists() {
-                    match move_to_trash(src, trash_dir, ts) {
-                        Ok(TrashResult::Moved { trash_file }) => trash_file,
-                        Err(e) => {
-                            return Err(format!("failed to move child {} to trash: {e}", child.id))
-                        }
-                    }
+                    let TrashResult::Moved { trash_file } = move_to_trash(src, trash_dir, ts)
+                        .with_context(|| format!("failed to move child {} to trash", child.id))?;
+                    trash_file
                 } else {
                     String::new()
                 }
@@ -79,9 +77,8 @@ pub fn execute_trash(
     // Cleanup directories
     for dir in &plan.cleanup_dirs {
         if dir.is_dir() {
-            std::fs::remove_dir_all(dir).map_err(|e| {
-                format!("failed to remove cleanup directory {}: {e}", dir.display())
-            })?;
+            std::fs::remove_dir_all(dir)
+                .with_context(|| format!("failed to remove cleanup directory {}", dir.display()))?;
         }
     }
 
@@ -93,20 +90,20 @@ pub fn execute_purge(
     plan: &DeletionPlan,
     provider: &dyn SessionProvider,
     meta: &SessionMeta,
-) -> Result<(), String> {
+) -> anyhow::Result<()> {
     match plan.file_action {
         FileAction::Remove => {
             let src = Path::new(&meta.source_path);
             if src.exists() {
-                std::fs::remove_file(src).map_err(|e| {
-                    format!("failed to remove parent source file {}: {e}", src.display())
+                std::fs::remove_file(src).with_context(|| {
+                    format!("failed to remove parent source file {}", src.display())
                 })?;
             }
         }
         FileAction::Shared => {
             provider
                 .purge_from_source(&meta.source_path, &meta.id)
-                .map_err(|e| format!("failed to purge parent from shared source: {e}"))?;
+                .context("failed to purge parent from shared source")?;
         }
         FileAction::Skip => {}
     }
@@ -116,16 +113,16 @@ pub fn execute_purge(
             FileAction::Remove => {
                 let src = Path::new(&child.source_path);
                 if src.exists() {
-                    std::fs::remove_file(src).map_err(|e| {
-                        format!("failed to remove child source file {}: {e}", src.display())
+                    std::fs::remove_file(src).with_context(|| {
+                        format!("failed to remove child source file {}", src.display())
                     })?;
                 }
                 // Also try .meta.json (Claude subagents)
                 let meta_path = src.with_extension("meta.json");
                 if meta_path.exists() {
-                    std::fs::remove_file(&meta_path).map_err(|e| {
+                    std::fs::remove_file(&meta_path).with_context(|| {
                         format!(
-                            "failed to remove child metadata file {}: {e}",
+                            "failed to remove child metadata file {}",
                             meta_path.display()
                         )
                     })?;
@@ -134,8 +131,8 @@ pub fn execute_purge(
             FileAction::Shared => {
                 provider
                     .purge_from_source(&child.source_path, &child.id)
-                    .map_err(|e| {
-                        format!("failed to purge child {} from shared source: {e}", child.id)
+                    .with_context(|| {
+                        format!("failed to purge child {} from shared source", child.id)
                     })?;
             }
             FileAction::Skip => {}
@@ -144,9 +141,8 @@ pub fn execute_purge(
 
     for dir in &plan.cleanup_dirs {
         if dir.is_dir() {
-            std::fs::remove_dir_all(dir).map_err(|e| {
-                format!("failed to remove cleanup directory {}: {e}", dir.display())
-            })?;
+            std::fs::remove_dir_all(dir)
+                .with_context(|| format!("failed to remove cleanup directory {}", dir.display()))?;
         }
     }
     Ok(())
@@ -159,7 +155,7 @@ pub fn execute_restore(
     entry: &TrashMeta,
     trash_dir: &Path,
     all_entries: &[TrashMeta],
-) -> Result<bool, String> {
+) -> anyhow::Result<bool> {
     match action {
         RestoreAction::MoveBack => {
             if entry.trash_file.is_empty() {
@@ -174,8 +170,7 @@ pub fn execute_restore(
             }
 
             if let Some(parent) = dest.parent() {
-                std::fs::create_dir_all(parent)
-                    .map_err(|e| format!("failed to create parent directory: {e}"))?;
+                std::fs::create_dir_all(parent).context("failed to create parent directory")?;
             }
 
             // Check if other trash entries reference the same trash file
@@ -185,15 +180,14 @@ pub fn execute_restore(
 
             if others_use_same_file {
                 if !dest.exists() {
-                    std::fs::copy(&src, dest)
-                        .map_err(|e| format!("failed to copy file back: {e}"))?;
+                    std::fs::copy(&src, dest).context("failed to copy file back")?;
                 }
             } else if dest.exists() {
                 let _ = std::fs::remove_file(&src);
             } else {
                 std::fs::rename(&src, dest)
                     .or_else(|_| std::fs::copy(&src, dest).and_then(|_| std::fs::remove_file(&src)))
-                    .map_err(|e| format!("failed to restore file: {e}"))?;
+                    .context("failed to restore file")?;
             }
 
             Ok(true)
@@ -500,7 +494,7 @@ mod tests {
         };
 
         let err = execute_purge(&plan, &provider, &meta).expect_err("should propagate purge error");
-        assert!(err.contains("boom"));
+        assert!(format!("{err:#}").contains("boom"));
     }
 
     #[test]

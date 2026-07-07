@@ -43,7 +43,7 @@ fn sanitize_session_id(id: &str) -> anyhow::Result<String> {
 
 fn resolve_resume_target(db: &Database, session_id: &str) -> anyhow::Result<ResumeTarget> {
     let safe_id = sanitize_session_id(session_id)?;
-    let session = load_session_meta(db, session_id).map_err(anyhow::Error::msg)?;
+    let session = load_session_meta(db, session_id)?;
     let variant_name = session
         .variant_name
         .as_deref()
@@ -75,8 +75,7 @@ pub async fn resume_session(
     let state = state.inner().clone();
     tokio::task::spawn_blocking(move || -> CommandResult<()> {
         let target = resolve_resume_target(&state.db, &session_id)?;
-        terminal::launch_terminal(&terminal_app, &target.command, target.cwd.as_deref())
-            .map_err(CommandError::from)?;
+        terminal::launch_terminal(&terminal_app, &target.command, target.cwd.as_deref())?;
         Ok(())
     })
     .await

@@ -153,8 +153,8 @@ impl Provider {
         provider_entry_for_key(s).map(|entry| entry.kind.clone())
     }
 
-    pub fn parse_strict(s: &str) -> Result<Provider, String> {
-        Self::parse(s).ok_or_else(|| format!("unknown provider: '{s}'"))
+    pub fn parse_strict(s: &str) -> anyhow::Result<Provider> {
+        Self::parse(s).ok_or_else(|| anyhow::anyhow!("unknown provider: '{s}'"))
     }
 
     pub fn all() -> &'static [Provider] {
@@ -170,9 +170,9 @@ impl Provider {
         (provider_entry(self).build_runtime)()
     }
 
-    pub fn require_runtime(&self) -> Result<Box<dyn SessionProvider>, String> {
+    pub fn require_runtime(&self) -> anyhow::Result<Box<dyn SessionProvider>> {
         self.build_runtime()
-            .ok_or_else(|| format!("provider unavailable: {}", self.key()))
+            .ok_or_else(|| anyhow::anyhow!("provider unavailable: {}", self.key()))
     }
 
     /// Identify which provider owns a source path.

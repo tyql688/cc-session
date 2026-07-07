@@ -8,11 +8,12 @@
 //! the pre-migration behaviour — see `tests` at the bottom of this file
 //! and `crate::error::CommandError`).
 //!
-//! `Message(String)` is the transparent passthrough used for errors that
-//! originate in still-`String`-typed helpers (`trash_state`,
-//! `provider::trash`, `Provider::require_runtime` / `parse_strict`).
-//! Those strings are already fully formatted at their source, so `?`
-//! propagating them through `From<String>` preserves the exact text.
+//! `Anyhow(anyhow::Error)` is the transparent passthrough used for errors
+//! propagated from `anyhow`-typed helpers (`trash_state`, `provider::trash`,
+//! `Provider::require_runtime` / `parse_strict`). Rendering uses the full
+//! context chain (`{:#}`), which matches the flat `format!("...: {e}")`
+//! strings those helpers used to produce. `Message(String)` remains for
+//! already-formatted strings.
 
 use thiserror::Error;
 
@@ -22,11 +23,17 @@ use thiserror::Error;
 /// `String` errors.
 #[derive(Debug, Error)]
 pub enum ServiceError {
-    /// Passthrough for already-formatted messages propagated from
-    /// helpers that still return `Result<_, String>`. Carries the
-    /// source string verbatim so no text is altered.
+    /// Passthrough for already-formatted messages. Carries the source
+    /// string verbatim so no text is altered.
     #[error("{0}")]
     Message(String),
+
+    /// Passthrough for errors propagated from `anyhow`-typed helpers
+    /// (`trash_state`, `provider::trash`, `Provider::require_runtime` /
+    /// `parse_strict`). The `{:#}` rendering preserves the full context
+    /// chain, byte-identical to the old flat `format!("...: {e}")` text.
+    #[error("{0:#}")]
+    Anyhow(#[from] anyhow::Error),
 
     // --- session_resolution ---
     #[error("failed to load session {0}: {1}")]
@@ -107,9 +114,16 @@ mod tests {
     }
 
     #[test]
+    fn anyhow_passthrough_preserves_context_chain() {
+        let err: ServiceError = anyhow::anyhow!("boom")
+            .context("failed to create trash directory")
+            .into();
+        assert_eq!(rendered(err), "failed to create trash directory: boom");
+    }
+
+    #[test]
     fn message_passthrough_preserves_text_verbatim() {
-        // A string propagated from an out-of-scope `Result<_, String>`
-        // helper (e.g. `trash_dir()`), surfaced via `From<String>`.
+        // An already-formatted string surfaced via `From<String>`.
         let err: ServiceError = "failed to create trash directory: boom".to_string().into();
         assert_eq!(rendered(err), "failed to create trash directory: boom");
     }

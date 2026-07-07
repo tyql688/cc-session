@@ -793,10 +793,8 @@ pub(super) fn load_messages_from_provider(
     source_path: &str,
 ) -> anyhow::Result<crate::provider::LoadedSession> {
     provider
-        .require_runtime()
-        .map_err(anyhow::Error::msg)?
+        .require_runtime()?
         .load_messages(session_id, source_path)
-        .map_err(anyhow::Error::msg)
         .context("failed to load messages")
 }
 

@@ -38,40 +38,32 @@ pub mod command_test_helpers {
     use crate::models::{ProviderSnapshot, SessionDetail, TrashMeta};
     use crate::services::{ProviderSnapshotService, SessionLifecycleService};
 
-    pub fn get_session_detail(db: &Database, session_id: &str) -> Result<SessionDetail, String> {
+    pub fn get_session_detail(db: &Database, session_id: &str) -> anyhow::Result<SessionDetail> {
         load_session_detail_for_tests(db, session_id)
     }
 
-    pub fn get_provider_snapshots(db: &Database) -> Result<Vec<ProviderSnapshot>, String> {
-        ProviderSnapshotService::new(db)
-            .list()
-            .map_err(|e| e.to_string())
+    pub fn get_provider_snapshots(db: &Database) -> anyhow::Result<Vec<ProviderSnapshot>> {
+        Ok(ProviderSnapshotService::new(db).list()?)
     }
 
-    pub fn get_resume_command(db: &Database, session_id: &str) -> Result<String, String> {
+    pub fn get_resume_command(db: &Database, session_id: &str) -> anyhow::Result<String> {
         get_resume_command_for_tests(db, session_id)
     }
 
-    pub fn trash_session(db: &Database, session_id: &str) -> Result<(), String> {
-        SessionLifecycleService::new(db)
-            .trash_session(session_id)
-            .map_err(|e| e.to_string())
+    pub fn trash_session(db: &Database, session_id: &str) -> anyhow::Result<()> {
+        Ok(SessionLifecycleService::new(db).trash_session(session_id)?)
     }
 
-    pub fn list_trash() -> Result<Vec<TrashMeta>, String> {
-        SessionLifecycleService::list_trash().map_err(|e| e.to_string())
+    pub fn list_trash() -> anyhow::Result<Vec<TrashMeta>> {
+        Ok(SessionLifecycleService::list_trash()?)
     }
 
-    pub fn restore_session(db: &Database, trash_id: &str) -> Result<(), String> {
-        SessionLifecycleService::new(db)
-            .restore_session(trash_id)
-            .map_err(|e| e.to_string())
+    pub fn restore_session(db: &Database, trash_id: &str) -> anyhow::Result<()> {
+        Ok(SessionLifecycleService::new(db).restore_session(trash_id)?)
     }
 
-    pub fn delete_session(db: &Database, session_id: &str) -> Result<(), String> {
-        SessionLifecycleService::new(db)
-            .purge_session(session_id)
-            .map_err(|e| e.to_string())
+    pub fn delete_session(db: &Database, session_id: &str) -> anyhow::Result<()> {
+        Ok(SessionLifecycleService::new(db).purge_session(session_id)?)
     }
 }
 
@@ -352,7 +344,7 @@ pub fn run() {
                 Ok(fs_watcher) => {
                     app.manage(fs_watcher);
                 }
-                Err(e) => log::warn!("failed to start file watcher: {e}"),
+                Err(e) => log::warn!("failed to start file watcher: {e:#}"),
             }
             Ok(())
         })

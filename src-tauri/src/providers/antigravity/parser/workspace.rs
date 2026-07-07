@@ -14,9 +14,19 @@ pub fn load_history_workspaces() -> HashMap<String, String> {
         .join("antigravity-cli")
         .join("history.jsonl");
 
-    if let Ok(file) = File::open(history_path) {
+    if let Ok(file) = File::open(&history_path) {
         let reader = BufReader::new(file);
-        for line_str in reader.lines().map_while(Result::ok) {
+        for line in reader.lines() {
+            let line_str = match line {
+                Ok(line_str) => line_str,
+                Err(error) => {
+                    log::warn!(
+                        "failed to read line from Antigravity history '{}': {error}",
+                        history_path.display()
+                    );
+                    continue;
+                }
+            };
             if let Ok(val) = serde_json::from_str::<Value>(&line_str) {
                 if let (Some(cid), Some(ws)) = (
                     val.get("conversationId").and_then(|v| v.as_str()),
@@ -59,9 +69,19 @@ pub fn find_workspace_by_display_content(first_user_msg: &str) -> Option<String>
         .join("antigravity-cli")
         .join("history.jsonl");
 
-    if let Ok(file) = File::open(history_path) {
+    if let Ok(file) = File::open(&history_path) {
         let reader = BufReader::new(file);
-        for line_str in reader.lines().map_while(Result::ok) {
+        for line in reader.lines() {
+            let line_str = match line {
+                Ok(line_str) => line_str,
+                Err(error) => {
+                    log::warn!(
+                        "failed to read line from Antigravity history '{}': {error}",
+                        history_path.display()
+                    );
+                    continue;
+                }
+            };
             if let Ok(val) = serde_json::from_str::<Value>(&line_str) {
                 if let (Some(display), Some(ws)) = (
                     val.get("display").and_then(|v| v.as_str()),

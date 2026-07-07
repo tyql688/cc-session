@@ -1,5 +1,6 @@
 use std::path::{Path, PathBuf};
 
+use anyhow::Context;
 use serde::{Deserialize, Serialize};
 
 use crate::models::TrashMeta;
@@ -11,12 +12,12 @@ pub struct SharedDeletion {
     pub original_path: String,
 }
 
-pub fn trash_dir() -> Result<PathBuf, String> {
+pub fn trash_dir() -> anyhow::Result<PathBuf> {
     let dir = data_local_dir()
-        .ok_or_else(|| "failed to resolve local data dir".to_string())?
+        .context("failed to resolve local data dir")?
         .join("cc-session")
         .join("trash");
-    std::fs::create_dir_all(&dir).map_err(|e| format!("failed to create trash directory: {e}"))?;
+    std::fs::create_dir_all(&dir).context("failed to create trash directory")?;
     Ok(dir)
 }
 
@@ -34,12 +35,11 @@ pub fn shared_deletions_path(trash_dir: &Path) -> PathBuf {
     trash_dir.join("shared_deletions.json")
 }
 
-pub fn atomic_write_json<T: Serialize>(path: &Path, data: &T) -> Result<(), String> {
+pub fn atomic_write_json<T: Serialize>(path: &Path, data: &T) -> anyhow::Result<()> {
     let tmp = path.with_extension("json.tmp");
-    let json = serde_json::to_string_pretty(data)
-        .map_err(|e| format!("failed to serialize trash state: {e}"))?;
-    std::fs::write(&tmp, &json).map_err(|e| format!("failed to write trash state tmp: {e}"))?;
-    std::fs::rename(&tmp, path).map_err(|e| format!("failed to rename trash state: {e}"))?;
+    let json = serde_json::to_string_pretty(data).context("failed to serialize trash state")?;
+    std::fs::write(&tmp, &json).context("failed to write trash state tmp")?;
+    std::fs::rename(&tmp, path).context("failed to rename trash state")?;
     Ok(())
 }
 
@@ -55,7 +55,7 @@ pub fn remove_shared_deletion(
     path: &Path,
     session_id: &str,
     original_path: &str,
-) -> Result<(), String> {
+) -> anyhow::Result<()> {
     let filtered: Vec<SharedDeletion> = read_shared_deletions(path)
         .into_iter()
         .filter(|entry| !(entry.id == session_id && entry.original_path == original_path))
@@ -68,7 +68,7 @@ pub fn add_shared_deletion(
     session_id: &str,
     provider: &str,
     original_path: &str,
-) -> Result<(), String> {
+) -> anyhow::Result<()> {
     let mut entries = read_shared_deletions(path);
     let candidate = SharedDeletion {
         id: session_id.to_string(),

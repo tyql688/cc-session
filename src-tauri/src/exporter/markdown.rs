@@ -1,6 +1,8 @@
 use std::fs;
 use std::path::Path;
 
+use anyhow::Context;
+
 use super::format::{aggregate_token_usage, fmt_tokens, format_epoch};
 use crate::models::{Message, MessageRole, SessionDetail};
 
@@ -84,9 +86,9 @@ pub fn render(detail: &SessionDetail) -> String {
     out
 }
 
-pub fn export_markdown(detail: &SessionDetail, output_path: &Path) -> Result<(), String> {
+pub fn export_markdown(detail: &SessionDetail, output_path: &Path) -> anyhow::Result<()> {
     let out = super::redact_home_path(&render(detail));
-    fs::write(output_path, out).map_err(|e| format!("failed to write file: {e}"))?;
+    fs::write(output_path, out).context("failed to write file")?;
     Ok(())
 }
 
