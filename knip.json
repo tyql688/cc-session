@@ -1,9 +1,5 @@
 {
   "$schema": "https://unpkg.com/knip@6/schema.json",
-  "entry": [
-    "src/main.tsx",
-    "vitest.setup.ts"
-  ],
   "project": [
     "src/**/*.{ts,tsx}"
   ],
