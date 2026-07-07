@@ -54,9 +54,9 @@ pub(super) struct CodexScanAccum {
     pub(super) content_parts: Vec<String>,
     session_id: Option<String>,
     cwd: Option<String>,
-    /// Map call_id -> message index for merging function_call_output
+    /// call_id → message-index pairing for merging function_call_output
     /// into the matching function_call message.
-    pub(super) call_id_map: std::collections::HashMap<String, usize>,
+    pub(super) call_id_map: crate::provider_utils::ToolCallPairer,
     model: Option<String>,
     model_provider: Option<String>,
     pub(super) thread_name: Option<String>,
@@ -92,7 +92,7 @@ impl CodexScanAccum {
             content_parts: Vec::new(),
             session_id: None,
             cwd: None,
-            call_id_map: std::collections::HashMap::new(),
+            call_id_map: crate::provider_utils::ToolCallPairer::default(),
             model: None,
             model_provider: None,
             thread_name: None,

@@ -1,11 +1,10 @@
 //! Accumulator and per-line dispatch — shared between full-file parse
 //! and tail parse.
 
-use std::collections::HashMap;
-
 use serde_json::{json, Value};
 
 use crate::models::{Message, MessageRole, Provider, TokenUsage, ToolMetadata};
+use crate::provider_utils::ToolCallPairer;
 use crate::tool_metadata::{
     attach_call_metadata, build_tool_metadata, enrich_tool_metadata, ToolCallFacts, ToolResultFacts,
 };
@@ -34,7 +33,7 @@ pub(super) struct ScanAccum {
     pub(super) content_parts: Vec<String>,
     /// toolCallId → message index, used to merge tool.result onto the
     /// matching tool.call message.
-    call_id_map: HashMap<String, usize>,
+    call_id_map: ToolCallPairer,
     /// Fallback timestamp when individual lines do not carry `time`
     /// (migrated format): derived from `metadata.created_at`.
     fallback_time_secs: Option<i64>,
@@ -64,7 +63,7 @@ impl ScanAccum {
             first_time_secs: None,
             last_time_secs: None,
             content_parts: Vec::new(),
-            call_id_map: HashMap::new(),
+            call_id_map: ToolCallPairer::default(),
             fallback_time_secs: None,
             fallback_time_rfc: None,
             current_model: None,
@@ -92,7 +91,7 @@ impl ScanAccum {
         self.messages.truncate(snap.messages_len);
         self.content_parts.truncate(snap.content_parts_len);
         // Rebuild call_id_map by keeping only entries whose message still exists.
-        self.call_id_map.retain(|_k, v| *v < snap.messages_len);
+        self.call_id_map.retain_below(snap.messages_len);
         self.first_user_message = snap.first_user_message;
         self.current_turn_assistant_idx = None;
     }
@@ -194,10 +193,7 @@ impl ScanAccum {
         }
         let display_name = metadata.canonical_name.clone();
         let tool_input = args.map(|v| v.to_string());
-        let idx = self.messages.len();
-        if let Some(cid) = call_id {
-            self.call_id_map.insert(cid.to_string(), idx);
-        }
+        self.call_id_map.register(call_id, self.messages.len());
         self.messages.push(Message {
             timestamp: ts,
             tool_name: Some(display_name),
@@ -222,24 +218,21 @@ impl ScanAccum {
         if !rendered_output.is_empty() {
             self.content_parts.push(rendered_output.clone());
         }
-        let target_idx = call_id.and_then(|cid| self.call_id_map.get(cid)).copied();
-        if let Some(idx) = target_idx {
-            if idx < self.messages.len() {
-                if let Some(meta) = self.messages[idx].tool_metadata.as_mut() {
-                    enrich_tool_metadata(
-                        meta,
-                        ToolResultFacts {
-                            raw_result,
-                            is_error,
-                            status: None,
-                            artifact_path: None,
-                        },
-                    );
-                    attach_agent_swarm_children(meta, &rendered_output);
-                }
-                self.messages[idx].content = rendered_output;
-                return;
+        if let Some(message) = self.call_id_map.message_mut(call_id, &mut self.messages) {
+            if let Some(meta) = message.tool_metadata.as_mut() {
+                enrich_tool_metadata(
+                    meta,
+                    ToolResultFacts {
+                        raw_result,
+                        is_error,
+                        status: None,
+                        artifact_path: None,
+                    },
+                );
+                attach_agent_swarm_children(meta, &rendered_output);
             }
+            message.content = rendered_output;
+            return;
         }
         self.messages.push(Message {
             timestamp: ts,
@@ -369,7 +362,7 @@ mod turn_cancel_tests {
 
         assert_eq!(accum.messages.len(), 0);
         assert_eq!(accum.content_parts.len(), 0);
-        assert_eq!(accum.call_id_map.len(), 0);
+        assert_eq!(accum.call_id_map.index_of(Some("tc_1")), None);
     }
 
     #[test]

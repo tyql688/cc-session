@@ -28,7 +28,7 @@ use rayon::prelude::*;
 
 use crate::models::{Provider, SessionMeta};
 use crate::provider::{
-    ChildPlan, DeletionPlan, FileAction, LoadedSession, ParsedSession, ProviderError,
+    per_file_deletion_plan, DeletionPlan, LoadedSession, ParsedSession, ProviderError,
     SessionProvider,
 };
 use crate::provider_utils::project_name_from_path;
@@ -498,43 +498,18 @@ impl SessionProvider for CursorProvider {
     }
 
     fn deletion_plan(&self, meta: &SessionMeta, children: &[SessionMeta]) -> DeletionPlan {
-        // Subagent: just remove its own jsonl. Its parent owns the
-        // session dir, so we don't touch anything else.
-        if meta.parent_id.is_some() {
-            return DeletionPlan {
-                file_action: FileAction::Remove,
-                child_plans: Vec::new(),
-                cleanup_dirs: Vec::new(),
-            };
-        }
-
-        // Parent: trash each child's jsonl as its own restorable entry,
-        // then clean up the session dir (which only holds subagents/ +
+        // Parent cleanup: the session dir (which only holds subagents/ +
         // the main jsonl after trash). The `store.db` directory is
         // intentionally left alone — `cleanup_on_permanent_delete`
         // removes it on hard-delete, not on trash, so a restored
         // session still resolves as CLI on the next scan.
-        let child_plans: Vec<ChildPlan> = children
-            .iter()
-            .map(|c| ChildPlan {
-                id: c.id.clone(),
-                source_path: c.source_path.clone(),
-                title: c.title.clone(),
-                file_action: FileAction::Remove,
-            })
-            .collect();
-        let source = PathBuf::from(&meta.source_path);
-        let cleanup_dirs: Vec<PathBuf> = source
+        let cleanup_dirs = PathBuf::from(&meta.source_path)
             .parent()
-            .filter(|d| d.is_dir())
+            .filter(|dir| dir.is_dir())
             .map(Path::to_path_buf)
             .into_iter()
             .collect();
-        DeletionPlan {
-            file_action: FileAction::Remove,
-            child_plans,
-            cleanup_dirs,
-        }
+        per_file_deletion_plan(meta, children, cleanup_dirs)
     }
 
     fn cleanup_on_permanent_delete(&self, session_id: &str) {
@@ -583,6 +558,7 @@ impl SessionProvider for CursorProvider {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::provider::FileAction;
     use rusqlite::Connection;
     use serde_json::{json, Value};
 

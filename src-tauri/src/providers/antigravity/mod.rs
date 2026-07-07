@@ -1,11 +1,11 @@
 use rayon::prelude::*;
 use std::collections::HashMap;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use walkdir::WalkDir;
 
 use crate::models::{Provider, SessionMeta};
 use crate::provider::{
-    ChildPlan, DeletionPlan, FileAction, LoadedSession, ParsedSession, ProviderDescriptor,
+    per_file_deletion_plan, DeletionPlan, LoadedSession, ParsedSession, ProviderDescriptor,
     ProviderError, SessionProvider, WatchStrategy,
 };
 
@@ -151,41 +151,17 @@ impl SessionProvider for AntigravityProvider {
     }
 
     fn deletion_plan(&self, meta: &SessionMeta, children: &[SessionMeta]) -> DeletionPlan {
-        if meta.parent_id.is_some() {
-            return DeletionPlan {
-                file_action: FileAction::Remove,
-                child_plans: Vec::new(),
-                cleanup_dirs: Vec::new(),
-            };
-        }
-
-        let child_plans = children
-            .iter()
-            .map(|c| ChildPlan {
-                id: c.id.clone(),
-                source_path: c.source_path.clone(),
-                title: c.title.clone(),
-                file_action: FileAction::Remove,
-            })
-            .collect();
-
-        let source = PathBuf::from(&meta.source_path);
-        let mut cleanup_dirs = Vec::new();
-        if let Some(conversation_dir) = source
+        // Transcript lives at <conversation>/.system_generated/logs/
+        // transcript.jsonl — clean up the whole conversation dir.
+        let cleanup_dirs = PathBuf::from(&meta.source_path)
             .parent()
-            .and_then(|p| p.parent())
-            .and_then(|p| p.parent())
-        {
-            if conversation_dir.is_dir() {
-                cleanup_dirs.push(conversation_dir.to_path_buf());
-            }
-        }
-
-        DeletionPlan {
-            file_action: FileAction::Remove,
-            child_plans,
-            cleanup_dirs,
-        }
+            .and_then(Path::parent)
+            .and_then(Path::parent)
+            .filter(|dir| dir.is_dir())
+            .map(Path::to_path_buf)
+            .into_iter()
+            .collect();
+        per_file_deletion_plan(meta, children, cleanup_dirs)
     }
 
     fn load_messages(

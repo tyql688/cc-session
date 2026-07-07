@@ -212,25 +212,23 @@ impl CodexScanAccum {
                 let query = payload.get("query").and_then(|v| v.as_str()).unwrap_or("");
                 let result = Some(payload.clone());
 
-                if let Some(idx) = call_id.and_then(|cid| self.call_id_map.get(cid)).copied() {
-                    if idx < self.messages.len() {
-                        self.messages[idx].content = query.to_string();
-                        if self.messages[idx].tool_input.is_none() {
-                            self.messages[idx].tool_input = action.map(|value| value.to_string());
-                        }
-                        if let Some(metadata) = self.messages[idx].tool_metadata.as_mut() {
-                            enrich_tool_metadata(
-                                metadata,
-                                ToolResultFacts {
-                                    raw_result: result.as_ref(),
-                                    is_error: None,
-                                    status: None,
-                                    artifact_path: None,
-                                },
-                            );
-                        }
-                        return;
+                if let Some(message) = self.call_id_map.message_mut(call_id, &mut self.messages) {
+                    message.content = query.to_string();
+                    if message.tool_input.is_none() {
+                        message.tool_input = action.map(|value| value.to_string());
                     }
+                    if let Some(metadata) = message.tool_metadata.as_mut() {
+                        enrich_tool_metadata(
+                            metadata,
+                            ToolResultFacts {
+                                raw_result: result.as_ref(),
+                                is_error: None,
+                                status: None,
+                                artifact_path: None,
+                            },
+                        );
+                    }
+                    return;
                 }
 
                 let mut metadata = build_tool_metadata(ToolCallFacts {
@@ -249,10 +247,7 @@ impl CodexScanAccum {
                         artifact_path: None,
                     },
                 );
-                let idx = self.messages.len();
-                if let Some(call_id) = call_id {
-                    self.call_id_map.insert(call_id.to_string(), idx);
-                }
+                self.call_id_map.register(call_id, self.messages.len());
                 if !query.is_empty() {
                     self.content_parts.push(query.to_string());
                 }
@@ -268,21 +263,21 @@ impl CodexScanAccum {
                 let Some(call_id) = codex_call_id(payload) else {
                     return;
                 };
-                let Some(idx) = self.call_id_map.get(call_id).copied() else {
+                let Some(message) = self
+                    .call_id_map
+                    .message_mut(Some(call_id), &mut self.messages)
+                else {
                     log::warn!(
                         "missing Codex image generation tool message for event call_id {call_id} in '{}'", path.display());
                     return;
                 };
-                if idx >= self.messages.len() {
-                    return;
-                }
 
                 if let Some(saved_path) = payload.get("saved_path").and_then(|v| v.as_str()) {
-                    self.messages[idx].content = format!("[Image: source: {saved_path}]");
+                    message.content = format!("[Image: source: {saved_path}]");
                 }
                 let result_value = codex_image_generation_result(payload);
                 enrich_existing_tool_message(
-                    &mut self.messages[idx],
+                    message,
                     result_value,
                     None,
                     payload.get("status").and_then(|v| v.as_str()),
@@ -301,10 +296,8 @@ impl CodexScanAccum {
                     call_id: codex_call_id(payload),
                     assistant_id: None,
                 });
-                let idx = self.messages.len();
-                if let Some(call_id) = codex_call_id(payload) {
-                    self.call_id_map.insert(call_id.to_string(), idx);
-                }
+                self.call_id_map
+                    .register(codex_call_id(payload), self.messages.len());
                 self.messages.push(Message {
                     timestamp: entry.timestamp.clone(),
                     tool_name: Some(metadata.canonical_name.clone()),
@@ -328,20 +321,13 @@ impl CodexScanAccum {
                     .and_then(|v| v.as_bool())
                     .map(|success| if success { "success" } else { "error" });
 
-                if let Some(idx) = codex_call_id(payload)
-                    .and_then(|cid| self.call_id_map.get(cid))
-                    .copied()
+                if let Some(message) = self
+                    .call_id_map
+                    .message_mut(codex_call_id(payload), &mut self.messages)
                 {
-                    if idx < self.messages.len() {
-                        self.messages[idx].content = output;
-                        enrich_existing_tool_message(
-                            &mut self.messages[idx],
-                            result_value,
-                            is_error,
-                            status,
-                        );
-                        return;
-                    }
+                    message.content = output;
+                    enrich_existing_tool_message(message, result_value, is_error, status);
+                    return;
                 }
 
                 let input_value = dynamic_tool_input(payload);
@@ -377,22 +363,19 @@ impl CodexScanAccum {
                 let Some(call_id) = payload.get("call_id").and_then(|v| v.as_str()) else {
                     return;
                 };
-                let Some(idx) = self.call_id_map.get(call_id).copied() else {
+                let Some(message) = self
+                    .call_id_map
+                    .message_mut(Some(call_id), &mut self.messages)
+                else {
                     log::warn!(
                         "missing Codex exec_command tool message for event call_id {call_id} in '{}'", path.display());
                     return;
                 };
-                if idx >= self.messages.len() {
-                    return;
-                }
 
-                let result_value =
-                    codex_exec_command_event_result(payload, &self.messages[idx].content);
+                let result_value = codex_exec_command_event_result(payload, &message.content);
                 let status = payload.get("status").and_then(|v| v.as_str());
                 let is_error = status.map(|status| matches!(status, "failed" | "declined"));
-                if self.messages[idx].content.is_empty()
-                    || self.messages[idx].content.trim_start().starts_with('{')
-                {
+                if message.content.is_empty() || message.content.trim_start().starts_with('{') {
                     if let Some(formatted_output) = result_value
                         .get("formattedOutput")
                         .and_then(|v| v.as_str())
@@ -410,109 +393,92 @@ impl CodexScanAccum {
                                 .filter(|v| !v.is_empty())
                         })
                     {
-                        self.messages[idx].content = formatted_output.to_string();
+                        message.content = formatted_output.to_string();
                     }
                 }
-                enrich_existing_tool_message(
-                    &mut self.messages[idx],
-                    result_value,
-                    is_error,
-                    status,
-                );
+                enrich_existing_tool_message(message, result_value, is_error, status);
             }
             "mcp_tool_call_end" => {
                 let Some(call_id) = payload.get("call_id").and_then(|v| v.as_str()) else {
                     return;
                 };
-                let Some(idx) = self.call_id_map.get(call_id).copied() else {
+                let Some(message) = self
+                    .call_id_map
+                    .message_mut(Some(call_id), &mut self.messages)
+                else {
                     log::warn!(
                         "missing Codex MCP tool message for event call_id {call_id} in '{}'",
                         path.display()
                     );
                     return;
                 };
-                if idx >= self.messages.len() {
-                    return;
-                }
 
                 let result_value = codex_mcp_tool_call_event_result(payload);
                 let is_error = result_value
                     .get("success")
                     .and_then(|v| v.as_bool())
                     .map(|success| !success);
-                enrich_existing_tool_message(&mut self.messages[idx], result_value, is_error, None);
+                enrich_existing_tool_message(message, result_value, is_error, None);
             }
             "patch_apply_end" => {
                 let Some(call_id) = payload.get("call_id").and_then(|v| v.as_str()) else {
                     return;
                 };
-                let Some(idx) = self.call_id_map.get(call_id).copied() else {
+                let Some(message) = self
+                    .call_id_map
+                    .message_mut(Some(call_id), &mut self.messages)
+                else {
                     log::warn!(
                         "missing Codex apply_patch tool message for event call_id {call_id} in '{}'", path.display());
                     return;
                 };
-                if idx >= self.messages.len() {
-                    return;
-                }
 
                 let result_value = codex_patch_event_result(payload);
                 let status = payload.get("status").and_then(|v| v.as_str());
                 let is_error = payload.get("success").and_then(|v| v.as_bool()).map(|v| !v);
-                if self.messages[idx].content.is_empty()
-                    || self.messages[idx].content.trim_start().starts_with('{')
-                {
+                if message.content.is_empty() || message.content.trim_start().starts_with('{') {
                     if let Some(stdout) = result_value
                         .get("stdout")
                         .and_then(|v| v.as_str())
                         .filter(|v| !v.is_empty())
                     {
-                        self.messages[idx].content = stdout.to_string();
+                        message.content = stdout.to_string();
                     }
                 }
-                enrich_existing_tool_message(
-                    &mut self.messages[idx],
-                    result_value,
-                    is_error,
-                    status,
-                );
+                enrich_existing_tool_message(message, result_value, is_error, status);
             }
             "collab_agent_spawn_end" => {
                 let Some(call_id) = payload.get("call_id").and_then(|v| v.as_str()) else {
                     return;
                 };
-                let Some(idx) = self.call_id_map.get(call_id).copied() else {
+                let Some(message) = self
+                    .call_id_map
+                    .message_mut(Some(call_id), &mut self.messages)
+                else {
                     log::warn!(
                         "missing Codex spawn_agent tool message for event call_id {call_id} in '{}'", path.display());
                     return;
                 };
-                if idx >= self.messages.len() {
-                    return;
-                }
 
                 let status = payload.get("status").and_then(|v| v.as_str());
-                enrich_existing_tool_message(
-                    &mut self.messages[idx],
-                    payload.clone(),
-                    None,
-                    status,
-                );
+                enrich_existing_tool_message(message, payload.clone(), None, status);
             }
             "collab_waiting_end" => {
                 let Some(call_id) = payload.get("call_id").and_then(|v| v.as_str()) else {
                     return;
                 };
-                let Some(idx) = self.call_id_map.get(call_id).copied() else {
+                let Some(message) = self
+                    .call_id_map
+                    .message_mut(Some(call_id), &mut self.messages)
+                else {
                     log::warn!(
                         "missing Codex wait_agent tool message for event call_id {call_id} in '{}'",
                         path.display()
                     );
                     return;
                 };
-                if idx >= self.messages.len() {
-                    return;
-                }
 
-                let status = self.messages[idx]
+                let status = message
                     .tool_metadata
                     .as_ref()
                     .and_then(|metadata| metadata.structured.as_ref())
@@ -520,58 +486,43 @@ impl CodexScanAccum {
                     .and_then(|value| value.as_bool())
                     .map(|timed_out| if timed_out { "timed_out" } else { "completed" });
                 let is_error = status.map(|status| status == "timed_out");
-                enrich_existing_tool_message(
-                    &mut self.messages[idx],
-                    payload.clone(),
-                    is_error,
-                    status,
-                );
+                enrich_existing_tool_message(message, payload.clone(), is_error, status);
             }
             "collab_agent_interaction_end" => {
                 let Some(call_id) = payload.get("call_id").and_then(|v| v.as_str()) else {
                     return;
                 };
-                let Some(idx) = self.call_id_map.get(call_id).copied() else {
+                let Some(message) = self
+                    .call_id_map
+                    .message_mut(Some(call_id), &mut self.messages)
+                else {
                     log::warn!(
                         "missing Codex send_input tool message for event call_id {call_id} in '{}'",
                         path.display()
                     );
                     return;
                 };
-                if idx >= self.messages.len() {
-                    return;
-                }
 
                 let status = payload
                     .get("status")
                     .and_then(|v| v.as_str())
                     .or(Some("completed"));
-                enrich_existing_tool_message(
-                    &mut self.messages[idx],
-                    payload.clone(),
-                    None,
-                    status,
-                );
+                enrich_existing_tool_message(message, payload.clone(), None, status);
             }
             "collab_close_end" => {
                 let Some(call_id) = payload.get("call_id").and_then(|v| v.as_str()) else {
                     return;
                 };
-                let Some(idx) = self.call_id_map.get(call_id).copied() else {
+                let Some(message) = self
+                    .call_id_map
+                    .message_mut(Some(call_id), &mut self.messages)
+                else {
                     log::warn!(
                         "missing Codex close_agent tool message for event call_id {call_id} in '{}'", path.display());
                     return;
                 };
-                if idx >= self.messages.len() {
-                    return;
-                }
 
-                enrich_existing_tool_message(
-                    &mut self.messages[idx],
-                    payload.clone(),
-                    None,
-                    Some("completed"),
-                );
+                enrich_existing_tool_message(message, payload.clone(), None, Some("completed"));
             }
             _ => {
                 flush_pending_user_message(

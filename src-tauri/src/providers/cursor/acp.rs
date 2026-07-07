@@ -30,6 +30,7 @@ use base64::engine::general_purpose::STANDARD as BASE64;
 use base64::Engine;
 
 use crate::models::{Message, MessageRole, Provider};
+use crate::provider_utils::ToolCallPairer;
 use crate::tool_metadata::{build_tool_metadata, ToolCallFacts};
 
 use super::store_db::{
@@ -172,13 +173,13 @@ pub(crate) fn parse_acp_transcript_with_cache_dir(
         .unwrap_or_default();
 
     let mut messages = Vec::new();
-    let mut call_id_to_idx: std::collections::HashMap<String, usize> = Default::default();
+    let mut pairer = ToolCallPairer::default();
     let mut last_model: Option<String> = None;
     for envelope in envelopes {
         translate_envelope(
             envelope,
             &mut messages,
-            &mut call_id_to_idx,
+            &mut pairer,
             &session_id,
             cache_dir,
             &mut last_model,
@@ -240,7 +241,7 @@ fn walk_blob(
 fn translate_envelope(
     envelope: Value,
     messages: &mut Vec<Message>,
-    call_id_to_idx: &mut std::collections::HashMap<String, usize>,
+    pairer: &mut ToolCallPairer,
     session_id: &str,
     cache_dir: Option<&Path>,
     last_model: &mut Option<String>,
@@ -338,7 +339,7 @@ fn translate_envelope(
                 if part.get("type").and_then(|v| v.as_str()) != Some("tool-call") {
                     continue;
                 }
-                push_tool_call_acp(part, messages, call_id_to_idx, last_model);
+                push_tool_call_acp(part, messages, pairer, last_model);
             }
         }
         "tool" => {
@@ -349,7 +350,7 @@ fn translate_envelope(
                 if part.get("type").and_then(|v| v.as_str()) != Some("tool-result") {
                     continue;
                 }
-                merge_tool_result_acp(part, messages, call_id_to_idx, session_id, cache_dir);
+                merge_tool_result_acp(part, messages, pairer, session_id, cache_dir);
             }
         }
         // Intentionally dropped — system framing that the user never
@@ -391,7 +392,7 @@ fn harvest_model(content: &[Value]) -> Option<String> {
 fn push_tool_call_acp(
     part: &Value,
     messages: &mut Vec<Message>,
-    call_id_to_idx: &mut std::collections::HashMap<String, usize>,
+    pairer: &mut ToolCallPairer,
     last_model: &Option<String>,
 ) {
     let raw_name = part
@@ -409,10 +410,7 @@ fn push_tool_call_acp(
     });
     let display_name = metadata.canonical_name.clone();
     let tool_input = args.and_then(|a| remap_tool_args(&display_name, a));
-    let idx = messages.len();
-    if let Some(cid) = call_id {
-        call_id_to_idx.insert(cid.to_string(), idx);
-    }
+    pairer.register(call_id, messages.len());
     messages.push(Message {
         role: MessageRole::Tool,
         message_kind: None,
@@ -430,7 +428,7 @@ fn push_tool_call_acp(
 fn merge_tool_result_acp(
     part: &Value,
     messages: &mut Vec<Message>,
-    call_id_to_idx: &std::collections::HashMap<String, usize>,
+    pairer: &ToolCallPairer,
     session_id: &str,
     cache_dir: Option<&Path>,
 ) {
@@ -491,11 +489,9 @@ fn merge_tool_result_acp(
         }
     }
 
-    if let Some(idx) = call_id.and_then(|cid| call_id_to_idx.get(cid)).copied() {
-        if let Some(msg) = messages.get_mut(idx) {
-            msg.content = body;
-            return;
-        }
+    if let Some(msg) = pairer.message_mut(call_id, messages) {
+        msg.content = body;
+        return;
     }
     messages.push(Message {
         role: MessageRole::Tool,
@@ -543,7 +539,7 @@ mod tests {
 
     struct TranslateContext {
         messages: Vec<Message>,
-        call_id_to_idx: std::collections::HashMap<String, usize>,
+        pairer: ToolCallPairer,
         last_model: Option<String>,
         cache_dir: Option<PathBuf>,
     }
@@ -552,7 +548,7 @@ mod tests {
         fn new() -> Self {
             Self {
                 messages: Vec::new(),
-                call_id_to_idx: std::collections::HashMap::new(),
+                pairer: ToolCallPairer::default(),
                 last_model: None,
                 cache_dir: None,
             }
@@ -567,7 +563,7 @@ mod tests {
             translate_envelope(
                 env,
                 &mut self.messages,
-                &mut self.call_id_to_idx,
+                &mut self.pairer,
                 "test-session",
                 self.cache_dir.as_deref(),
                 &mut self.last_model,

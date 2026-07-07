@@ -6,6 +6,7 @@ use std::collections::HashMap;
 use serde_json::{Map, Value};
 
 use crate::models::{Message, MessageRole, Provider, TokenUsage};
+use crate::provider_utils::ToolCallPairer;
 use crate::tool_metadata::{
     build_tool_metadata, enrich_tool_metadata, ToolCallFacts, ToolResultFacts,
 };
@@ -19,7 +20,7 @@ pub(super) fn extract_messages(entries: &[PiEntry], branch: &[String]) -> Vec<Me
         .filter_map(|entry| get_entry_id(entry).map(|id| (id, entry)))
         .collect();
     let mut messages = Vec::new();
-    let mut call_id_to_idx: HashMap<String, usize> = HashMap::new();
+    let mut pairer = ToolCallPairer::default();
 
     for entry_id in branch {
         let Some(entry) = entry_by_id.get(entry_id).copied() else {
@@ -28,7 +29,7 @@ pub(super) fn extract_messages(entries: &[PiEntry], branch: &[String]) -> Vec<Me
 
         match entry {
             PiEntry::Message(msg_entry) => {
-                push_agent_messages(&msg_entry.message, &mut messages, &mut call_id_to_idx);
+                push_agent_messages(&msg_entry.message, &mut messages, &mut pairer);
             }
             PiEntry::Compaction(compaction) => {
                 push_system_message(
@@ -66,7 +67,7 @@ pub(super) fn extract_messages(entries: &[PiEntry], branch: &[String]) -> Vec<Me
 fn push_agent_messages(
     msg: &PiAgentMessage,
     messages: &mut Vec<Message>,
-    call_id_to_idx: &mut HashMap<String, usize>,
+    pairer: &mut ToolCallPairer,
 ) {
     match msg {
         PiAgentMessage::User(user) => {
@@ -79,10 +80,10 @@ fn push_agent_messages(
             }
         }
         PiAgentMessage::Assistant(assistant) => {
-            push_assistant_message(assistant, messages, call_id_to_idx);
+            push_assistant_message(assistant, messages, pairer);
         }
         PiAgentMessage::ToolResult(result) => {
-            merge_tool_result(result, messages, call_id_to_idx);
+            merge_tool_result(result, messages, pairer);
         }
         PiAgentMessage::BashExecution(bash) => {
             push_bash_execution(bash, messages);
@@ -120,7 +121,7 @@ fn push_agent_messages(
 fn push_assistant_message(
     assistant: &PiAssistantMessage,
     messages: &mut Vec<Message>,
-    call_id_to_idx: &mut HashMap<String, usize>,
+    pairer: &mut ToolCallPairer,
 ) {
     let timestamp = format_millis_timestamp(assistant.timestamp);
     let mut usage_target_idx: Option<usize> = None;
@@ -179,7 +180,7 @@ fn push_assistant_message(
                     timestamp.clone(),
                     assistant.model.clone(),
                 );
-                call_id_to_idx.insert(id.clone(), idx);
+                pairer.register(Some(id), idx);
                 if usage_target_idx.is_none() {
                     usage_target_idx = Some(idx);
                 }
@@ -261,28 +262,26 @@ fn push_tool_call(
 fn merge_tool_result(
     result: &PiToolResultMessage,
     messages: &mut Vec<Message>,
-    call_id_to_idx: &HashMap<String, usize>,
+    pairer: &ToolCallPairer,
 ) {
     let content = extract_content_blocks_text(&result.content);
     let result_value = tool_result_value(result, &content);
     let artifact_path = tool_result_artifact_path(result);
 
-    if let Some(idx) = call_id_to_idx.get(&result.tool_call_id).copied() {
-        if let Some(message) = messages.get_mut(idx) {
-            message.content = content;
-            if let Some(metadata) = message.tool_metadata.as_mut() {
-                enrich_tool_metadata(
-                    metadata,
-                    ToolResultFacts {
-                        raw_result: Some(&result_value),
-                        is_error: Some(result.is_error),
-                        status: None,
-                        artifact_path,
-                    },
-                );
-            }
-            return;
+    if let Some(message) = pairer.message_mut(Some(&result.tool_call_id), messages) {
+        message.content = content;
+        if let Some(metadata) = message.tool_metadata.as_mut() {
+            enrich_tool_metadata(
+                metadata,
+                ToolResultFacts {
+                    raw_result: Some(&result_value),
+                    is_error: Some(result.is_error),
+                    status: None,
+                    artifact_path,
+                },
+            );
         }
+        return;
     }
 
     let mut metadata = build_tool_metadata(ToolCallFacts {

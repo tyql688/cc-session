@@ -35,7 +35,7 @@ struct ParseState {
     content_parts: Vec<String>,
     first_user_message: Option<String>,
     pending_user_message: Option<(String, Option<String>)>,
-    tool_use_id_map: HashMap<String, usize>,
+    tool_use_id_map: crate::provider_utils::ToolCallPairer,
     assistant_tool_indices_by_uuid: HashMap<String, Vec<usize>>,
     pending_tool_results_by_use_id: HashMap<String, PendingToolResult>,
     /// Count of per-line parse warnings: malformed JSONL lines or JSON fields
@@ -93,7 +93,7 @@ impl ScanAccum {
                 content_parts: Vec::new(),
                 first_user_message: None,
                 pending_user_message: None,
-                tool_use_id_map: HashMap::new(),
+                tool_use_id_map: crate::provider_utils::ToolCallPairer::default(),
                 assistant_tool_indices_by_uuid: HashMap::new(),
                 pending_tool_results_by_use_id: HashMap::new(),
                 parse_warning_count: 0,

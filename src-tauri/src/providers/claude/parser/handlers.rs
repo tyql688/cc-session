@@ -248,10 +248,10 @@ fn handle_tool_result(
                 state.content_parts.push(result_text.clone());
             }
             let use_id = result_item.get("tool_use_id").and_then(|i| i.as_str());
-            if let Some(idx) = use_id.and_then(|id| state.tool_use_id_map.get(id)) {
+            if let Some(idx) = state.tool_use_id_map.index_of(use_id) {
                 // Merge result into the existing tool_use message
-                state.messages[*idx].content = result_text;
-                if let Some(metadata) = state.messages[*idx].tool_metadata.as_mut() {
+                state.messages[idx].content = result_text;
+                if let Some(metadata) = state.messages[idx].tool_metadata.as_mut() {
                     enrich_tool_metadata(
                         metadata,
                         tool_result_facts(result_item, top_level_result),
@@ -392,7 +392,7 @@ pub(super) fn handle_assistant_message(
                     tool_indices.push(msg_idx);
                     // Record tool_use_id for merging results later
                     if let Some(id) = use_id {
-                        state.tool_use_id_map.insert(id.to_string(), msg_idx);
+                        state.tool_use_id_map.register(Some(id), msg_idx);
                         if let Some(pending) = state.pending_tool_results_by_use_id.remove(id) {
                             state.messages[msg_idx].content = pending.result_text;
                             if let Some(metadata) = state.messages[msg_idx].tool_metadata.as_mut() {

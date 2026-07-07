@@ -8,6 +8,9 @@ use serde_json::Value;
 
 use crate::models::TokenUsage;
 
+mod tool_pairing;
+pub(crate) use tool_pairing::ToolCallPairer;
+
 pub const NO_PROJECT: &str = "(No Project)";
 
 /// Outcome of a [`for_each_jsonl_record`] scan: how many lines failed to

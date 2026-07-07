@@ -200,11 +200,16 @@ pub fn execute_restore(
     }
 }
 
-/// Shared deletion plan for JSONL providers with subagent directories
-/// (Claude, CC-Mirror, and similar).
-/// - Parent: Remove file + Remove children + cleanup session dir
-/// - Child: Remove own file only
-pub fn jsonl_subagents_deletion_plan(meta: &SessionMeta, children: &[SessionMeta]) -> DeletionPlan {
+/// Shared deletion plan for providers whose sessions live in dedicated
+/// per-session files.
+/// - Parent: Remove file + Remove each child's file as its own
+///   restorable trash entry + the provider-specific `cleanup_dirs`
+/// - Child: Remove own file only (the parent owns any shared dirs)
+pub fn per_file_deletion_plan(
+    meta: &SessionMeta,
+    children: &[SessionMeta],
+    cleanup_dirs: Vec<PathBuf>,
+) -> DeletionPlan {
     if meta.parent_id.is_some() {
         return DeletionPlan {
             file_action: FileAction::Remove,
@@ -223,19 +228,25 @@ pub fn jsonl_subagents_deletion_plan(meta: &SessionMeta, children: &[SessionMeta
         })
         .collect();
 
-    // Session dir: /path/to/{session_id}/ (may contain subagents/, context.jsonl, state.json)
-    let source = PathBuf::from(&meta.source_path);
-    let session_dir = source.with_extension("");
-    let mut cleanup_dirs = Vec::new();
-    if session_dir.is_dir() {
-        cleanup_dirs.push(session_dir);
-    }
-
     DeletionPlan {
         file_action: FileAction::Remove,
         child_plans,
         cleanup_dirs,
     }
+}
+
+/// Shared deletion plan for JSONL providers with subagent directories
+/// (Claude, Codex, CC-Mirror, Pi, and similar): [`per_file_deletion_plan`]
+/// with the session dir sitting next to the parent's `.jsonl` (may contain
+/// subagents/, context.jsonl, state.json) as the cleanup dir when present.
+pub fn jsonl_subagents_deletion_plan(meta: &SessionMeta, children: &[SessionMeta]) -> DeletionPlan {
+    let session_dir = PathBuf::from(&meta.source_path).with_extension("");
+    let cleanup_dirs = if session_dir.is_dir() {
+        vec![session_dir]
+    } else {
+        Vec::new()
+    };
+    per_file_deletion_plan(meta, children, cleanup_dirs)
 }
 
 pub fn jsonl_subagent_related_paths(source: &Path) -> Vec<PathBuf> {

@@ -10,7 +10,7 @@ use std::collections::HashMap;
 
 use crate::models::{Provider, SessionMeta};
 use crate::provider::{
-    partition_files_by_freshness, ChildPlan, DeletionPlan, FileAction, LoadedSession,
+    partition_files_by_freshness, per_file_deletion_plan, DeletionPlan, LoadedSession,
     ParsedSession, ProviderError, ScanOutcome, SessionProvider, SourceState,
 };
 
@@ -187,35 +187,16 @@ impl SessionProvider for PiProvider {
     }
 
     fn deletion_plan(&self, meta: &SessionMeta, children: &[SessionMeta]) -> DeletionPlan {
-        if meta.parent_id.is_some() {
-            return DeletionPlan {
-                file_action: FileAction::Remove,
-                child_plans: Vec::new(),
-                cleanup_dirs: Vec::new(),
-            };
-        }
-
-        let child_plans = children
-            .iter()
-            .map(|child| ChildPlan {
-                id: child.id.clone(),
-                source_path: child.source_path.clone(),
-                title: child.title.clone(),
-                file_action: FileAction::Remove,
-            })
-            .collect();
-
-        DeletionPlan {
-            file_action: FileAction::Remove,
-            child_plans,
-            cleanup_dirs: Vec::new(),
-        }
+        // Pi sessions are flat .jsonl files (subagents included) — no
+        // session dir to clean up.
+        per_file_deletion_plan(meta, children, Vec::new())
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::provider::FileAction;
     use crate::provider::ProviderDescriptor;
 
     #[test]

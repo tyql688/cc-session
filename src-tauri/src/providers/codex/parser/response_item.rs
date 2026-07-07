@@ -176,10 +176,10 @@ impl CodexScanAccum {
                 });
                 let display_name = metadata.canonical_name.clone();
 
-                let idx = self.messages.len();
-                if let Some(cid) = payload.get("call_id").and_then(|v| v.as_str()) {
-                    self.call_id_map.insert(cid.to_string(), idx);
-                }
+                self.call_id_map.register(
+                    payload.get("call_id").and_then(|v| v.as_str()),
+                    self.messages.len(),
+                );
                 self.messages.push(Message {
                     timestamp: entry.timestamp.clone(),
                     tool_name: Some(display_name.to_string()),
@@ -202,26 +202,19 @@ impl CodexScanAccum {
 
                 // Merge output into the matching function_call message
                 let call_id = payload.get("call_id").and_then(|v| v.as_str());
-                if let Some(idx) = call_id.and_then(|cid| self.call_id_map.get(cid)).copied() {
-                    if idx < self.messages.len() {
-                        let result_value = codex_tool_result_value(&raw_output, &output);
-                        self.messages[idx].content = output;
-                        let is_error = result_value.as_ref().and_then(|value| {
-                            value
-                                .get("exitCode")
-                                .and_then(|code| code.as_i64())
-                                .map(|code| code != 0)
-                        });
-                        if let Some(result_value) = result_value {
-                            enrich_existing_tool_message(
-                                &mut self.messages[idx],
-                                result_value,
-                                is_error,
-                                None,
-                            );
-                        }
-                        return;
+                if let Some(message) = self.call_id_map.message_mut(call_id, &mut self.messages) {
+                    let result_value = codex_tool_result_value(&raw_output, &output);
+                    message.content = output;
+                    let is_error = result_value.as_ref().and_then(|value| {
+                        value
+                            .get("exitCode")
+                            .and_then(|code| code.as_i64())
+                            .map(|code| code != 0)
+                    });
+                    if let Some(result_value) = result_value {
+                        enrich_existing_tool_message(message, result_value, is_error, None);
                     }
+                    return;
                 }
                 // Fallback: standalone output message
                 self.messages.push(Message {
@@ -258,10 +251,7 @@ impl CodexScanAccum {
                 if !query.is_empty() {
                     self.content_parts.push(query.to_string());
                 }
-                let idx = self.messages.len();
-                if let Some(call_id) = call_id {
-                    self.call_id_map.insert(call_id.to_string(), idx);
-                }
+                self.call_id_map.register(call_id, self.messages.len());
                 self.messages.push(Message {
                     timestamp: entry.timestamp.clone(),
                     tool_name: Some(metadata.canonical_name.clone()),
@@ -280,10 +270,7 @@ impl CodexScanAccum {
                     call_id,
                     assistant_id: None,
                 });
-                let idx = self.messages.len();
-                if let Some(call_id) = call_id {
-                    self.call_id_map.insert(call_id.to_string(), idx);
-                }
+                self.call_id_map.register(call_id, self.messages.len());
                 self.messages.push(Message {
                     timestamp: entry.timestamp.clone(),
                     tool_name: Some(metadata.canonical_name.clone()),
@@ -308,10 +295,8 @@ impl CodexScanAccum {
                     call_id: codex_call_id(payload),
                     assistant_id: None,
                 });
-                let idx = self.messages.len();
-                if let Some(call_id) = codex_call_id(payload) {
-                    self.call_id_map.insert(call_id.to_string(), idx);
-                }
+                self.call_id_map
+                    .register(codex_call_id(payload), self.messages.len());
                 self.messages.push(Message {
                     timestamp: entry.timestamp.clone(),
                     tool_name: Some(metadata.canonical_name.clone()),
@@ -329,10 +314,8 @@ impl CodexScanAccum {
                     call_id: codex_call_id(payload),
                     assistant_id: None,
                 });
-                let idx = self.messages.len();
-                if let Some(call_id) = codex_call_id(payload) {
-                    self.call_id_map.insert(call_id.to_string(), idx);
-                }
+                self.call_id_map
+                    .register(codex_call_id(payload), self.messages.len());
                 self.messages.push(Message {
                     timestamp: entry.timestamp.clone(),
                     tool_name: Some(metadata.canonical_name.clone()),
@@ -346,13 +329,13 @@ impl CodexScanAccum {
                 if !output.is_empty() {
                     self.content_parts.push(output.clone());
                 }
-                if let Some(idx) = codex_call_id(payload)
-                    .and_then(|cid| self.call_id_map.get(cid))
-                    .copied()
+                if let Some(message) = self
+                    .call_id_map
+                    .message_mut(codex_call_id(payload), &mut self.messages)
                 {
-                    self.messages[idx].content = output;
+                    message.content = output;
                     enrich_existing_tool_message(
-                        &mut self.messages[idx],
+                        message,
                         payload.clone(),
                         None,
                         payload.get("status").and_then(|v| v.as_str()),
@@ -381,10 +364,10 @@ impl CodexScanAccum {
                 });
                 let display_name = metadata.canonical_name.clone();
 
-                let idx = self.messages.len();
-                if let Some(cid) = payload.get("call_id").and_then(|v| v.as_str()) {
-                    self.call_id_map.insert(cid.to_string(), idx);
-                }
+                self.call_id_map.register(
+                    payload.get("call_id").and_then(|v| v.as_str()),
+                    self.messages.len(),
+                );
                 self.messages.push(Message {
                     timestamp: entry.timestamp.clone(),
                     tool_name: Some(display_name.to_string()),
@@ -402,26 +385,19 @@ impl CodexScanAccum {
                 let output = extract_tool_output(&raw_output);
 
                 let call_id = payload.get("call_id").and_then(|v| v.as_str());
-                if let Some(idx) = call_id.and_then(|cid| self.call_id_map.get(cid)).copied() {
-                    if idx < self.messages.len() {
-                        let result_value = codex_tool_result_value(&raw_output, &output);
-                        self.messages[idx].content = output;
-                        let is_error = result_value.as_ref().and_then(|value| {
-                            value
-                                .get("exitCode")
-                                .and_then(|code| code.as_i64())
-                                .map(|code| code != 0)
-                        });
-                        if let Some(result_value) = result_value {
-                            enrich_existing_tool_message(
-                                &mut self.messages[idx],
-                                result_value,
-                                is_error,
-                                None,
-                            );
-                        }
-                        return;
+                if let Some(message) = self.call_id_map.message_mut(call_id, &mut self.messages) {
+                    let result_value = codex_tool_result_value(&raw_output, &output);
+                    message.content = output;
+                    let is_error = result_value.as_ref().and_then(|value| {
+                        value
+                            .get("exitCode")
+                            .and_then(|code| code.as_i64())
+                            .map(|code| code != 0)
+                    });
+                    if let Some(result_value) = result_value {
+                        enrich_existing_tool_message(message, result_value, is_error, None);
                     }
+                    return;
                 }
                 if !output.is_empty() {
                     self.messages.push(Message {
