@@ -1,3 +1,5 @@
+import { Button } from "@/components/ui/button";
+import { ChevronsRight } from "lucide-react";
 import {
   type MouseEvent as ReactMouseEvent,
   useEffect,
@@ -239,14 +241,16 @@ export function TabBar(props: {
       {/* Overflow chevron */}
       {overflowing && (
         <>
-          <button
+          <Button
             ref={overflowBtnRef}
-            className="tab-overflow-btn"
+            variant="ghost"
+            size="icon-xs"
+            className="tab-overflow-btn shrink-0"
             title={t("tabs.showOpenTabs")}
             onClick={() => setShowOverflowMenu((v) => !v)}
           >
-            &#xBB;
-          </button>
+            <ChevronsRight className="size-3.5" aria-hidden="true" />
+          </Button>
           {showOverflowMenu && (
             <div ref={overflowMenuRef} className="tab-overflow-menu">
               {props.tabs.map((tab) => (

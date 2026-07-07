@@ -1,3 +1,6 @@
+import { Button } from "@/components/ui/button";
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
+import { Crosshair, Folder, Layers, PanelLeftClose } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type React from "react";
 import type { SessionRef, TreeNode } from "@/lib/types";
@@ -445,60 +448,51 @@ export function Explorer(props: {
             {selCount} {t("explorer.selected")}
           </span>
         )}
-        <span className="explorer-header-actions">
-          <span className="explorer-grouping-toggle">
-            <button
-              className={`explorer-grouping-btn${grouping === "provider" ? " active" : ""}`}
+        <span className="explorer-header-actions flex items-center gap-0.5">
+          <ToggleGroup
+            size="sm"
+            value={[grouping]}
+            onValueChange={(next) => {
+              const value = next[0];
+              if (value === "provider" || value === "directory") {
+                setExplorerGrouping(value);
+              }
+            }}
+          >
+            <ToggleGroupItem
+              value="provider"
+              className="size-6 p-0 text-muted-foreground data-pressed:bg-brand-soft data-pressed:text-brand"
               title={t("explorer.groupByProvider")}
-              onClick={() => setExplorerGrouping("provider")}
             >
-              <svg
-                width="12"
-                height="12"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-              >
-                <path d="M12 2 2 7l10 5 10-5-10-5Z" />
-                <path d="m2 17 10 5 10-5" />
-                <path d="m2 12 10 5 10-5" />
-              </svg>
-            </button>
-            <button
-              className={`explorer-grouping-btn${grouping === "directory" ? " active" : ""}`}
+              <Layers className="size-3" aria-hidden="true" />
+            </ToggleGroupItem>
+            <ToggleGroupItem
+              value="directory"
+              className="size-6 p-0 text-muted-foreground data-pressed:bg-brand-soft data-pressed:text-brand"
               title={t("explorer.groupByDirectory")}
-              onClick={() => setExplorerGrouping("directory")}
             >
-              <svg
-                width="12"
-                height="12"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-              >
-                <path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z" />
-              </svg>
-            </button>
-          </span>
+              <Folder className="size-3" aria-hidden="true" />
+            </ToggleGroupItem>
+          </ToggleGroup>
           {props.activeSessionId && (
-            <button
-              className="explorer-header-btn"
+            <Button
+              variant="ghost"
+              size="icon-xs"
               title={t("explorer.locateSession")}
               onClick={revealActiveSession}
             >
-              {"\u2316"}
-            </button>
+              <Crosshair className="size-3.5" aria-hidden="true" />
+            </Button>
           )}
           {props.onCollapse && (
-            <button
-              className="explorer-header-btn"
+            <Button
+              variant="ghost"
+              size="icon-xs"
               title={t("explorer.hideExplorer")}
               onClick={() => props.onCollapse?.()}
             >
-              {"\u2190"}
-            </button>
+              <PanelLeftClose className="size-3.5" aria-hidden="true" />
+            </Button>
           )}
         </span>
       </div>

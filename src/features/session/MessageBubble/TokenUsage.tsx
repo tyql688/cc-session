@@ -1,6 +1,8 @@
+import { Check, Copy } from "lucide-react";
 import { useState } from "react";
-import type { TokenUsage } from "@/lib/types";
+import { Button } from "@/components/ui/button";
 import { useI18n } from "@/i18n/index";
+import type { TokenUsage } from "@/lib/types";
 import { toastError } from "@/stores/toast";
 
 export function CopyMessageButton(props: {
@@ -22,39 +24,22 @@ export function CopyMessageButton(props: {
   }
 
   return (
-    <button
+    // msg-copy-btn stays as the hover-reveal hook (messages.css shows it on
+    // bubble hover); the visual base comes from the shared Button.
+    <Button
+      variant="ghost"
+      size="icon-xs"
       className="msg-copy-btn"
       onClick={handleCopy}
       title={t("common.copyMessage")}
       aria-label={t("common.copyMessage")}
     >
       {copied ? (
-        <svg
-          width="12"
-          height="12"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="2"
-          strokeLinecap="round"
-        >
-          <polyline points="20 6 9 17 4 12" />
-        </svg>
+        <Check className="size-3 text-success" aria-hidden="true" />
       ) : (
-        <svg
-          width="12"
-          height="12"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="2"
-          strokeLinecap="round"
-        >
-          <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
-          <path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1" />
-        </svg>
+        <Copy className="size-3" aria-hidden="true" />
       )}
-    </button>
+    </Button>
   );
 }
 
