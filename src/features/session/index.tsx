@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { SessionRef, SessionMeta, Message, MessageRole, TokenTotals } from "@/lib/types";
 import {
   getSessionOpenWindow,
@@ -18,7 +18,7 @@ import { ExportDialog } from "@/features/session/ExportDialog";
 import { setFocusMode, useFocusMode, useTerminalApp } from "@/stores/settings";
 import { toast, toastError } from "@/stores/toast";
 import { errorMessage } from "@/lib/errors";
-import { isSearchableRole, processMessages } from "@/features/session/hooks";
+import { estimateEntryHeight, isSearchableRole, processMessages } from "@/features/session/hooks";
 import { SessionToolbar } from "@/features/session/SessionToolbar";
 import { SessionSearch } from "@/features/session/SessionSearch";
 import { TimelineMinimap, activeTurnIndex } from "@/features/session/TimelineMinimap";
@@ -95,20 +95,62 @@ export function SessionView(props: {
   // Role-filter slice: hiddenRoles + filteredEntries + roleCounts.
   const { hiddenRoles, roleCounts, filteredEntries, toggleRole } = useRoleFilter(processedEntries, focusMode);
 
-  // Virtualized-scrolling slice: renders only the on-screen rows, pages
-  // older messages in from the backend as the viewport nears the top.
-  const { virtualizer, setTotalMessages, resolveCompleteSearchMatch, revealEntry, revealMessageIndex, scrollToEnd } =
-    useSessionPagination({
-      sessionId: props.session.id,
-      filteredEntries,
-      windowStart,
-      setWindowStart,
-      loadedCount: messages.length,
-      scrollElement: messagesEl,
-      setMessages,
-      setMeta,
-      withTokenTotals,
-    });
+  // Rendering is content-visibility: every loaded row is real DOM in normal
+  // document flow, and the browser skips layout/paint for off-screen rows
+  // (`content-visibility: auto` in session.css). Because rows keep their real
+  // heights and normal-flow position, the browser's native scroll anchoring
+  // absorbs every height correction (a code block painting taller than its
+  // reserved estimate, an older page prepending above) — so the read position
+  // never jumps, unlike an absolutely-positioned JS virtualizer. Navigation is
+  // driven through these plain DOM scroll callbacks.
+  const scrollToItem = useCallback((index: number, align: "start" | "center" | "end") => {
+    const rows = messagesRef.current?.querySelectorAll<HTMLElement>(".session-entry");
+    rows?.[index]?.scrollIntoView({ block: align === "center" ? "center" : align });
+  }, []);
+  const scrollToBottom = useCallback(() => {
+    const align = () => {
+      const el = messagesRef.current;
+      if (!el) return;
+      // Align the last row's bottom edge to the viewport bottom directly, so an
+      // estimate-vs-real height gap on the newest rows can't leave a sliver
+      // below it. Re-run next frame after those rows paint at real height.
+      const rows = el.querySelectorAll<HTMLElement>(".session-entry");
+      const last = rows[rows.length - 1];
+      if (last) last.scrollIntoView({ block: "end" });
+      else el.scrollTo({ top: el.scrollHeight });
+    };
+    align();
+    requestAnimationFrame(align);
+  }, []);
+  // Stable ref callback: an inline arrow would change identity every render, so
+  // React would re-invoke it (null → el) each time, toggling `messagesEl` and
+  // re-firing the open scroll-to-bottom effect — which pins you to the bottom.
+  const handleScrollerRef = useCallback((el: HTMLDivElement | null) => {
+    messagesRef.current = el;
+    setMessagesEl(el);
+  }, []);
+
+  const {
+    setTotalMessages,
+    resolveCompleteSearchMatch,
+    revealEntry,
+    revealMessageIndex,
+    scrollToEnd,
+    loadOlder,
+    loadNewer,
+  } = useSessionPagination({
+    sessionId: props.session.id,
+    filteredEntries,
+    windowStart,
+    setWindowStart,
+    loadedCount: messages.length,
+    scrollElement: messagesEl,
+    setMessages,
+    setMeta,
+    withTokenTotals,
+    scrollToItem,
+    scrollToBottom,
+  });
 
   // In-session search slice: query signals + data-level match locations.
   const {
@@ -197,8 +239,7 @@ export function SessionView(props: {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [props.session.id]);
 
-  // A session opens at its newest messages. Depends on the scroll element
-  // too: the messages container only mounts after loading flips false.
+  // A session opens at its newest messages (and this arms edge prefetch).
   useEffect(() => {
     if (loading || error || !messagesEl) return;
     scrollToEnd();
@@ -333,28 +374,81 @@ export function SessionView(props: {
     },
   });
 
-  const virtualItems = virtualizer.getVirtualItems();
-
-  // Minimap position, computed from the virtualizer's rendered range — pure
-  // data, no DOM measurement anywhere on the scroll path.
+  // Minimap active-turn + scroll state, driven by a throttled scroll handler on
+  // the real scroll container. The top-visible row (by hit-testing the viewport
+  // top) picks the active turn; nearing an edge prefetches the next page; a
+  // short idle timer drives the minimap wave. `data-entry-key` on each row maps
+  // the DOM node back to a `filteredEntries` position.
+  const [topVisibleKey, setTopVisibleKey] = useState<string | null>(null);
+  const [lastRowVisible, setLastRowVisible] = useState(false);
+  const [timelineScrolling, setTimelineScrolling] = useState(false);
+  const scrollRafRef = useRef(0);
+  const scrollIdleRef = useRef(0);
+  const handleTimelineScroll = useCallback(() => {
+    if (scrollRafRef.current) return;
+    scrollRafRef.current = requestAnimationFrame(() => {
+      scrollRafRef.current = 0;
+      const el = messagesRef.current;
+      if (!el) return;
+      const rect = el.getBoundingClientRect();
+      // Hit-test a few points down from the top edge so the container's
+      // top padding (which has no row under it) doesn't yield a null key —
+      // otherwise the active turn falls back to the last turn at scrollTop 0.
+      let row: Element | null = null;
+      for (const dy of [6, 24, 48]) {
+        const hit = document.elementFromPoint(rect.left + 24, rect.top + dy);
+        row = hit instanceof Element ? hit.closest(".session-entry") : null;
+        if (row) break;
+      }
+      // Still nothing (very top padding): the first rendered row is the top one.
+      if (!row) row = el.querySelector(".session-entry");
+      setTopVisibleKey(row?.getAttribute("data-entry-key") ?? null);
+      setLastRowVisible(el.scrollHeight - el.scrollTop - el.clientHeight < 4);
+      // Edge prefetch: load the adjacent page well before the viewport reaches
+      // the end, so the runway stays ahead of the read position.
+      if (el.scrollTop < 1500) loadOlder();
+      if (el.scrollHeight - el.scrollTop - el.clientHeight < 1500) loadNewer();
+      setTimelineScrolling(true);
+      window.clearTimeout(scrollIdleRef.current);
+      scrollIdleRef.current = window.setTimeout(() => setTimelineScrolling(false), 160);
+    });
+  }, [loadOlder, loadNewer]);
+  useEffect(() => () => cancelAnimationFrame(scrollRafRef.current), []);
+  // Paint-ahead band: `content-visibility: auto` skips off-screen paint, which
+  // flashes blank on fast scroll. An IntersectionObserver with a tall rootMargin
+  // force-paints rows within ~1.5 screens of the viewport (and lets their
+  // estimate→real height correction settle off-screen), so a row is ready before
+  // it scrolls in. Re-observes when the row set changes (pagination / filter).
+  useEffect(() => {
+    const root = messagesEl;
+    if (!root) return;
+    const io = new IntersectionObserver(
+      (entries) => {
+        for (const entry of entries) {
+          (entry.target as HTMLElement).classList.toggle("paint-ahead", entry.isIntersecting);
+        }
+      },
+      { root, rootMargin: "1500px 0px 1500px 0px" },
+    );
+    for (const row of root.querySelectorAll(".session-entry")) io.observe(row);
+    return () => io.disconnect();
+  }, [messagesEl, filteredEntries]);
   const topVisibleMessageIndex = useMemo(() => {
-    for (const item of virtualItems) {
-      const entry = filteredEntries[item.index];
-      if (!entry) continue;
-      if (entry.type === "message") return entry.messageIndex;
-      if (entry.type === "merged-tools") return entry.messageIndices[0];
+    if (!topVisibleKey) return null;
+    const start = filteredEntries.findIndex((entry) => entry.key === topVisibleKey);
+    for (let i = Math.max(0, start); i < filteredEntries.length; i += 1) {
+      const entry = filteredEntries[i];
+      if (entry?.type === "message") return entry.messageIndex;
+      if (entry?.type === "merged-tools") return entry.messageIndices[0];
     }
     return null;
-  }, [virtualItems, filteredEntries]);
-  const lastRowVisible =
-    filteredEntries.length > 0 && virtualItems.some((item) => item.index === filteredEntries.length - 1);
+  }, [topVisibleKey, filteredEntries]);
   const activeTurn = activeTurnIndex(outline, topVisibleMessageIndex, lastRowVisible);
 
-  // Repaint search highlights over the mounted rows whenever the rendered
-  // window, the query, or the active match changes. Ranges live on real DOM
-  // nodes, and virtual rows mount/unmount as the user scrolls — so painting
-  // is a recurring pass, while counting stays data-level in the search hook.
-  const renderedRangeSignature = `${virtualItems[0]?.key ?? ""}:${virtualItems.length}`;
+  // Paint search highlights when the query, matches, or active match change.
+  // Every row is real DOM (content-visibility rendering), so ranges are stable
+  // and there is NO need to repaint on scroll — the browser applies the
+  // highlight to each row as it paints. Counting stays data-level in the hook.
   const lastScrolledMatchRef = useRef<string | null>(null);
   useEffect(() => {
     if (!activeSessionSearch || !messagesEl) return;
@@ -366,8 +460,7 @@ export function SessionView(props: {
         activeSessionSearch,
         target !== null && activeKey !== undefined ? { entryKey: activeKey, occurrence: target.occurrence } : null,
       );
-      // Center the active match once per navigation step — not on every
-      // scroll repaint, which would hijack free scrolling.
+      // Center the active match once per navigation step.
       const scrollKey = `${activeSessionSearch}#${searchMatchIdx}`;
       if (activeRange && lastScrolledMatchRef.current !== scrollKey) {
         lastScrolledMatchRef.current = scrollKey;
@@ -375,7 +468,7 @@ export function SessionView(props: {
       }
     });
     return () => cancelAnimationFrame(frame);
-  }, [activeSessionSearch, searchMatchIdx, matchLocations, messagesEl, filteredEntries, renderedRangeSignature]);
+  }, [activeSessionSearch, searchMatchIdx, matchLocations, messagesEl, filteredEntries]);
 
   return (
     <div className="session-view">
@@ -462,52 +555,41 @@ export function SessionView(props: {
 
       {!loading && !error && (
         <div className="session-messages-container">
-          <div
-            className="session-messages"
-            ref={(el) => {
-              messagesRef.current = el;
-              setMessagesEl(el);
-            }}
-          >
-            <div className="session-messages-inner" style={{ height: `${virtualizer.getTotalSize()}px` }}>
-              {virtualItems.map((item) => {
-                const entry = filteredEntries[item.index];
-                if (!entry) return null;
-                return (
-                  <div
-                    className="session-entry"
-                    key={entry.key}
-                    data-index={item.index}
-                    data-entry-key={entry.key}
-                    // DOM-level search painting (CSS Custom Highlight API)
-                    // only scans subtrees tagged searchable: user +
-                    // assistant dialogue.
-                    data-searchable={entry.type === "message" && isSearchableRole(entry.msg.role) ? "" : undefined}
-                    ref={virtualizer.measureElement}
-                    style={{ transform: `translateY(${item.start}px)` }}
-                  >
-                    {entry.type === "time-sep" ? (
-                      <div className="msg-time-separator">{entry.time}</div>
-                    ) : entry.type === "merged-tools" ? (
-                      <MergedToolRow
-                        tools={entry.tools}
-                        messages={entry.messages}
-                        provider={meta.provider}
-                        parentSessionId={props.session.id}
-                      />
-                    ) : (
-                      <MessageBubble message={entry.msg} provider={meta.provider} parentSessionId={props.session.id} />
-                    )}
-                  </div>
-                );
-              })}
+          {messages.length === 0 ? (
+            <div className="session-messages">
+              <div className="session-empty-messages">{t("session.noMessages")}</div>
             </div>
-            {messages.length === 0 && <div className="session-empty-messages">{t("session.noMessages")}</div>}
-          </div>
+          ) : (
+            <div className="session-messages" ref={handleScrollerRef} onScroll={handleTimelineScroll} tabIndex={-1}>
+              {filteredEntries.map((entry) => (
+                <div
+                  key={entry.key}
+                  className="session-entry"
+                  data-entry-key={entry.key}
+                  data-searchable={entry.type === "message" && isSearchableRole(entry.msg.role) ? "" : undefined}
+                  // Per-row reserved height so revealing off-screen rows doesn't shift scroll.
+                  style={{ containIntrinsicSize: `auto ${estimateEntryHeight(entry)}px` }}
+                >
+                  {entry.type === "time-sep" ? (
+                    <div className="msg-time-separator">{entry.time}</div>
+                  ) : entry.type === "merged-tools" ? (
+                    <MergedToolRow
+                      tools={entry.tools}
+                      messages={entry.messages}
+                      provider={meta.provider}
+                      parentSessionId={props.session.id}
+                    />
+                  ) : (
+                    <MessageBubble message={entry.msg} provider={meta.provider} parentSessionId={props.session.id} />
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
           <TimelineMinimap
             outline={outline}
             activeIndex={activeTurn}
-            scrolling={virtualizer.isScrolling}
+            scrolling={timelineScrolling}
             onWheelScroll={(deltaY) => {
               messagesRef.current?.scrollBy({ top: deltaY });
             }}

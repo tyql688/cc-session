@@ -148,44 +148,46 @@
   position: relative;
 }
 
-/* Messages — virtualized: the inner spacer owns the full scroll height and
- * only the on-screen rows exist, absolutely positioned by the virtualizer.
- * Rows never push each other around, so scrolling is symmetric in both
- * directions regardless of session size. */
+/* Messages — content-visibility rendering: every loaded row is real DOM in
+ * normal flow; the browser skips layout/paint for off-screen rows but keeps
+ * their reserved height, so the list scrolls at full real length with no
+ * position estimation. `overflow-anchor` (default, stated for intent) lets the
+ * browser's scroll anchoring absorb height corrections and older-page prepends
+ * so the read position never jumps. */
 .session-messages {
   flex: 1;
   overflow-y: auto;
   padding: 16px 20px 26px;
+  overflow-anchor: auto;
   /* Focus is programmatic (keyboard paging), never a visual affordance. */
   outline: none;
+  /* The minimap is the scroll indicator; hide the native scrollbar so its thumb
+   * doesn't lurch downward when an older page prepends above. The document
+   * genuinely grows upward (older messages are now above the read position), so
+   * scrollTop must jump to keep the content glued — the thumb would reflect that
+   * even though nothing on screen moved, which reads as scrolling the wrong way. */
+  scrollbar-width: none;
 }
-
-.session-messages-inner {
-  position: relative;
-  width: 100%;
+.session-messages::-webkit-scrollbar {
+  display: none;
 }
 
 .session-entry {
-  position: absolute;
-  top: 0;
-  left: 0;
   display: flex;
   width: 100%;
   flex-direction: column;
-  /* Replaces the old flex gap between rows — spacing must live inside the
-   * measured row so the virtualizer accounts for it. */
   padding-bottom: 10px;
+  /* Off-screen rows skip layout+paint; the estimate reserves their height so
+   * scrolling stays full-length and stable. `auto` makes the browser remember
+   * each row's real size once painted, so revisits don't re-estimate. */
+  content-visibility: auto;
+  contain-intrinsic-size: auto 200px;
 }
 
-/* In-session search highlighting (CSS Custom Highlight API — ranges are
- * painted by search-utils, no DOM mutation). */
-::highlight(session-search) {
-  background-color: color-mix(in srgb, var(--accent) 30%, transparent);
-}
-
-::highlight(session-search-active) {
-  background-color: var(--warning-amber);
-  color: #1d1d1f;
+/* Rows within the paint-ahead band (see the IntersectionObserver in
+ * SessionView) render eagerly so fast scrolling never reveals an unpainted row. */
+.session-entry.paint-ahead {
+  content-visibility: visible;
 }
 
 .session-empty-messages {

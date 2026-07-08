@@ -45,24 +45,19 @@ function structuredRecord(metadata: ToolMetadata | undefined): Record<string, un
     : null;
 }
 
-/** Parse a possibly-JSON tool payload into an object record. Returns undefined
- *  silently for plain-text payloads (Bash stdout, file contents, etc.) — most
- *  tool inputs/outputs aren't JSON, and calling JSON.parse on them spams
- *  SyntaxError into the console. We only attempt a parse when the value looks
- *  like a JSON object/array, and only log a warning when something that
- *  *looked* like JSON failed to parse (a real anomaly worth seeing). */
-export function parseToolJsonObject(
-  raw: string | undefined | null,
-  label: string,
-): Record<string, unknown> | undefined {
+/** Parse a possibly-JSON tool payload into an object record. Tool payloads are
+ *  rendered on a hot path and many real sessions contain plain text, truncated
+ *  JSON, or partial streamed values, so parse misses fall back quietly. */
+export function parseToolJsonObject(raw: string | undefined | null): Record<string, unknown> | undefined {
   if (typeof raw !== "string") return undefined;
   const trimmed = raw.trimStart();
-  if (!trimmed.startsWith("{") && !trimmed.startsWith("[")) return undefined;
+  if (!trimmed.startsWith("{")) return undefined;
   try {
     const parsed: unknown = JSON.parse(trimmed);
-    return typeof parsed === "object" && parsed !== null ? (parsed as Record<string, unknown>) : undefined;
-  } catch (error) {
-    console.warn(`Failed to parse ${label} JSON:`, error);
+    return typeof parsed === "object" && parsed !== null && !Array.isArray(parsed)
+      ? (parsed as Record<string, unknown>)
+      : undefined;
+  } catch {
     return undefined;
   }
 }
@@ -154,8 +149,8 @@ export function extractSubagentInfo(message: Message): SubagentInfo {
   if (!isAgentToolMessage(message)) {
     return { childPrompts: [] };
   }
-  const input = parseToolJsonObject(message.tool_input, "tool_input");
-  const output = parseToolJsonObject(message.content, "tool output");
+  const input = parseToolJsonObject(message.tool_input);
+  const output = parseToolJsonObject(message.content);
   return {
     nickname: extractAgentNickname(output),
     description: extractAgentDescription(input),

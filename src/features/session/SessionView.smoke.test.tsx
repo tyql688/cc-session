@@ -466,11 +466,13 @@ describe("SessionView smoke", () => {
       />,
     );
 
-    // Opening lands at the newest messages; older rows are outside the
-    // virtualizer's window.
+    // Opening lands at the newest messages. With content-visibility rendering
+    // every LOADED row is real DOM (the browser only skips off-screen paint),
+    // so older loaded rows are present in the tree even before scrolling to them
+    // — which is what makes native find-in-page and text selection work.
     expect(await findByText("message 119")).toBeInTheDocument();
-    expect(queryByText("target after search")).not.toBeInTheDocument();
-    expect(queryByText("oldest still above")).not.toBeInTheDocument();
+    expect(queryByText("target after search")).toBeInTheDocument();
+    expect(queryByText("oldest still above")).toBeInTheDocument();
 
     document.dispatchEvent(
       new CustomEvent(SESSION_COMMAND_EVENTS.sessionSearch),
@@ -490,8 +492,7 @@ describe("SessionView smoke", () => {
     );
 
     // After the reveal, plain scrolling must still work: driving the scroll
-    // container to the very top brings the oldest row into the virtualizer's
-    // window.
+    // container to the very top keeps the oldest loaded row present and reachable.
     const messagesEl =
       document.querySelector<HTMLDivElement>(".session-messages");
     expect(messagesEl).not.toBeNull();

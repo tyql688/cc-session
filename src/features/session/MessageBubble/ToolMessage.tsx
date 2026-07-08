@@ -120,18 +120,15 @@ export function ToolMessage(props: { message: Message; provider?: string; parent
   const resultHasDiff = () => !!resultMetadata?.diff || !!resultMetadata?.patchDiff;
   const showInputDetail = () => !!formatted && !resultHasDiff();
   const isAgent = () => isAgentToolMessage(props.message);
-  /** Parsed tool_input/tool_output JSON, memoized so each downstream
-   *  extractor reuses the same JSON.parse call. Most tool outputs are
-   *  plain text (Bash stdout, file contents, …), so we pre-screen the
-   *  shape before calling JSON.parse — otherwise every non-JSON output
-   *  spams `SyntaxError: JSON Parse error` into the console. Only a
-   *  malformed JSON-looking payload is worth a warn. */
+  /** Parsed tool_input/tool_output JSON, memoized so downstream extractors
+   *  reuse the same JSON.parse call. Many real tool payloads are plain text
+   *  or partial streamed values, so parse misses simply mean "no metadata". */
   const toolInputObj = useMemo<Record<string, unknown> | undefined>(
-    () => parseToolJsonObject(props.message.tool_input, "tool_input"),
+    () => parseToolJsonObject(props.message.tool_input),
     [props.message.tool_input],
   );
   const toolOutputObj = useMemo<Record<string, unknown> | undefined>(
-    () => parseToolJsonObject(props.message.content, "tool output"),
+    () => parseToolJsonObject(props.message.content),
     [props.message.content],
   );
   // Subagent extraction lives in lib/subagent.ts (pure, provider-specific);

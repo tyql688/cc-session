@@ -29,18 +29,36 @@ export function findFirstMatchingEntryIndex(entries: ProcessedEntry[], term: str
 
 // --- DOM highlighting via the CSS Custom Highlight API -----------------------
 //
-// Markdown now renders through Streamdown, which offers no hook for injecting
-// <mark> elements, so highlighting moved to the DOM layer: occurrences are
-// collected as Ranges over the rendered text and painted with
-// ::highlight(session-search) / ::highlight(session-search-active) (styled in
-// session.css). Only subtrees tagged [data-searchable] participate — search
-// covers user + assistant dialogue, not tool output or thinking.
+// Markdown renders as sanitized HTML, so highlighting stays at the DOM layer:
+// occurrences are collected as Ranges over the rendered text and painted with
+// ::highlight(session-search) / ::highlight(session-search-active). Only
+// subtrees tagged [data-searchable] participate — search covers user +
+// assistant dialogue, not tool output or thinking.
 
 const HIGHLIGHT_NAME = "session-search";
 const ACTIVE_HIGHLIGHT_NAME = "session-search-active";
+const HIGHLIGHT_STYLE_ID = "session-search-highlight-styles";
+const HIGHLIGHT_STYLE_TEXT = `
+::highlight(${HIGHLIGHT_NAME}) {
+  background-color: color-mix(in srgb, var(--accent) 30%, transparent);
+}
+
+::highlight(${ACTIVE_HIGHLIGHT_NAME}) {
+  background-color: var(--warning-amber);
+  color: #1d1d1f;
+}
+`;
 
 function supportsHighlightApi(): boolean {
   return typeof CSS !== "undefined" && "highlights" in CSS;
+}
+
+function ensureHighlightStyles(): void {
+  if (typeof document === "undefined" || document.getElementById(HIGHLIGHT_STYLE_ID)) return;
+  const style = document.createElement("style");
+  style.id = HIGHLIGHT_STYLE_ID;
+  style.textContent = HIGHLIGHT_STYLE_TEXT;
+  document.head.append(style);
 }
 
 /**
@@ -139,6 +157,7 @@ export function paintVisibleHighlights(
  * No-op when the Highlight API is unavailable (e.g. happy-dom in tests). */
 export function applySearchHighlight(ranges: Range[], activeIndex: number | null): void {
   if (!supportsHighlightApi()) return;
+  ensureHighlightStyles();
   const rest = ranges.filter((_, i) => i !== activeIndex);
   CSS.highlights.set(HIGHLIGHT_NAME, new Highlight(...rest));
   if (activeIndex !== null && ranges[activeIndex]) {

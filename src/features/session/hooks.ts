@@ -24,6 +24,41 @@ export type ProcessedEntry =
     };
 
 /**
+ * Rough per-row height (px) used for `contain-intrinsic-size`, so off-screen
+ * content-visibility rows reserve close to their real height and revealing them
+ * on scroll doesn't shift the read position. Only the FIRST paint uses this
+ * value; `contain-intrinsic-size: auto` then remembers each row's measured size,
+ * so re-scrolls are exact. Accuracy only needs to be in the right ballpark — a
+ * flat guess makes short rows jump ~200px, an in-range guess ~50px.
+ */
+export function estimateEntryHeight(entry: ProcessedEntry): number {
+  if (entry.type === "time-sep") return 32;
+  if (entry.type === "merged-tools") return 44 + entry.tools.length * 40;
+  const content = entry.msg.content;
+  let height = 44; // role header + vertical padding
+  // Alternating prose / fenced-code segments split on ``` markers.
+  const segments = content.split("```");
+  for (let i = 0; i < segments.length; i += 1) {
+    const segment = segments[i];
+    if (i % 2 === 1) {
+      const lang = segment.split("\n", 1)[0]?.trim().toLowerCase();
+      if (lang === "mermaid") {
+        height += 372; // fixed-height mermaid canvas + toolbar (see markdown.css)
+        continue;
+      }
+      const lines = segment.split("\n").length;
+      height += lines * 21 + 44; // code line height + block chrome
+    } else {
+      const lines = segment.split("\n").reduce((sum, line) => sum + Math.max(1, Math.ceil(line.length / 90)), 0);
+      height += lines * 22; // wrapped prose line height
+    }
+  }
+  const imageCount = (content.match(/\[Image:/g) ?? []).length;
+  height += imageCount * 260; // inline images reserve a preview-sized block
+  return Math.max(48, Math.round(height));
+}
+
+/**
  * In-session search covers user + assistant dialogue only — deliberately
  * narrower than global search (which indexes thinking and tool summaries):
  * tool/thinking blocks render collapsed, so counting hits inside them would

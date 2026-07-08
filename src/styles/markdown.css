@@ -1,13 +1,27 @@
-/* ---------------------------------------------------------------------------
- * Element-level polish for Streamdown output inside message bubbles.
- * Streamdown ships neutral utility styling (bg-muted etc.) that has near-zero
- * contrast against the bubble backgrounds — these overrides re-anchor its
- * elements to the app's design tokens. Scoped to .timeline-markdown, keyed on
- * the stable data-streamdown markers.
- * ------------------------------------------------------------------------- */
+/* Timeline markdown output is static HTML generated from markdown-it. Keep
+ * selectors scoped so transcript content cannot leak into the app shell. */
+.timeline-markdown .timeline-markdown-inner {
+  min-width: 0;
+}
 
-/* Inline code: the classic accent pill (bg-muted vanished against bubbles). */
-.timeline-markdown [data-streamdown="inline-code"] {
+.timeline-markdown :where(p, ul, ol, blockquote, table, pre, .markdown-code-block, .markdown-mermaid-block) {
+  margin-block: 0.65em;
+}
+
+.timeline-markdown :where(:first-child) {
+  margin-top: 0;
+}
+
+.timeline-markdown :where(:last-child) {
+  margin-bottom: 0;
+}
+
+.timeline-markdown :where(strong) {
+  font-weight: 650;
+}
+
+/* Inline code: the classic accent pill. */
+.timeline-markdown :where(:not(pre) > code) {
   padding: 1px 5px;
   border-radius: var(--radius-sm);
   background: var(--inline-code-bg);
@@ -17,118 +31,107 @@
 }
 
 /* Links: accent-colored, quiet underline that firms up on hover. */
-.timeline-markdown [data-streamdown="link"] {
+.timeline-markdown a {
   color: var(--accent);
   text-decoration-color: color-mix(in srgb, var(--accent) 40%, transparent);
   text-underline-offset: 2px;
 }
 
-.timeline-markdown [data-streamdown="link"]:hover {
+.timeline-markdown a:hover {
   text-decoration-color: var(--accent);
 }
 
-/* Code blocks: one-piece panel. In the light theme, keep fenced Markdown code
- * on the editor's white surface instead of another grey card; dark keeps the
- * dedicated code surface for contrast with github-dark tokens. */
-.timeline-markdown [data-streamdown="code-block"] {
-  max-width: 100%;
-  border: 1px solid var(--border-subtle);
-  border-radius: 10px;
-  background: var(--bg-editor);
-  overflow: hidden;
-}
-
-[data-theme="dark"] .timeline-markdown [data-streamdown="code-block"] {
-  background: var(--code-bg);
-}
-
-.timeline-markdown [data-streamdown="code-block-header"] {
-  padding: 6px 12px;
-  border-bottom: 1px solid var(--border-subtle);
-  background: none;
-  color: var(--text-tertiary);
-  font-size: 11px;
-  letter-spacing: 0.08em;
-}
-
-/* Keep header/body as one uninterrupted panel surface. */
-.timeline-markdown [data-streamdown="code-block-body"] {
-  border: 0;
-  background: transparent;
-  max-width: 100%;
-  padding: 11px 14px 18px;
-  font-size: 13px;
-  line-height: 1.7;
-  color: var(--code-text);
-  overflow-x: auto;
-  overflow-y: hidden;
-  scrollbar-gutter: stable;
-}
-
-.timeline-markdown [data-streamdown="code-block-body"] code {
-  display: block;
-  min-width: max-content;
-}
-
-/* Lists: restore visible markers and a comfortable hang. */
-.timeline-markdown [data-streamdown="unordered-list"] {
+/* Lists: visible markers and a comfortable hang. */
+.timeline-markdown ul {
   padding-left: 1.3em;
   list-style: disc;
 }
 
-.timeline-markdown [data-streamdown="ordered-list"] {
+.timeline-markdown ol {
   padding-left: 1.3em;
   list-style: decimal;
 }
 
-.timeline-markdown [data-streamdown="list-item"] {
+.timeline-markdown li {
   margin-block: 2px;
 }
 
-.timeline-markdown [data-streamdown="list-item"]::marker {
+.timeline-markdown li::marker {
   color: var(--text-tertiary);
 }
 
-/* Blockquote */
-.timeline-markdown [data-streamdown="blockquote"] {
+.timeline-markdown li > :where(p, ul, ol, blockquote, table, pre, .markdown-code-block):first-child {
+  margin-top: 0.3em;
+}
+
+.timeline-markdown li > :where(p, ul, ol, blockquote, table, pre, .markdown-code-block):last-child {
+  margin-bottom: 0.3em;
+}
+
+/* Task-list items: the checkbox is the marker, so remove the bullet next to it. */
+.timeline-markdown .task-list-item {
+  list-style: none;
+}
+
+.timeline-markdown .task-list-item-checkbox {
+  margin-right: 4px;
+  vertical-align: -1px;
+}
+
+/* Blockquote: upright text for CJK and stacked paragraphs. */
+.timeline-markdown blockquote {
   border-left: 3px solid color-mix(in srgb, var(--text-tertiary) 55%, transparent);
   padding-left: 10px;
   color: var(--text-secondary);
+  font-style: normal;
 }
 
-/* Tables: token-colored grid instead of the neutral defaults. */
-.timeline-markdown [data-streamdown="table-cell"],
-.timeline-markdown [data-streamdown="table-header-cell"] {
+.timeline-markdown blockquote p + p {
+  margin-top: 0.4em;
+}
+
+/* Tables: token-colored grid without a padded wrapper frame. */
+.timeline-markdown table {
+  display: block;
+  max-width: 100%;
+  overflow-x: auto;
+  border-collapse: collapse;
+  border-spacing: 0;
+}
+
+.timeline-markdown :where(th, td) {
   border: 1px solid var(--border);
   padding: 4px 8px;
 }
 
-.timeline-markdown [data-streamdown="table-header-cell"] {
+.timeline-markdown th {
   background: color-mix(in srgb, var(--text-primary) 4%, transparent);
   color: var(--text-secondary);
+  font-weight: 600;
 }
 
-.timeline-markdown [data-streamdown="horizontal-rule"] {
-  border-color: var(--border-subtle);
+.timeline-markdown hr {
+  border: 0;
+  border-top: 1px solid var(--border-subtle);
+  margin-block: 0.85em;
 }
 
-/* Headings: bubble-scale hierarchy (streamdown's page-scale sizes shout
- * inside a 13px bubble). */
+/* Headings: bubble-scale hierarchy. */
 .timeline-markdown :where(h1, h2, h3, h4, h5, h6) {
   margin-block: 0.6em 0.3em;
   font-weight: 600;
   line-height: 1.4;
 }
 
-.timeline-markdown :where(h1) {
+.timeline-markdown h1 {
   font-size: 1.25em;
 }
 
-.timeline-markdown :where(h2) {
+.timeline-markdown h2 {
   font-size: 1.15em;
 }
 
-.timeline-markdown :where(h3) {
+.timeline-markdown h3 {
   font-size: 1.08em;
 }
 
@@ -136,148 +139,266 @@
   font-size: 1em;
 }
 
-/* Task-list items: the checkbox IS the marker — a bullet next to it is
- * double punctuation. */
-.timeline-markdown [data-streamdown="list-item"]:has(> input[type="checkbox"]) {
-  list-style: none;
+.timeline-markdown img {
+  max-width: 100%;
+  height: auto;
 }
 
-.timeline-markdown [data-streamdown="list-item"] > input[type="checkbox"] {
+/* Code blocks: one-piece panel with a quiet copy affordance. */
+.timeline-markdown .markdown-code-block {
+  max-width: 100%;
+  border: 1px solid var(--border-subtle);
+  border-radius: 10px;
+  background: var(--bg-editor);
+  overflow: hidden;
+}
+
+[data-theme="dark"] .timeline-markdown .markdown-code-block {
+  background: var(--code-bg);
+}
+
+.msg-bubble-user .timeline-markdown .markdown-code-block {
+  background: var(--msg-user-code-block-bg);
+  border-color: var(--msg-user-code-block-border);
+}
+
+.timeline-markdown .markdown-code-block-header {
+  display: flex;
+  min-height: 30px;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 1px solid var(--border-subtle);
+  background: none;
+  color: var(--text-tertiary);
+}
+
+.timeline-markdown .markdown-code-block-lang {
+  padding: 6px 12px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.timeline-markdown .markdown-code-copy {
+  display: flex;
+  width: 28px;
+  height: 28px;
+  margin-left: auto;
   margin-right: 4px;
-  vertical-align: -1px;
+  padding: 6px;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: none;
+  color: var(--text-tertiary);
+  cursor: pointer;
+  opacity: 0.55;
+  transition:
+    opacity var(--dur-fast) var(--ease-standard),
+    color var(--dur-fast) var(--ease-standard),
+    background var(--dur-fast) var(--ease-standard);
 }
 
-/* Blockquote: faux-italic mangles CJK text — keep it upright, and give
- * stacked paragraphs inside the quote some air. */
-.timeline-markdown [data-streamdown="blockquote"] {
-  font-style: normal;
+.timeline-markdown .markdown-code-block:hover .markdown-code-copy,
+.timeline-markdown .markdown-code-copy:focus-visible {
+  opacity: 1;
 }
 
-.timeline-markdown [data-streamdown="blockquote"] p + p {
-  margin-top: 0.4em;
+.timeline-markdown .markdown-code-copy:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
 }
 
-/* Block math can be wider than the bubble — scroll inside, never overflow. */
+.timeline-markdown .markdown-code-copy svg {
+  width: 14px;
+  height: 14px;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 2;
+}
+
+.timeline-markdown .markdown-code-block-body {
+  max-width: 100%;
+  margin: 0;
+  padding: 11px 14px 18px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  background: transparent;
+  color: var(--code-text);
+  font-family: var(--font-mono);
+  font-size: 13px;
+  line-height: 1.7;
+  scrollbar-gutter: stable;
+}
+
+.timeline-markdown .markdown-code-block-body code {
+  display: block;
+  min-width: max-content;
+  font-family: inherit;
+}
+
+.timeline-markdown .shiki,
+.timeline-markdown .shiki span {
+  --shiki-token-color: var(--shiki-light);
+}
+
+.timeline-markdown .shiki code > .line {
+  min-height: 1.7em;
+}
+
+[data-theme="dark"] .timeline-markdown .shiki,
+[data-theme="dark"] .timeline-markdown .shiki span {
+  --shiki-token-color: var(--shiki-dark);
+}
+
+/* Language-less code blocks still need the copy control, but no empty strip. */
+.timeline-markdown .markdown-code-block-header:not(:has(.markdown-code-block-lang)) {
+  justify-content: flex-end;
+}
+
+/* Block math can be wider than the bubble. */
 .timeline-markdown .katex-display {
   overflow-x: auto;
   overflow-y: hidden;
   padding-block: 2px;
 }
 
-/* Code/mermaid action buttons: their anonymous wrapper row (sticky + negative
- * margin upstream) ends up occupying a blank full-width strip here — pin the
- * whole row onto the header line instead. */
-.timeline-markdown [data-streamdown="code-block"],
-.timeline-markdown [data-streamdown="mermaid-block"] {
-  position: relative;
+.timeline-markdown .katex {
+  font-size: 1em;
 }
 
-.timeline-markdown [data-streamdown="code-block"] > div:has(> [data-streamdown="code-block-actions"]),
-.timeline-markdown [data-streamdown="mermaid-block"] > div:has(> [data-streamdown="mermaid-block-actions"]) {
-  position: absolute;
-  top: 3px;
-  right: 8px;
-  margin-top: 0;
-  height: auto;
+/* Mermaid: natural-size diagram, centered, scrolls when wider than the bubble. */
+.timeline-markdown .markdown-mermaid-block {
+  max-width: 100%;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--bg-editor);
+  overflow: hidden;
 }
 
-.timeline-markdown [data-streamdown="code-block-actions"],
-.timeline-markdown [data-streamdown="mermaid-block-actions"] {
-  /* Copy stays visible (it's the core affordance) but reads as quiet
-   * chrome until the block is hovered. */
-  opacity: 0.7;
-  border: 0;
-  background: none;
-  padding: 0;
-  box-shadow: none;
-  backdrop-filter: none;
-  transition: opacity var(--dur-fast) var(--ease-standard);
+.timeline-markdown .markdown-mermaid-toolbar {
+  display: flex;
+  min-height: 30px;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 2px;
+  border-bottom: 1px solid var(--border-subtle);
+  padding-inline: 6px;
 }
 
-/* Ghost icon buttons instead of the heavy bordered squares. */
-.timeline-markdown [data-streamdown="code-block-actions"] button,
-.timeline-markdown [data-streamdown="mermaid-block-actions"] button {
-  width: 22px;
-  height: 22px;
-  padding: 3px;
+.timeline-markdown .markdown-mermaid-action {
+  display: flex;
+  width: 24px;
+  height: 24px;
+  padding: 5px;
+  align-items: center;
+  justify-content: center;
   border: 0;
   border-radius: var(--radius-sm);
   background: none;
-  box-shadow: none;
   color: var(--text-tertiary);
+  cursor: pointer;
+  opacity: 0.7;
+  transition:
+    opacity var(--dur-fast) var(--ease-standard),
+    color var(--dur-fast) var(--ease-standard),
+    background var(--dur-fast) var(--ease-standard);
 }
 
-.timeline-markdown [data-streamdown="code-block-actions"] button:hover,
-.timeline-markdown [data-streamdown="mermaid-block-actions"] button:hover {
+.timeline-markdown .markdown-mermaid-action:hover,
+.timeline-markdown .markdown-mermaid-action:focus-visible {
   background: var(--bg-hover);
   color: var(--text-primary);
+  opacity: 1;
 }
 
-.timeline-markdown [data-streamdown="code-block-actions"] svg,
-.timeline-markdown [data-streamdown="mermaid-block-actions"] svg {
+.timeline-markdown .markdown-mermaid-action svg {
   width: 14px;
   height: 14px;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 2;
 }
 
-.timeline-markdown [data-streamdown="code-block"]:hover [data-streamdown="code-block-actions"],
-.timeline-markdown [data-streamdown="mermaid-block"]:hover [data-streamdown="mermaid-block-actions"] {
-  opacity: 1;
-}
-
-/* Mermaid canvas shares the code-block framing. */
-.timeline-markdown [data-streamdown="mermaid-block"] {
-  border: 1px solid var(--border);
-  border-radius: var(--radius-md);
-}
-
-/* Line numbers: recede behind the code instead of competing with it. */
-.timeline-markdown [data-streamdown="code-block-body"] code > span::before {
-  color: var(--text-tertiary);
-  opacity: 0.7;
-  padding-right: 6px;
-}
-
-/* Language-less code blocks: an empty header strip is pure noise. */
-.timeline-markdown [data-streamdown="code-block-header"]:has(> span:empty) {
-  display: none;
-}
-
-/* Tables: drop the padded grey wrapper frame (double-framing the table's own
- * borders) and pin the copy control to the corner instead of a blank row. */
-.timeline-markdown [data-streamdown="table-wrapper"] {
-  position: relative;
-  border: 0;
-  background: none;
-  padding: 0;
-}
-
-.timeline-markdown [data-streamdown="table-wrapper"] > div:has(button) {
-  position: absolute;
-  top: 4px;
-  right: 4px;
-  z-index: 1;
-  margin: 0;
-  /* Overlaps the header row, so it only appears while hovering the table. */
-  opacity: 0;
-  transition: opacity var(--dur-fast) var(--ease-standard);
-}
-
-.timeline-markdown [data-streamdown="table-wrapper"]:hover > div:has(button) {
-  opacity: 1;
-}
-
-/* Mermaid pan-zoom cluster: bottom-right, horizontal — out of the diagram's
- * reading path. */
-.timeline-markdown [data-streamdown="mermaid-block"] div[class~="absolute"][class~="flex-col"] {
-  inset: auto 8px 8px auto;
-  flex-direction: row;
-}
-
-/* Mermaid canvas: natural-size diagram, centered, scrolls when wider than
- * the bubble. Give short diagrams a little presence. */
-.timeline-markdown [data-streamdown="mermaid"] {
-  display: flex;
-  justify-content: safe center;
-  overflow-x: auto;
+.timeline-markdown .markdown-mermaid-canvas {
+  /* Fixed viewport height so the row height NEVER changes when the async SVG
+   * replaces the source text (mermaid renders ~400px taller than its source —
+   * that jump re-measures the virtual list and destabilizes scrolling). The
+   * diagram is viewable in full via pan-drag (the canvas is grabbable) and the
+   * fullscreen button. Fullscreen overrides this to fill the screen. */
+  height: 340px;
+  overflow: hidden;
   padding: 12px 8px;
+  cursor: grab;
+  touch-action: none;
+  white-space: pre;
+}
+
+.timeline-markdown .markdown-mermaid-canvas-dragging {
+  cursor: grabbing;
+}
+
+.timeline-markdown .markdown-mermaid-surface {
+  display: flex;
+  min-width: min-content;
+  justify-content: safe center;
+}
+
+.timeline-markdown .markdown-mermaid-content {
+  transform-origin: center;
+  will-change: transform;
+}
+
+.timeline-markdown .markdown-mermaid-content svg {
+  flex: 0 0 auto;
+  max-width: none;
+}
+
+.timeline-markdown .markdown-mermaid-content:not(.markdown-mermaid-error) {
+  white-space: normal;
+}
+
+.timeline-markdown .markdown-mermaid-error {
+  display: block;
+  color: var(--text-secondary);
+  font-family: var(--font-mono);
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.timeline-markdown .markdown-mermaid-fullscreen {
+  position: fixed;
+  z-index: 1000;
+  inset: 16px;
+  display: flex;
+  max-width: none;
+  flex-direction: column;
+  margin: 0;
+  border-color: var(--border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-lg);
+}
+
+.timeline-markdown .markdown-mermaid-fullscreen .markdown-mermaid-toolbar {
+  flex: 0 0 auto;
+}
+
+.timeline-markdown .markdown-mermaid-fullscreen .markdown-mermaid-canvas {
+  display: grid;
+  flex: 1 1 auto;
+  height: auto;
+  min-height: 0;
+  place-items: center;
+  overflow: hidden;
+  padding: 24px;
+}
+
+.timeline-markdown .markdown-mermaid-fullscreen .markdown-mermaid-surface {
+  min-width: 0;
 }

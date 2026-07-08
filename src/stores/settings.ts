@@ -50,12 +50,31 @@ const VALID_TERMINALS: TerminalApp[] = [
   "xterm",
 ];
 
-function readStorage(key: string): string | null {
-  if (typeof localStorage === "undefined" || typeof localStorage.getItem !== "function") {
+interface ProcessLike {
+  versions?: {
+    node?: unknown;
+  };
+}
+
+function isNodeRuntime(): boolean {
+  const maybeProcess = (globalThis as { process?: ProcessLike }).process;
+  return typeof maybeProcess?.versions?.node === "string";
+}
+
+function browserLocalStorage(): Storage | null {
+  if (isNodeRuntime()) {
     return null;
   }
+  return typeof window !== "undefined" ? window.localStorage : null;
+}
+
+function readStorage(key: string): string | null {
   try {
-    return localStorage.getItem(key);
+    const storage = browserLocalStorage();
+    if (storage === null || typeof storage.getItem !== "function") {
+      return null;
+    }
+    return storage.getItem(key);
   } catch (error) {
     console.error(`Failed to read localStorage key ${key}:`, error);
     return null;
@@ -63,11 +82,12 @@ function readStorage(key: string): string | null {
 }
 
 function writeStorage(key: string, value: string): void {
-  if (typeof localStorage === "undefined" || typeof localStorage.setItem !== "function") {
-    return;
-  }
   try {
-    localStorage.setItem(key, value);
+    const storage = browserLocalStorage();
+    if (storage === null || typeof storage.setItem !== "function") {
+      return;
+    }
+    storage.setItem(key, value);
   } catch (error) {
     console.error(`Failed to write localStorage key ${key}:`, error);
   }

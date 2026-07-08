@@ -10,7 +10,7 @@ import { ThinkingBlock } from "@/features/session/MessageBubble/ThinkingBlock";
 import { CopyMessageButton, TokenUsageDisplay } from "@/features/session/MessageBubble/TokenUsage";
 import { ToolMessage } from "@/features/session/MessageBubble/ToolMessage";
 
-// The markdown engine (streamdown + shiki/katex/mermaid plugins) is by far
+// The markdown engine (markdown-it + shiki/katex/mermaid plugins) is by far
 // the heaviest frontend dependency — load it on demand so the app shell and
 // explorer render without it. Rendering per bubble is eager: the virtualizer
 // only mounts the rows near the viewport, so each mount parses exactly one

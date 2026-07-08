@@ -3,6 +3,7 @@ import { useState } from "react";
 import { describe, expect, it, vi } from "vitest";
 import {
   activeMatchTarget,
+  applySearchHighlight,
   buildMatchLocations,
   collectSearchRanges,
 } from "@/features/session/search-utils";
@@ -37,6 +38,56 @@ describe("collectSearchRanges (DOM)", () => {
     expect(collectSearchRanges(undefined, "x")).toEqual([]);
     const container = document.createElement("div");
     expect(collectSearchRanges(container, "  ")).toEqual([]);
+  });
+});
+
+describe("applySearchHighlight", () => {
+  it("registers ranges and injects runtime highlight styles", () => {
+    const highlightDescriptor = Object.getOwnPropertyDescriptor(globalThis, "Highlight");
+    const cssDescriptor = Object.getOwnPropertyDescriptor(globalThis, "CSS");
+    const highlights = {
+      delete: vi.fn(),
+      set: vi.fn(),
+    };
+
+    class TestHighlight {
+      readonly ranges: Range[];
+
+      constructor(...ranges: Range[]) {
+        this.ranges = ranges;
+      }
+    }
+
+    Object.defineProperty(globalThis, "Highlight", {
+      configurable: true,
+      value: TestHighlight,
+    });
+    Object.defineProperty(globalThis, "CSS", {
+      configurable: true,
+      value: { highlights },
+    });
+
+    try {
+      const range = document.createRange();
+      applySearchHighlight([range], 0);
+
+      expect(highlights.set).toHaveBeenCalledTimes(2);
+      expect(document.getElementById("session-search-highlight-styles")?.textContent).toContain(
+        "::highlight(session-search)",
+      );
+    } finally {
+      document.getElementById("session-search-highlight-styles")?.remove();
+      if (highlightDescriptor) {
+        Object.defineProperty(globalThis, "Highlight", highlightDescriptor);
+      } else {
+        Reflect.deleteProperty(globalThis, "Highlight");
+      }
+      if (cssDescriptor) {
+        Object.defineProperty(globalThis, "CSS", cssDescriptor);
+      } else {
+        Reflect.deleteProperty(globalThis, "CSS");
+      }
+    }
   });
 });
 

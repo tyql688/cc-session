@@ -62,23 +62,24 @@ describe("isAgentToolMessage", () => {
 
 describe("parseToolJsonObject", () => {
   it("returns undefined for plain text without warning", () => {
-    expect(parseToolJsonObject("hello world", "tool output")).toBeUndefined();
+    expect(parseToolJsonObject("hello world")).toBeUndefined();
   });
 
   it("parses a JSON object", () => {
-    expect(parseToolJsonObject('{"a":1}', "tool_input")).toEqual({ a: 1 });
+    expect(parseToolJsonObject('{"a":1}')).toEqual({ a: 1 });
   });
 
   it("returns undefined for a JSON array (not an object record)", () => {
-    expect(parseToolJsonObject('{"a":1}', "x")).toEqual({ a: 1 });
-    // Arrays trim-start with "[" so we attempt a parse, but only objects
-    // are returned as records — arrays come back as the parsed value too.
-    expect(parseToolJsonObject("[1,2]", "x")).toEqual([1, 2]);
+    expect(parseToolJsonObject("[1,2]")).toBeUndefined();
+  });
+
+  it("returns undefined for malformed JSON-looking input", () => {
+    expect(parseToolJsonObject('{"a":')).toBeUndefined();
   });
 
   it("returns undefined for null/undefined input", () => {
-    expect(parseToolJsonObject(null, "x")).toBeUndefined();
-    expect(parseToolJsonObject(undefined, "x")).toBeUndefined();
+    expect(parseToolJsonObject(null)).toBeUndefined();
+    expect(parseToolJsonObject(undefined)).toBeUndefined();
   });
 });
 

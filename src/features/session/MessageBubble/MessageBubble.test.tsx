@@ -3,9 +3,8 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { Message } from "@/lib/types";
 
-// Message bodies render through the Streamdown-based Markdown component;
-// mock it so tests assert what text reaches the renderer without pulling the
-// full markdown pipeline (shiki, mermaid) into happy-dom.
+// Message bodies render through the Markdown component; mock it so tests assert
+// what text reaches the renderer without pulling shiki/mermaid into happy-dom.
 const markdownMock = vi.fn((_props: { text: string }) => null);
 vi.mock("@/features/session/timeline/Markdown", () => ({
   Markdown: (props: { text: string }) => markdownMock(props),

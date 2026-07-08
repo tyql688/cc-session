@@ -1,32 +1,21 @@
 import { useEffect, useRef, useState } from "react";
 import type { Dispatch, SetStateAction } from "react";
 import { flushSync } from "react-dom";
-import { useVirtualizer, type Virtualizer } from "@tanstack/react-virtual";
 import { cancelSessionLoad, getSessionMessagesWindow, isLoadCanceledError } from "@/lib/tauri";
 import type { Message, SessionMeta, TokenTotals } from "@/lib/types";
 import { findFirstMatchingEntryIndex } from "@/features/session/search-utils";
 import type { ProcessedEntry } from "@/features/session/hooks";
 
 /** Backend page sizes: how many messages the initial open fetches and how
- * many each older-page fetch adds. Rendering no longer windows anything —
- * the virtualizer draws only the on-screen rows regardless of how many
- * messages are in memory — so these exist purely to bound a single IPC
- * payload. */
+ * many each older-page fetch adds. The Virtuoso window bounds live DOM; these
+ * bound a single IPC payload and how many messages sit in memory. */
 export const INITIAL_TAIL = 300;
 const TAIL_BATCH = 600;
-
-/** Fetch the next older page while this many rows of runway remain above the
- * viewport, so the prepend usually lands before the user reaches the top. */
-const PREFETCH_ROW_RUNWAY = 60;
-
-/** Pre-measurement row height estimate. Real heights replace it the moment a
- * row renders (measureElement); it only positions never-rendered rows. */
-const ESTIMATED_ROW_PX = 120;
 
 export interface CreateSessionPaginationOptions {
   /** Current session id (guards stale async results). */
   sessionId: string;
-  /** Role-filtered entries the virtualizer renders. */
+  /** Role-filtered entries the timeline renders. */
   filteredEntries: ProcessedEntry[];
   /** Absolute session index of messages[0] — owned by the component because
    * `processMessages` needs it before this hook can run. */
@@ -40,38 +29,39 @@ export interface CreateSessionPaginationOptions {
   setMeta: Dispatch<SetStateAction<SessionMeta>>;
   /** Apply fresh token totals onto a meta object. */
   withTokenTotals: (metaData: SessionMeta, totals: TokenTotals) => SessionMeta;
+  /** Scroll a row (by index in `filteredEntries`) into view — backed by the
+   * Virtuoso handle in the component. */
+  scrollToItem: (index: number, align: "start" | "center" | "end") => void;
+  /** Scroll to the newest row. */
+  scrollToBottom: () => void;
 }
 
 export interface CreateSessionPaginationResult {
-  virtualizer: Virtualizer<HTMLDivElement, Element>;
   totalMessages: number;
   setTotalMessages: Dispatch<SetStateAction<number>>;
   resolveCompleteSearchMatch: (term: string) => Promise<number | null>;
   revealEntry: (entryIndex: number) => void;
   revealMessageIndex: (messageIndex: number) => Promise<boolean>;
   scrollToEnd: () => void;
+  /** Page in the previous/next batch — wired to Virtuoso's start/end reached. */
+  loadOlder: () => void;
+  loadNewer: () => void;
 }
 
 /**
- * Owns the virtualized-scrolling slice of SessionView.
+ * Owns the windowed-loading + navigation slice of SessionView.
  *
- * Rendering is fully virtual (@tanstack/react-virtual): only the rows near
- * the viewport exist in the DOM, absolutely positioned inside a fixed-height
- * spacer, so a row's height never pushes other rows around — scrolling is
- * symmetric in both directions and opening a session mounts one screenful,
- * not a whole tail.
- *
- * Message *loading* stays windowed (the backend pages the parsed session
- * over IPC), in BOTH directions: older pages prepend as the viewport nears
- * the top of the loaded window, newer pages append as it nears the bottom.
- * A jump far outside the window (minimap tick, first-turn reveal) does NOT
- * load everything in between — it re-centers the window around the target,
- * which costs the same as opening the session. Entry keys are built on
- * absolute message indices, and the virtualizer keys its measurements by
- * entry key, so a prepend shifts indices without invalidating any measured
- * height; the scroll offset is compensated by the spacer growth in the same
- * synchronous flush. Only a committed in-session search loads the complete
- * session (counting must cover every message).
+ * Rendering is content-visibility: every loaded row is real DOM in normal flow
+ * and the browser skips paint/layout for off-screen rows. Message *loading*
+ * stays windowed (the backend pages the parsed session over IPC), in BOTH
+ * directions: older pages prepend as the viewport nears the top, newer pages
+ * append as it nears the bottom. Prepends keep the viewport glued to the read
+ * position through the browser's native scroll anchoring (rows stay in normal
+ * flow), so no manual scrollHeight compensation here. A jump far outside the
+ * window (minimap tick, reveal) re-centers the window around the target instead
+ * of paging everything in between, then scrolls the target row into view via the
+ * DOM. Only a committed in-session search loads the complete session (counting
+ * must cover every message).
  */
 export function useSessionPagination(opts: CreateSessionPaginationOptions): CreateSessionPaginationResult {
   const [totalMessages, setTotalMessages] = useState(0);
@@ -98,10 +88,9 @@ export function useSessionPagination(opts: CreateSessionPaginationOptions): Crea
     sessionId: string;
     requestId: string;
   } | null>(null);
-  // Edge prefetch is armed only after the view has been positioned
-  // (scroll-to-end on open, or a reveal jump). Before that, the virtualizer
-  // renders from offset 0 and the "near the top" check would fire a spurious
-  // older-page fetch on every open.
+  // Edge prefetch is armed only after the view has been positioned (scroll-to-
+  // end on open, or a reveal jump). Before that the scroller sits at offset 0
+  // and the "near the top" check would fire a spurious older-page fetch.
   const positionedRef = useRef(false);
   useEffect(() => {
     positionedRef.current = false;
@@ -134,36 +123,24 @@ export function useSessionPagination(opts: CreateSessionPaginationOptions): Crea
     }
   }
 
-  const virtualizer = useVirtualizer({
-    count: opts.filteredEntries.length,
-    getScrollElement: () => scrollElementRef.current,
-    estimateSize: () => ESTIMATED_ROW_PX,
-    // Measurements survive prepends: keys are stable per entry, not per index.
-    getItemKey: (index) => opts.filteredEntries[index]?.key ?? index,
-    overscan: 8,
-    // Non-zero rect before the first element measurement (and in DOM-less
-    // test environments) so the first render already mounts a screenful.
-    initialRect: { width: 800, height: 800 },
-  });
-
-  /** Prepend an older page and keep the viewport glued to the rows the user
-   * was reading: the flushSync commit grows the spacer above the viewport,
-   * and the scroll offset moves by exactly that growth before paint. */
+  /** Prepend an older page and keep the read position fixed. Browser scroll
+   * anchoring handles small per-row height corrections but NOT a bulk insert of
+   * a whole page far above the viewport, so compensate explicitly: measure the
+   * scrollHeight growth across the synchronous DOM update and add it to
+   * scrollTop, so the previously-visible rows stay exactly where they were. */
   function prependMessages(older: { messages: Message[]; start: number; total: number; token_totals: TokenTotals }) {
-    const scroller = scrollElementRef.current;
-    const prevTotalSize = virtualizer.getTotalSize();
-    const prevScrollTop = scroller?.scrollTop ?? 0;
+    const el = scrollElementRef.current;
+    const beforeHeight = el?.scrollHeight ?? 0;
+    const beforeTop = el?.scrollTop ?? 0;
     flushSync(() => {
       opts.setMeta((prev) => opts.withTokenTotals(prev, older.token_totals));
       opts.setMessages((prev) => [...older.messages, ...prev]);
       setWindowStart(older.start);
       setTotalMessages(older.total);
     });
-    if (scroller) {
-      const delta = virtualizer.getTotalSize() - prevTotalSize;
-      if (delta > 0) {
-        scroller.scrollTop = prevScrollTop + delta;
-      }
+    if (el) {
+      const grew = el.scrollHeight - beforeHeight;
+      if (grew !== 0) el.scrollTop = beforeTop + grew;
     }
   }
 
@@ -200,8 +177,8 @@ export function useSessionPagination(opts: CreateSessionPaginationOptions): Crea
     try {
       const newer = await getSessionMessagesWindow(request.sessionId, end, TAIL_BATCH, request.requestId);
       if (request.sessionId !== sessionIdRef.current) return false;
-      // Appending below the viewport never moves visible content in a
-      // top-down layout — no flushSync, no scroll compensation needed.
+      // Appending below the viewport never moves visible content in a top-down
+      // layout — no flushSync, no scroll compensation needed.
       opts.setMeta((prev) => opts.withTokenTotals(prev, newer.token_totals));
       opts.setMessages((prev) => [...prev, ...newer.messages]);
       setTotalMessages(newer.total);
@@ -216,40 +193,29 @@ export function useSessionPagination(opts: CreateSessionPaginationOptions): Crea
     }
   }
 
-  // Prefetch: when the rendered window nears either edge of the loaded
-  // messages, page in the next batch on that side. Runs off the
-  // virtualizer's own render output — no scroll listener, no geometry reads.
-  const virtualItems = virtualizer.getVirtualItems();
-  const firstRenderedIndex = virtualItems[0]?.index ?? 0;
-  const lastRenderedIndex = virtualItems[virtualItems.length - 1]?.index ?? 0;
-  const entryCount = opts.filteredEntries.length;
-  useEffect(() => {
+  // Edge prefetch is driven by Virtuoso's start/end-reached callbacks (it knows
+  // the rendered range with overscan runway). Only fire once the view has been
+  // positioned, so the open scroll-to-bottom doesn't trigger a spurious fetch.
+  function loadOlder() {
     if (!positionedRef.current) return;
-    if (windowStart <= 0) return;
-    if (firstRenderedIndex > PREFETCH_ROW_RUNWAY) return;
     void loadOlderTail();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [firstRenderedIndex, windowStart]);
-  useEffect(() => {
+  }
+  function loadNewer() {
     if (!positionedRef.current) return;
-    if (windowStart + opts.loadedCount >= totalMessages) return;
-    if (entryCount - 1 - lastRenderedIndex > PREFETCH_ROW_RUNWAY) return;
     void loadNewerTail();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [lastRenderedIndex, entryCount, windowStart, opts.loadedCount, totalMessages]);
+  }
 
   function revealEntry(entryIndex: number) {
     const total = filteredEntriesRef.current.length;
     if (entryIndex < 0 || entryIndex >= total) return;
     positionedRef.current = true;
-    virtualizer.scrollToIndex(entryIndex, { align: "center" });
+    opts.scrollToItem(entryIndex, "center");
   }
 
-  /** Re-center the loaded window around a target message, REPLACING the
-   * current window. A far jump (minimap tick near the top of a 13k-message
-   * session) must not page in everything in between — re-centering costs the
-   * same IPC as opening the session, and the discarded rows reload on demand
-   * if the user scrolls back. */
+  /** Re-center the loaded window around a target message, REPLACING the current
+   * window. A far jump (minimap tick near the top of a 13k-message session)
+   * must not page in everything in between — re-centering costs the same IPC as
+   * opening the session, and discarded rows reload on demand if scrolled back. */
   async function recenterWindowAround(messageIndex: number): Promise<boolean> {
     if (windowFetchInFlightRef.current) return false;
     const request = beginWindowRequest("recenter");
@@ -292,8 +258,8 @@ export function useSessionPagination(opts: CreateSessionPaginationOptions): Crea
     const entries = filteredEntriesRef.current;
     let entryIndex = entries.findIndex((entry) => entry.type === "message" && entry.messageIndex === messageIndex);
     if (entryIndex < 0) {
-      // The exact message may be folded into a merged-tool row or filtered
-      // out; land on the first entry at or after it instead of failing.
+      // The exact message may be folded into a merged-tool row or filtered out;
+      // land on the first entry at or after it instead of failing.
       entryIndex = entries.findIndex((entry) => {
         if (entry.type === "message") return entry.messageIndex >= messageIndex;
         if (entry.type === "merged-tools") {
@@ -303,15 +269,15 @@ export function useSessionPagination(opts: CreateSessionPaginationOptions): Crea
       });
     }
     if (entryIndex < 0) return false;
-    virtualizer.scrollToIndex(entryIndex, { align: "start" });
+    opts.scrollToItem(entryIndex, "start");
     return true;
   }
 
-  /** Load whatever the window is missing so search covers every message.
-   * The common shape (window is the newest tail) prepends the older part,
-   * preserving the viewport; a re-centered window missing BOTH sides is
-   * replaced with the full session, compensating the scroll offset by where
-   * the previously-first row lands in the new entry list. */
+  /** Load whatever the window is missing so search covers every message. The
+   * common shape (window is the newest tail) prepends the older part, preserving
+   * the viewport; a re-centered window missing BOTH sides is replaced with the
+   * full session, compensating the scroll offset by where the previously-first
+   * row lands in the new list. */
   async function ensureCompleteWindowForSearch(): Promise<boolean> {
     if (windowFetchInFlightRef.current) return false;
     const start = windowStartRef.current;
@@ -331,23 +297,14 @@ export function useSessionPagination(opts: CreateSessionPaginationOptions): Crea
 
       const complete = await getSessionMessagesWindow(request.sessionId, 0, total, request.requestId);
       if (request.sessionId !== sessionIdRef.current) return false;
-      const scroller = scrollElementRef.current;
-      const prevFirstKey = filteredEntriesRef.current[0]?.key;
-      const prevScrollTop = scroller?.scrollTop ?? 0;
+      // Scroll anchoring keeps the read position stable across the prepended
+      // part; the caller (search) then scrolls to the match anyway.
       flushSync(() => {
         opts.setMeta((prev) => opts.withTokenTotals(prev, complete.token_totals));
         opts.setMessages(complete.messages);
         setWindowStart(complete.start);
         setTotalMessages(complete.total);
       });
-      if (scroller && prevFirstKey !== undefined) {
-        const anchorIndex = filteredEntriesRef.current.findIndex((entry) => entry.key === prevFirstKey);
-        if (anchorIndex > 0) {
-          virtualizer.getTotalSize(); // force a fresh measurements pass
-          const anchorStart = virtualizer.measurementsCache[anchorIndex]?.start ?? anchorIndex * ESTIMATED_ROW_PX;
-          scroller.scrollTop = prevScrollTop + anchorStart;
-        }
-      }
       return complete.start === 0;
     } catch (e) {
       if (isLoadCanceledError(e)) return false;
@@ -371,25 +328,17 @@ export function useSessionPagination(opts: CreateSessionPaginationOptions): Crea
 
   function scrollToEnd() {
     positionedRef.current = true;
-    const scrollLast = () => {
-      const last = filteredEntriesRef.current.length - 1;
-      if (last >= 0) virtualizer.scrollToIndex(last, { align: "end" });
-    };
-    scrollLast();
-    // Dynamic row heights: the first pass lands on estimates; a second pass
-    // after the mounted rows report real sizes settles the exact bottom.
-    requestAnimationFrame(() => {
-      requestAnimationFrame(scrollLast);
-    });
+    opts.scrollToBottom();
   }
 
   return {
-    virtualizer,
     totalMessages,
     setTotalMessages,
     resolveCompleteSearchMatch,
     revealEntry,
     revealMessageIndex,
     scrollToEnd,
+    loadOlder,
+    loadNewer,
   };
 }

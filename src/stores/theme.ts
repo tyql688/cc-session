@@ -2,12 +2,31 @@ import { create } from "zustand";
 
 export type Theme = "light" | "dark" | "system";
 
-function readStoredTheme(): Theme {
-  if (typeof localStorage === "undefined" || typeof localStorage.getItem !== "function") {
-    return "system";
+interface ProcessLike {
+  versions?: {
+    node?: unknown;
+  };
+}
+
+function isNodeRuntime(): boolean {
+  const maybeProcess = (globalThis as { process?: ProcessLike }).process;
+  return typeof maybeProcess?.versions?.node === "string";
+}
+
+function browserLocalStorage(): Storage | null {
+  if (isNodeRuntime()) {
+    return null;
   }
+  return typeof window !== "undefined" ? window.localStorage : null;
+}
+
+function readStoredTheme(): Theme {
   try {
-    const stored = localStorage.getItem("sessionview-theme");
+    const storage = browserLocalStorage();
+    if (storage === null || typeof storage.getItem !== "function") {
+      return "system";
+    }
+    const stored = storage.getItem("sessionview-theme");
     return stored === "light" || stored === "dark" ? stored : "system";
   } catch (error) {
     console.error("Failed to read theme from localStorage:", error);
@@ -16,11 +35,12 @@ function readStoredTheme(): Theme {
 }
 
 function writeStoredTheme(theme: Theme): void {
-  if (typeof localStorage === "undefined" || typeof localStorage.setItem !== "function") {
-    return;
-  }
   try {
-    localStorage.setItem("sessionview-theme", theme);
+    const storage = browserLocalStorage();
+    if (storage === null || typeof storage.setItem !== "function") {
+      return;
+    }
+    storage.setItem("sessionview-theme", theme);
   } catch (error) {
     console.error("Failed to write theme to localStorage:", error);
   }

@@ -290,7 +290,7 @@ export default function App() {
         void refreshStatusBarStats();
       }
     });
-    // Warm the markdown engine (streamdown + shiki) while the shell is idle,
+    // Warm the markdown engine while the shell is idle,
     // so the first session open doesn't pay the chunk-load + highlighter
     // initialization on the critical path.
     // WKWebView (Safari engine) has never shipped requestIdleCallback,

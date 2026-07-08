@@ -5,3 +5,15 @@ declare module "*?raw" {
 
 // TS 6 flags side-effect imports without declarations (TS2882).
 declare module "*.css";
+
+declare module "markdown-it-task-lists" {
+  import type MarkdownIt from "markdown-it";
+
+  interface Options {
+    enabled?: boolean;
+    label?: boolean;
+    labelAfter?: boolean;
+  }
+
+  export default function taskLists(md: MarkdownIt, options?: Options): void;
+}
