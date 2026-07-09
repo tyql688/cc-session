@@ -1,8 +1,8 @@
 # TypeScript & React Style Guide
 
-The canonical coding standard for the `src/` frontend (React + TypeScript).
-`AGENTS.md` links here instead of duplicating these rules — this file is the
-single source of truth.
+The canonical coding standard for the frontend (React + TypeScript).
+`AGENTS.md` contains long-lived repo guardrails; this file owns the
+enforcement-mapped TypeScript and React details.
 
 Every rule lists its **enforcing tool** so you know whether a violation fails the
 build automatically or is caught only in review:
@@ -30,7 +30,7 @@ without blocking unrelated release work.
 
 - **Strict mode is on and stays on.** `tsconfig.json` has `strict: true`. — `tsc`
 - **No `any`.** Model genuinely-unknown boundary data as `unknown` and narrow it. — `review` (biome `noExplicitAny` advisory)
-- **No `as unknown as T`, no `@ts-ignore`, no `@ts-expect-error`** to silence the compiler. If a type is wrong, fix the type. — `tsc` / `review`
+- **No `as unknown as T` in app code, no `@ts-ignore`, no `@ts-expect-error`** to silence the compiler. If a type is wrong, fix the type. Test-only double casts are tolerated only for third-party mock objects that cannot be typed cleanly. — `tsc` / `review`
 - **Boundary data is `unknown`.** `tool_metadata.structured`, `JSON.parse` output, and `CustomEvent.detail` are modeled as `unknown` and narrowed with type guards before use. — `review`
 
 ```ts
@@ -38,21 +38,21 @@ without blocking unrelated release work.
 const detail: unknown = event.detail;
 if (isOpenSubagentDetail(detail)) handleOpen(detail);
 
-// ❌ never
+// ❌ app code
 const detail = event.detail as unknown as OpenSubagentDetail;
 ```
 
 ## 2. Error handling — no silent fallbacks
 
-- **No empty `catch {}`.** At minimum log; then rethrow, fall back deliberately, or surface via the toast store. — `review`
+- **No silent catch at action/data boundaries.** Log, rethrow, surface via the toast store, or return a documented best-effort result. Quiet catches are acceptable only for expected parse/render misses in local helpers (invalid optional JSON, unsupported highlighter language, malformed URL probe) where logging would be noisy and the fallback is non-actionable. — `review`
 - **No `?? fallback` that masks a failed read.** `?? 0` / `?? []` are fine for a genuine empty state, forbidden when they hide a broken load. Distinguish *loading* from *empty*. — `review`
-- **No `console.log` in committed code.** Use the toast store for user-visible errors; `console.warn` / `console.error` only at the Tauri-IPC boundary. — `review` (biome `noConsole` allows only warn/error)
+- **No `console.log` in committed code.** Use the toast store for user-visible errors; `console.warn` / `console.error` are acceptable at Tauri-IPC and other explicit boundary/fallback points. — `review` (biome `noConsole` allows only warn/error)
 - **Surface backend failures.** When a Tauri command fails, show a toast or error state — never render stale/empty data as success. — `review`
 
 ## 3. Immutability
 
 - **All store updates use spread copies.** `editorGroups`, `settings`, `providerSnapshots`, `search` — never mutate in place. — `review`
-- Return the *previous reference* when an update is a no-op (see `syncAllTabTitles`) to avoid spurious reactivity. — `review`
+- Return the *previous reference* when an update is a no-op to avoid spurious reactivity. — `review`
 
 ```ts
 // ✅
@@ -99,13 +99,19 @@ group.activeTabId = id;
     existing stylesheets risks visual regressions.
   - **`suspicious/noAssignInExpressions`** — the `while ((m = re.exec(s)) !== null)`
     regex-iteration idiom is correct and clearer than the alternatives.
+  - **`suspicious/noArrayIndexKey`** — timeline/markdown rendering sometimes
+    maps over derived, append-only arrays where no stable source id exists; use
+    stable ids whenever they do exist.
+  - **`correctness/useExhaustiveDependencies`** — React Compiler plus deliberately
+    stable refs/handlers make several dependency lists intentional; keep
+    handwritten exceptions local and commented.
 
 ---
 
 ### Quick checklist before commit
 
 - [ ] `npm run check` clean
-- [ ] No `any` / `as unknown as` / `@ts-ignore` / `console.log` / empty `catch`
+- [ ] No `any` / production `as unknown as` / `@ts-ignore` / `console.log` / silent boundary `catch`
 - [ ] Stores updated immutably (spread)
 - [ ] Reactivity: hooks at top level, stable keys, deliberate remount keys
 - [ ] User-facing strings via `t()`, both locales in parity

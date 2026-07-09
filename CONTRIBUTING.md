@@ -26,7 +26,9 @@ npm run tauri dev             # Dev with hot reload
 npm run tauri build           # Production build
 cd src-tauri && cargo test    # Rust tests
 npm test                      # Frontend tests
-cd src-tauri && cargo clippy  # Rust lint
+cd src-tauri && cargo fmt --check # Rust format check
+cd src-tauri && cargo clippy --all-targets --all-features -- -D warnings # Rust lint
+npm run check                 # TypeScript type check + frontend lint
 npm run typecheck             # TypeScript type check
 npm run lint                  # Biome formatter/linter/import-sort check + ESLint
 npm run format                # Biome format write
@@ -54,7 +56,7 @@ npm run knip                  # Release dead-code/dependency audit
 3. Make your changes
 4. Ensure all checks pass:
    ```bash
-   cd src-tauri && cargo fmt --check && cargo clippy && cargo test
+   cd src-tauri && cargo fmt --check && cargo clippy --all-targets --all-features -- -D warnings && cargo test
    npm run check && npm test
    ```
    Run `npm run knip` before releases or broad frontend refactors.
@@ -63,7 +65,7 @@ npm run knip                  # Release dead-code/dependency audit
 
 ## Code Style
 
-- **Rust**: `cargo fmt` + `cargo clippy` — no warnings
+- **Rust**: `cargo fmt --check` + `cargo clippy --all-targets --all-features -- -D warnings`
 - **TypeScript**: strict mode, no `any`, formatted with Biome
 - **Commits**: conventional commits format
 - **i18n**: all user-facing strings via `t()`, never hardcoded
@@ -72,4 +74,4 @@ npm run knip                  # Release dead-code/dependency audit
 
 - `src/` — React frontend
 - `src-tauri/src/` — Rust backend (providers, commands, database, exporter)
-- See [CLAUDE.md](CLAUDE.md) for detailed layout
+- See [AGENTS.md](AGENTS.md) for detailed layout and provider notes

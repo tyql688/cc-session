@@ -7,7 +7,7 @@
 </p>
 
 <p align="center">
-  <b>One desktop app to browse, search, resume, and manage all your AI coding sessions.</b>
+  <b>A local desktop workspace for reading, searching, analyzing, and resuming AI coding sessions.</b>
 </p>
 
 <p align="center">
@@ -25,46 +25,45 @@
 
 ## Why SessionView?
 
-Claude Code, Codex, Antigravity, Kimi Code, Cursor CLI, Pi, and more all store their session data locally — but each in its own format, in its own folder, with no way to look back. **SessionView brings every provider together in one fast, native app:** read full conversation histories, search across all of them at once, export clean archives, and jump straight back into any session in your terminal.
+AI coding tools leave valuable context on your machine: decisions, patches, tool calls, costs, images, and unfinished threads. The problem is that every tool stores that history differently.
 
-> 💡 **One window for every local coding session** — no more digging through `~/.claude`, `~/.codex`, and a dozen other folders.
+**SessionView turns those local histories into one fast desktop workspace.** Browse every supported tool in one explorer, read full sessions with rich rendering, search across your archive, inspect usage, export clean records, and resume work in the terminal when you need to continue.
 
-## ✨ Features
+Your data stays local. SessionView builds a local index for search and analytics; it does not upload your conversations.
 
-- 🗂️ **Unified view** — every session from every supported provider, in one explorer
-- 🔍 **Full-text search** — instant search across all session content (SQLite FTS5), plus in-session find
-- ↩️ **Resume in one click** — drop straight back into any session in your terminal
-- 📊 **Usage analytics** — cost, token, and per-model breakdowns with cache hit/write detail
-- 🎨 **Rich rendering** — Markdown, syntax highlighting, Mermaid diagrams, KaTeX math, inline images, and structured tool-call diffs
-- 📤 **Export** — JSON or Markdown archives with clean message and tool-call formatting
-- 🗃️ **Session management** — rename, favorite, trash/restore, and batch operations
-- ⌨️ **Keyboard-first** — navigate and act without touching the mouse
-- 🔄 **Auto-update**, 🌐 **English / 中文**, and 🚫 **blocked folders** to hide noisy projects
+## What you can do
 
-## 📊 Usage analytics
+- **Browse one workspace across tools**: Claude Code, Codex CLI, Antigravity, Kimi Code, Cursor CLI, OpenCode, CC-Mirror, and Pi.
+- **Read sessions like documents**: Markdown, code blocks, Mermaid, KaTeX, inline images, reasoning blocks, and structured tool-call output.
+- **Search without digging through folders**: global full-text search plus in-session find.
+- **Understand the work**: token timelines, tool-call mix, context/cache pressure, cost trends, and model breakdowns.
+- **Resume fast**: reopen a session in the matching terminal agent when the source tool supports it.
+- **Keep history tidy**: rename, favorite, export, trash/restore, hide noisy folders, and manage batches.
+- **Stay keyboard-friendly**: navigate tabs, panes, search, and common actions without leaving the keyboard.
 
-Track exactly what you're spending across every provider — daily cost trends, per-model token totals, and cache efficiency, all in one dashboard.
+## Session Analytics
+
+Inspect a single session from the side panel: token timeline, tool-call mix, cache/context pressure, and quick workflow signals without leaving the conversation.
 
 <p align="center">
-  <a href="assets/usage.png"><img src="assets/usage.png" alt="SessionView — usage analytics" width="860"></a>
+  <a href="assets/session-analytics.png"><img src="assets/session-analytics.png" alt="SessionView session analytics side panel" width="860"></a>
 </p>
 
-## 🧩 Supported tools
+## Usage Analytics
 
-| Provider | Source format | Resume |
-|----------|---------------|--------|
-| **Claude Code** | JSONL | `claude --resume` |
-| **Codex CLI** | JSONL | `codex resume` |
-| **Antigravity** | JSONL | `agy --conversation` |
-| **Kimi Code** | JSONL | `kimi --session` |
-| **Cursor CLI** | JSONL + SQLite | `cursor agent --resume` |
-| **OpenCode** | SQLite | `opencode -s` |
-| **CC-Mirror** | JSONL | per-variant |
-| **Pi** | JSONL | `pi --session` |
+Track daily spend, model-level token totals, cache reads/writes, and provider trends from one dashboard.
 
-Across providers, SessionView parses messages, tool calls, thinking/reasoning blocks, token usage, inline images, Markdown, Mermaid diagrams, and KaTeX math wherever the source format supports them — including subagent/child sessions.
+<p align="center">
+  <a href="assets/usage.png"><img src="assets/usage.png" alt="SessionView usage analytics" width="860"></a>
+</p>
 
-## 📥 Install
+## Supported Tools
+
+SessionView currently reads local history from Claude Code, Codex CLI, Antigravity, Kimi Code, Cursor CLI, OpenCode, CC-Mirror, and Pi.
+
+When a tool exposes enough information, SessionView can also resume the selected session in the matching terminal agent. CC-Mirror follows its configured variant. Parsing depth depends on what each tool records locally, but SessionView normalizes messages, tool calls, reasoning/thinking blocks, token usage, images, and child sessions wherever the source data exposes them.
+
+## Install
 
 Grab the latest build from [**Releases**](https://github.com/tyql688/sessionview/releases):
 
@@ -74,19 +73,19 @@ Grab the latest build from [**Releases**](https://github.com/tyql688/sessionview
 | Windows | `.exe` (NSIS installer) |
 | Linux | `.deb` / `.AppImage` |
 
-> **macOS Gatekeeper:** the app isn't code-signed, so macOS may block it on first launch. Clear the quarantine flag:
+> **macOS Gatekeeper:** depending on the release certificate available for a build, macOS may block the first launch. If that happens, clear the quarantine flag:
 >
 > ```bash
 > xattr -cr "/Applications/SessionView.app"
 > ```
 
-## 🚀 Quick start
+## Quick Start
 
 1. Install and open SessionView
-2. Let it index your local provider data
+2. Let it index your local tool histories
 3. Browse a session, search across your history, or resume right where you left off
 
-## 🛠️ Build from source
+## Build From Source
 
 Requires [Rust](https://rustup.rs/) and [Node.js](https://nodejs.org/) 22.12+.
 
@@ -98,20 +97,21 @@ npm run tauri build              # Production build
 npx tauri build --bundles dmg    # DMG only
 ```
 
-## 💻 Development
+## Development
 
 ```bash
 npm run tauri dev                # Dev with hot reload
 npm run check                    # Type-check + Biome + ESLint (frontend)
-npm run knip                     # Release dead-code/dependency audit
 npm test                         # Frontend tests (Vitest)
+cd src-tauri && cargo fmt --check
 cd src-tauri && cargo test       # Rust tests
 cd src-tauri && cargo clippy --all-targets --all-features -- -D warnings
+npm run knip                     # Release dead-code/dependency audit
 ```
 
 Code style is documented in [`style/ts.md`](style/ts.md) and [`style/rust.md`](style/rust.md), enforced by Biome, ESLint, Clippy, Knip, and lefthook. Knip runs as a release gate rather than a per-push hook.
 
-## 🏗️ Built with
+## Built With
 
 - [Tauri 2](https://v2.tauri.app/) — desktop shell and native integrations
 - [React 19](https://react.dev/) — frontend UI with React Compiler
@@ -119,6 +119,6 @@ Code style is documented in [`style/ts.md`](style/ts.md) and [`style/rust.md`](s
 - [SQLite](https://www.sqlite.org/) + FTS5 — local storage and full-text search
 - [Vitest](https://vitest.dev/), [Biome](https://biomejs.dev/), [ESLint](https://eslint.org/), and [Clippy](https://doc.rust-lang.org/clippy/) — testing and code quality
 
-## 📄 License
+## License
 
 [MIT](LICENSE) © tyql688

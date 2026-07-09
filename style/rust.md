@@ -1,8 +1,8 @@
 # Rust Style Guide
 
-The canonical coding standard for the `src-tauri/` backend (Tauri 2.0 + Rust).
-`AGENTS.md` links here instead of duplicating these rules — this file is the
-single source of truth.
+The canonical coding standard for the backend (Tauri 2 + Rust).
+`AGENTS.md` contains long-lived repo guardrails; this file owns the
+enforcement-mapped Rust details.
 
 Every rule lists its **enforcing tool**:
 
@@ -13,15 +13,15 @@ Every rule lists its **enforcing tool**:
 | `compiler` | `rustc` / exhaustiveness — a violation fails to compile |
 | `review` | No automated check; enforced by human/agent review |
 
-Run `cd src-tauri && cargo fmt --check && cargo clippy --all-targets --all-features -- -D warnings && cargo test`
-before committing larger backend changes. The lefthook pre-push hook runs these
-checks after the frontend checks.
+Run the backend format, clippy, and test gates before committing larger backend
+changes. The lefthook pre-push hook and CI are the source of truth for exact
+commands.
 
 ---
 
 ## 1. Formatting & lint hygiene
 
-- **`cargo fmt` and `cargo clippy --all-targets` must pass.** No exceptions. — `fmt` / `clippy`
+- **`cargo fmt --check` and `cargo clippy --all-targets --all-features -- -D warnings` must pass.** No exceptions. — `fmt` / `clippy`
 - **No `#[allow(...)]` without a one-line comment** justifying why. — `review`
 - **`snake_case` everywhere.** Modules small and focused; split a file approaching 800 LOC. — `clippy` (naming) / `review` (size)
 
@@ -44,7 +44,7 @@ let value = row.get(idx).unwrap_or_default();
 
 - **Malformed JSONL line / field → log a warning with file path + line context, then skip.** Never silently produce partial/empty results. — `review`
 - **Do not use truncated summaries (`compact_string`) for matching/comparison** — extract full values from source JSON. — `review`
-- **No heuristic substring/UUID scans where a structured signal exists.** Use each provider's typed parent/child field. — `review`
+- **No heuristic text scans where a structured signal exists.** Use each provider's typed parent/child field. — `review`
 
 ## 4. Design & idioms
 
@@ -63,18 +63,19 @@ let value = row.get(idx).unwrap_or_default();
 
 ## 6. Testing
 
-- **Unit tests in `#[cfg(test)] mod tests`** at file bottom; cross-file tests in `src-tauri/tests/<area>.rs`. — `review`
+- **Unit tests in `#[cfg(test)] mod tests`** at file bottom; cross-file tests in the backend integration-test tree. — `review`
 - **Test naming:** `<unit>_<scenario>_<expected>` (e.g. `parent_backfills_child_when_parser_declares_child_ids`). — `review`
-- **Golden fixtures** in `src-tauri/tests/fixtures/<provider>/` for parser regression; synthetic in-test JSON for behavioral edge cases. — `review`
+- **Golden fixtures** live with backend parser tests for regression coverage; use synthetic in-test JSON for behavioral edge cases. — `review`
 - **Test data must be synthetic** — placeholder UUIDs like `11111111-1111-4111-a111-111111111111`, never real session IDs/usernames/paths. — `review`
-- **Real-data smoke tests** that read `~/.<provider>/` MUST be `#[ignore]` and assert structural invariants only. — `review`
+- **Real-data smoke tests** that read local provider data MUST be `#[ignore]` and assert structural invariants only. — `review`
 - **Every bug fix adds a regression test** — paste the original bad input as a fixture. — `review`
 
-## 7. Adding a `Provider` variant
+## 7. Adding a Provider variant
 
-Update all of: `models.rs::Provider`, `provider.rs::PROVIDER_CATALOG` + `provider_entry` match,
-`tauri.conf.json` scope, `src/lib/types.ts`, `src/styles/variables.css`,
-`src/stores/providerSnapshots.ts` fallback. The compile errors list most but not all. — `compiler` (partial) / `review`
+Update every typed boundary: backend provider enum, provider catalog and
+exhaustive entry match, Tauri asset-scope allowlist, frontend provider type,
+theme/style fallback, provider snapshot fallback, resume/trash/indexing behavior,
+and tests. Compile errors list most but not all. — `compiler` (partial) / `review`
 
 ---
 

@@ -12,9 +12,9 @@ stronger session viewer, cleaner navigation, and a more reliable indexing path.
   pinned tabs, tab overflow, and VS Code-style session opening behavior.
 - Focus mode for session reading, with user and assistant messages emphasized by
   default.
-- Virtualized session timeline for very large conversations, including smoother
-  far jumps, stable row measurements, and minimap navigation that survives huge
-  sessions.
+- Content-visibility session timeline for very large conversations, including
+  smoother far jumps, stable scroll anchoring, and minimap navigation that
+  survives huge sessions.
 - Calendar date picker and accessible controls for usage heatmaps and date-range
   filtering.
 - Shared UI primitives for buttons, dialogs, menus, selects, toggles, tooltips,
