@@ -96,11 +96,13 @@ describe("ToolMessage", () => {
     const { container } = render(<ToolMessage message={bashOutputMessage} />);
 
     expect(container.querySelector(".msg-tool-output")).toBeNull();
+    expect(container.querySelector(".terminal-tool-window-dots")).toBeNull();
     const header = container.querySelector(".terminal-tool-toggle");
     if (!header) throw new Error("expected tool header");
 
     fireEvent.click(header);
 
+    expect(container.querySelector(".terminal-tool-window-dots")).toBeNull();
     expect(container.querySelector(".msg-tool-output pre")?.textContent).toBe(
       "line one\nline two",
     );

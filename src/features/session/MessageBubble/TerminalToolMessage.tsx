@@ -207,11 +207,6 @@ export function TerminalToolMessage(props: { message: Message }) {
             onClick={() => setExpanded((value) => !value)}
             aria-expanded={expanded}
           >
-            <span className="terminal-tool-window-dots" aria-hidden="true">
-              <span />
-              <span />
-              <span />
-            </span>
             <Terminal className="terminal-tool-icon" aria-hidden="true" />
             <span className="terminal-tool-name">{toolLabel}</span>
             <span className="terminal-tool-status-dot" title={status} aria-hidden="true" />

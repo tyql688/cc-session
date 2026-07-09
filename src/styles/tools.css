@@ -326,36 +326,6 @@
   background: transparent;
 }
 
-.terminal-tool-window-dots {
-  display: none;
-  gap: 4px;
-  flex-shrink: 0;
-  margin-right: 2px;
-}
-
-.terminal-tool.expanded .terminal-tool-window-dots {
-  display: inline-flex;
-}
-
-.terminal-tool-window-dots span {
-  width: 7px;
-  height: 7px;
-  border-radius: 999px;
-  opacity: 0.78;
-}
-
-.terminal-tool-window-dots span:nth-child(1) {
-  background: #ff5f57;
-}
-
-.terminal-tool-window-dots span:nth-child(2) {
-  background: #febc2e;
-}
-
-.terminal-tool-window-dots span:nth-child(3) {
-  background: #28c840;
-}
-
 .terminal-tool-icon,
 .terminal-tool-chevron {
   width: 14px;
