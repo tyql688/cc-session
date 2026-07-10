@@ -149,12 +149,17 @@ export function TreeNodeComponent(props: {
   const expanded = () => props.isNodeExpanded(props.node.id);
 
   const handleClick = (e: React.MouseEvent) => {
+    // A click on a subagent parent's chevron toggles its children instead of
+    // opening the session (delegated: the chevron can't be its own button
+    // inside this row button).
+    if (isSubagentParent() && (e.target as Element).closest("[data-subagent-chevron]")) {
+      props.toggleExpanded(props.node.id);
+      return;
+    }
     if (isSession()) {
+      // Opening a session never auto-expands its subagents — multi-agent
+      // sessions carry dozens of (now nested) children; the chevron toggles.
       props.onSessionClick(e, props.node, props.parentProjectLabel ?? "");
-      // Auto-expand parent sessions that have subagents
-      if (isSubagentParent() && !expanded()) {
-        props.toggleExpanded(props.node.id);
-      }
     } else if (e.metaKey || e.ctrlKey) {
       // Ctrl+Click on folder: select all sessions under it
       const sessions = collectAllSessions(props.node.children);
@@ -213,8 +218,15 @@ export function TreeNodeComponent(props: {
         onContextMenu={handleContextMenu}
         data-session-id={isSession() ? props.node.id : undefined}
       >
-        {!isLeaf() && !isSubagentParent() && <ChevronIcon expanded={expanded()} />}
-        {(isLeaf() || isSubagentParent()) && <span className="tree-node-icon-spacer" />}
+        {!isLeaf() && isSubagentParent() ? (
+          <span data-subagent-chevron>
+            <ChevronIcon expanded={expanded()} />
+          </span>
+        ) : !isLeaf() ? (
+          <ChevronIcon expanded={expanded()} />
+        ) : (
+          <span className="tree-node-icon-spacer" />
+        )}
 
         {props.node.node_type === "provider" && props.node.provider && <ProviderDot provider={props.node.provider} />}
         {props.node.node_type === "project" && props.node.project_path && !isOrphanFolder() && (
@@ -280,29 +292,10 @@ export function TreeNodeComponent(props: {
         {props.node.count > 0 && !isLeaf() && <span className="tree-node-count">{props.node.count}</span>}
       </Button>
 
-      {/* Subagent children always visible under parent session */}
-      {isSubagentParent() &&
-        props.node.children.map((child) => (
-          <TreeNodeComponent
-            key={child.id}
-            node={child}
-            depth={props.depth + 1}
-            activeSessionId={props.activeSessionId}
-            parentProjectLabel={projectLabel()}
-            isNodeExpanded={props.isNodeExpanded}
-            toggleExpanded={props.toggleExpanded}
-            onSessionContextMenu={props.onSessionContextMenu}
-            onNodeContextMenu={props.onNodeContextMenu}
-            onSessionClick={props.onSessionClick}
-            onSessionDblClick={props.onSessionDblClick}
-            sessionProviderDot={props.sessionProviderDot}
-            directoryGrouping={props.directoryGrouping}
-          />
-        ))}
-      {/* Provider/project children use expand/collapse */}
+      {/* All children — subagents included — use expand/collapse and start
+          collapsed (expandedIds is opt-in). */}
       {expanded() &&
         !isLeaf() &&
-        !isSubagentParent() &&
         props.node.children.map((child) => (
           <TreeNodeComponent
             key={child.id}
