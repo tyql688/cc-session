@@ -4,22 +4,29 @@ import { dispatchSessionCommand, SESSION_COMMAND_EVENTS } from "@/lib/session-co
 export interface KeyboardDeps {
   activeTabId: () => string | null;
   openTabs: () => SessionRef[];
-  showKeyboardOverlay: () => boolean;
   setActiveTabId: (id: string | null) => void;
   setShowKeyboardOverlay: (v: boolean | ((prev: boolean) => boolean)) => void;
   setShowSearchOverlay: (v: boolean | ((prev: boolean) => boolean)) => void;
   setActiveView: (view: string) => void;
   closeTab: (id: string) => void;
   closeAllTabs: () => void;
+  reopenClosedTab: () => void;
+  toggleSidebar: () => void;
   splitToRight: (sessionId: string) => void;
   focusAdjacentGroup: (direction: "left" | "right") => void;
   startRebuildIndex: () => void;
-  syncFromDisk: (opts?: { showSpinner?: boolean; changedPaths?: string[] }) => void;
 }
 
 export function createKeyboardHandler(deps: KeyboardDeps): (e: KeyboardEvent) => void {
   return (e: KeyboardEvent) => {
     const mod = e.metaKey || e.ctrlKey;
+    // Case-insensitive letter matching: CapsLock (and Shift combos) yield
+    // uppercase e.key, which silently disabled the lowercase-only checks.
+    const key = e.key.length === 1 ? e.key.toLowerCase() : e.key;
+    const typing =
+      document.activeElement instanceof HTMLInputElement ||
+      document.activeElement instanceof HTMLTextAreaElement ||
+      document.activeElement?.hasAttribute("contenteditable") === true;
 
     // Cmd+/ : Toggle keyboard shortcuts overlay
     if (mod && e.key === "/") {
@@ -29,28 +36,21 @@ export function createKeyboardHandler(deps: KeyboardDeps): (e: KeyboardEvent) =>
     }
 
     // Unmodified ? when not in an input: show keyboard shortcuts
-    if (
-      e.key === "?" &&
-      !mod &&
-      !e.altKey &&
-      !(document.activeElement instanceof HTMLInputElement) &&
-      !(document.activeElement instanceof HTMLTextAreaElement) &&
-      !document.activeElement?.hasAttribute("contenteditable")
-    ) {
+    if (e.key === "?" && !mod && !e.altKey && !typing) {
       e.preventDefault();
       deps.setShowKeyboardOverlay(true);
       return;
     }
 
     // Cmd+Shift+W / Ctrl+Shift+W: Close all tabs
-    if (mod && e.shiftKey && (e.key === "w" || e.key === "W")) {
+    if (mod && e.shiftKey && key === "w") {
       e.preventDefault();
       deps.closeAllTabs();
       return;
     }
 
     // Cmd+W / Ctrl+W: Close active tab
-    if (mod && e.key === "w") {
+    if (mod && key === "w") {
       e.preventDefault();
       const id = deps.activeTabId();
       if (id) deps.closeTab(id);
@@ -64,15 +64,6 @@ export function createKeyboardHandler(deps: KeyboardDeps): (e: KeyboardEvent) =>
       const tabs = deps.openTabs();
       if (idx < tabs.length) {
         deps.setActiveTabId(tabs[idx].id);
-      }
-      return;
-    }
-
-    // Escape: Close keyboard overlay
-    if (e.key === "Escape") {
-      if (deps.showKeyboardOverlay()) {
-        deps.setShowKeyboardOverlay(false);
-        return;
       }
       return;
     }
@@ -132,18 +123,29 @@ export function createKeyboardHandler(deps: KeyboardDeps): (e: KeyboardEvent) =>
       return;
     }
 
-    // Cmd+K or Cmd+Shift+F: Open global search overlay
-    if (
-      (mod && !e.shiftKey && (e.key === "k" || e.key === "K")) ||
-      (mod && e.shiftKey && (e.key === "f" || e.key === "F"))
-    ) {
+    // Cmd+Shift+T: Reopen most recently closed tab
+    if (mod && e.shiftKey && key === "t") {
+      e.preventDefault();
+      deps.reopenClosedTab();
+      return;
+    }
+
+    // Cmd+B: Toggle the explorer sidebar (VS Code convention)
+    if (mod && !e.shiftKey && key === "b") {
+      e.preventDefault();
+      deps.toggleSidebar();
+      return;
+    }
+
+    // Cmd+K / Cmd+P / Cmd+Shift+F: Open global search overlay
+    if ((mod && !e.shiftKey && (key === "k" || key === "p")) || (mod && e.shiftKey && key === "f")) {
       e.preventDefault();
       deps.setShowSearchOverlay(true);
       return;
     }
 
     // Cmd+R: Refresh index
-    if (mod && !e.shiftKey && e.key === "r") {
+    if (mod && !e.shiftKey && key === "r") {
       e.preventDefault();
       deps.startRebuildIndex();
       return;
@@ -153,35 +155,46 @@ export function createKeyboardHandler(deps: KeyboardDeps): (e: KeyboardEvent) =>
     if (!deps.activeTabId()) return;
 
     // Cmd+F: Find in session
-    if (mod && e.key === "f") {
+    if (mod && key === "f") {
       e.preventDefault();
       dispatchSessionCommand(SESSION_COMMAND_EVENTS.sessionSearch);
       return;
     }
 
     // Cmd+Shift+R: Resume session
-    if (mod && e.shiftKey && (e.key === "r" || e.key === "R")) {
+    if (mod && e.shiftKey && key === "r") {
       e.preventDefault();
       dispatchSessionCommand(SESSION_COMMAND_EVENTS.resume);
       return;
     }
 
     // Cmd+Shift+E: Export session
-    if (mod && e.shiftKey && (e.key === "e" || e.key === "E")) {
+    if (mod && e.shiftKey && key === "e") {
       e.preventDefault();
       dispatchSessionCommand(SESSION_COMMAND_EVENTS.exportSession);
       return;
     }
 
-    // Cmd+B: Toggle favorite
-    if (mod && e.key === "b") {
+    // Cmd+D: Toggle favorite (browser bookmark convention). Skipped while
+    // typing — hijacking a text field's combo to mutate the session is a
+    // surprise side effect.
+    if (mod && key === "d" && !typing) {
       e.preventDefault();
       dispatchSessionCommand(SESSION_COMMAND_EVENTS.favorite);
       return;
     }
 
-    // Cmd+Backspace: Delete session
-    if (mod && e.key === "Backspace") {
+    // Cmd+G / Cmd+Shift+G: next / previous in-session search match
+    if (mod && key === "g") {
+      e.preventDefault();
+      dispatchSessionCommand(e.shiftKey ? SESSION_COMMAND_EVENTS.findPrev : SESSION_COMMAND_EVENTS.findNext);
+      return;
+    }
+
+    // Cmd+Backspace: Delete session. NEVER while typing — on macOS
+    // Cmd+Backspace is delete-to-line-start, and hijacking it from a text
+    // field opened the session-delete confirm mid-keystroke.
+    if (mod && e.key === "Backspace" && !typing) {
       e.preventDefault();
       dispatchSessionCommand(SESSION_COMMAND_EVENTS.delete);
       return;

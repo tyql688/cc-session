@@ -4,6 +4,8 @@ export const SESSION_COMMAND_EVENTS = {
   exportSession: "sessionview:export",
   favorite: "sessionview:favorite",
   delete: "sessionview:delete",
+  findNext: "sessionview:find-next",
+  findPrev: "sessionview:find-prev",
 } as const;
 
 export type SessionCommandEvent = (typeof SESSION_COMMAND_EVENTS)[keyof typeof SESSION_COMMAND_EVENTS];

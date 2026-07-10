@@ -8,6 +8,8 @@ export interface UseSessionCommandEventsOptions {
   onFavorite: () => void;
   onDelete: () => void;
   onSessionSearch: () => void;
+  onFindNext: () => void;
+  onFindPrev: () => void;
 }
 
 export function useSessionCommandEvents(opts: UseSessionCommandEventsOptions): void {
@@ -27,6 +29,8 @@ export function useSessionCommandEvents(opts: UseSessionCommandEventsOptions): v
       [SESSION_COMMAND_EVENTS.favorite, () => runIfActive(optsRef.current.onFavorite)],
       [SESSION_COMMAND_EVENTS.delete, () => runIfActive(optsRef.current.onDelete)],
       [SESSION_COMMAND_EVENTS.sessionSearch, () => runIfActive(optsRef.current.onSessionSearch)],
+      [SESSION_COMMAND_EVENTS.findNext, () => runIfActive(optsRef.current.onFindNext)],
+      [SESSION_COMMAND_EVENTS.findPrev, () => runIfActive(optsRef.current.onFindPrev)],
     ];
 
     for (const [eventName, handler] of handlers) {

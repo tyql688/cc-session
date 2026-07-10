@@ -169,7 +169,6 @@
   },
   "keyboard": {
     "title": "键盘快捷键",
-    "search": "搜索",
     "closeTab": "关闭标签",
     "closeAllTabs": "关闭所有标签",
     "switchTab": "切换到标签 1-9",
@@ -192,7 +191,11 @@
     "splitView": "分屏视图",
     "splitEditor": "分屏",
     "focusGroupLeft": "聚焦左侧编辑组",
-    "focusGroupRight": "聚焦右侧编辑组"
+    "focusGroupRight": "聚焦右侧编辑组",
+    "reopenTab": "重新打开已关闭标签",
+    "findNext": "下一个匹配",
+    "findPrev": "上一个匹配",
+    "toggleSidebar": "切换侧边栏"
   },
   "contextMenu": {
     "close": "关闭",

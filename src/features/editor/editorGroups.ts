@@ -112,6 +112,24 @@ function removeGroupIfEmpty(groupId: string) {
 
 // ---------- actions ----------
 
+/** Recently closed tabs, newest last, so reopen (Cmd+Shift+T) can restore
+ * them in reverse-close order. Session state itself lives on disk; only the
+ * SessionRef is needed to reopen. */
+const closedTabHistory: SessionRef[] = [];
+const CLOSED_HISTORY_LIMIT = 20;
+
+function rememberClosed(tabs: SessionRef[]) {
+  for (const tab of tabs) {
+    closedTabHistory.push(tab);
+    if (closedTabHistory.length > CLOSED_HISTORY_LIMIT) closedTabHistory.shift();
+  }
+}
+
+function reopenClosedTab() {
+  const tab = closedTabHistory.pop();
+  if (tab) openSession(tab);
+}
+
 function openSession(session: SessionRef) {
   const existing = findGroupBySession(session.id);
   if (existing) {
@@ -160,6 +178,7 @@ function pinTab(sessionId: string) {
 function closeTab(sessionId: string) {
   const g = findGroupBySession(sessionId);
   if (!g) return;
+  rememberClosed(g.tabs.filter((t) => t.id === sessionId));
   const newTabs = g.tabs.filter((t) => t.id !== sessionId);
   const newActive =
     g.activeTabId === sessionId ? (newTabs.length > 0 ? newTabs[newTabs.length - 1].id : null) : g.activeTabId;
@@ -174,6 +193,7 @@ function closeTab(sessionId: string) {
 }
 
 function closeAllTabs() {
+  rememberClosed(getGroups().flatMap((g) => g.tabs));
   const g = makeGroup();
   setGroups([g]);
   setActiveGroupId(g.id);
@@ -182,6 +202,7 @@ function closeAllTabs() {
 function closeOtherTabs(keepId: string) {
   const g = findGroupBySession(keepId);
   if (!g) return;
+  rememberClosed(getGroups().flatMap((x) => x.tabs.filter((t) => t.id !== keepId)));
   const kept = g.tabs.filter((t) => t.id === keepId);
   updateGroup(g.id, (prev) => ({
     ...prev,
@@ -201,6 +222,7 @@ function closeTabsToRight(fromId: string) {
   const idx = g.tabs.findIndex((t) => t.id === fromId);
   if (idx === -1) return;
   const kept = g.tabs.slice(0, idx + 1);
+  rememberClosed(g.tabs.slice(idx + 1));
   const newActive = g.activeTabId && kept.some((t) => t.id === g.activeTabId) ? g.activeTabId : fromId;
   updateGroup(g.id, (prev) => ({
     ...prev,
@@ -369,6 +391,7 @@ export {
   openPreview,
   pinTab,
   closeTab,
+  reopenClosedTab,
   closeAllTabs,
   closeOtherTabs,
   closeTabsToRight,

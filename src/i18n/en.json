@@ -169,7 +169,6 @@
   },
   "keyboard": {
     "title": "Keyboard Shortcuts",
-    "search": "Search",
     "closeTab": "Close Tab",
     "closeAllTabs": "Close All Tabs",
     "switchTab": "Switch to Tab 1-9",
@@ -192,7 +191,11 @@
     "splitView": "Split View",
     "splitEditor": "Split Editor",
     "focusGroupLeft": "Focus Left Group",
-    "focusGroupRight": "Focus Right Group"
+    "focusGroupRight": "Focus Right Group",
+    "reopenTab": "Reopen Closed Tab",
+    "findNext": "Next Match",
+    "findPrev": "Previous Match",
+    "toggleSidebar": "Toggle Sidebar"
   },
   "contextMenu": {
     "close": "Close",

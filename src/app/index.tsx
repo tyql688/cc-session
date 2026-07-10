@@ -60,6 +60,7 @@ import {
   closeAllTabs,
   closeOtherTabs,
   closeTabsToRight,
+  reopenClosedTab,
   splitToRight,
   setActiveTabInGroup,
   focusGroup,
@@ -154,12 +155,10 @@ export default function App() {
 
   // Latest-value refs so the once-created keydown/event handlers read fresh
   // state without re-subscribing on every change.
-  const showKeyboardOverlayRef = useRef(showKeyboardOverlay);
   const tRef = useRef(t);
   const autoIndexStartPendingRef = useRef(false);
   const autoIndexActiveRef = useRef(false);
   useEffect(() => {
-    showKeyboardOverlayRef.current = showKeyboardOverlay;
     tRef.current = t;
   });
 
@@ -242,7 +241,6 @@ export default function App() {
     const handleGlobalKeyDown = createKeyboardHandler({
       activeTabId: () => activeGroup()?.activeTabId ?? null,
       openTabs: () => activeGroup()?.tabs ?? [],
-      showKeyboardOverlay: () => showKeyboardOverlayRef.current,
       setActiveTabId: (id: string | null) => {
         const g = activeGroup();
         if (g && id) setActiveTabInGroup(g.id, id);
@@ -252,6 +250,8 @@ export default function App() {
       setActiveView,
       closeTab,
       closeAllTabs,
+      reopenClosedTab,
+      toggleSidebar: () => setSidebarCollapsed((prev) => !prev),
       splitToRight,
       focusAdjacentGroup,
       startRebuildIndex: () => {
@@ -261,7 +261,6 @@ export default function App() {
           })
           .catch(() => toastError(tRef.current("toast.rebuildFailed")));
       },
-      syncFromDisk: sync.syncFromDisk,
     });
 
     const handleOpenSubagent = createOpenSubagentHandler({

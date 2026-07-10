@@ -7,7 +7,7 @@ import { formatTimestamp } from "@/lib/formatters";
 import { TabBar } from "@/features/editor/TabBar";
 import { SessionView } from "@/features/session";
 import { ProviderIcon } from "@/components/icons";
-import { isMac } from "@/lib/platform";
+import { formatShortcut } from "@/lib/platform";
 
 export function EditorArea(props: {
   groupId: string;
@@ -55,9 +55,6 @@ export function EditorArea(props: {
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tabIdsKey]);
-
-  const modKey = isMac ? "\u2318" : "Ctrl+";
-  const shiftKey = isMac ? "\u21E7" : "Shift+";
 
   return (
     <div
@@ -158,14 +155,10 @@ export function EditorArea(props: {
               )}
             <div className="editor-empty-shortcuts">
               <span className="editor-shortcut-hint">
-                <kbd>
-                  {modKey}
-                  {shiftKey}F
-                </kbd>{" "}
-                {t("keyboard.search")}
+                <kbd>{formatShortcut("F", { shift: true })}</kbd> {t("keyboard.globalSearch")}
               </span>
               <span className="editor-shortcut-hint">
-                <kbd>{modKey}1-9</kbd> {t("keyboard.switchTab")}
+                <kbd>{formatShortcut("1-9")}</kbd> {t("keyboard.switchTab")}
               </span>
             </div>
           </div>

@@ -386,6 +386,8 @@ export function SessionView(props: {
     onExport: () => setShowExportDialog(true),
     onFavorite: () => void handleToggleFavorite(),
     onDelete: () => setShowDeleteConfirm(true),
+    onFindNext: () => navigateMatch(1),
+    onFindPrev: () => navigateMatch(-1),
     onSessionSearch: () => {
       setSearchBarOpen(true);
       requestAnimationFrame(() => {
