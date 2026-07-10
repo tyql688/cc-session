@@ -123,6 +123,52 @@ pub struct SessionTurnOutlineEntry {
     pub reply_text: String,
 }
 
+/// Whole-session renderable-message counts per role, for the filter toolbar.
+/// The frontend's windowed loading only ever sees a slice, so its own counts
+/// grow as pages land — these are the authoritative session-wide numbers,
+/// computed on the same full parse the outline already pays for.
+#[derive(Serialize, Clone, Default, PartialEq, Eq, Debug)]
+pub struct SessionRoleCounts {
+    pub user: usize,
+    pub assistant: usize,
+    pub tool: usize,
+    pub system: usize,
+}
+
+/// Turn outline plus session-wide role counts — one full-parse pass feeds both.
+#[derive(Serialize, Clone)]
+pub struct SessionTurnOutline {
+    pub turns: Vec<SessionTurnOutlineEntry>,
+    pub role_counts: SessionRoleCounts,
+}
+
+/// Mirror of the frontend's `isRenderableMessage` (session/hooks.ts): the
+/// counts must describe the rows the role filter actually controls, so both
+/// sides skip the same non-renderable messages.
+fn is_renderable_message(message: &Message) -> bool {
+    if matches!(message.role, crate::models::MessageRole::Tool) {
+        let orphan_tool_result = message
+            .tool_name
+            .as_deref()
+            .is_some_and(|name| name.starts_with("toolu_"))
+            && message.tool_metadata.is_none();
+        if orphan_tool_result {
+            return false;
+        }
+        // Truthiness, not presence: the TS side treats "" as absent.
+        return !message.content.is_empty()
+            || message
+                .tool_input
+                .as_deref()
+                .is_some_and(|input| !input.is_empty())
+            || message
+                .tool_name
+                .as_deref()
+                .is_some_and(|name| !name.is_empty());
+    }
+    !message.content.trim().is_empty()
+}
+
 const OUTLINE_PREVIEW_CHARS: usize = 240;
 const OUTLINE_PREVIEW_SCAN_CHARS: usize = OUTLINE_PREVIEW_CHARS * 4;
 
@@ -139,10 +185,19 @@ fn outline_preview(content: &str) -> String {
         .collect()
 }
 
-pub(crate) fn build_session_turn_outline(messages: &[Message]) -> Vec<SessionTurnOutlineEntry> {
+pub(crate) fn build_session_turn_outline(messages: &[Message]) -> SessionTurnOutline {
     let mut outline: Vec<SessionTurnOutlineEntry> = Vec::new();
+    let mut role_counts = SessionRoleCounts::default();
     let mut ordinal = 0;
     for (message_index, message) in messages.iter().enumerate() {
+        if is_renderable_message(message) {
+            match message.role {
+                crate::models::MessageRole::User => role_counts.user += 1,
+                crate::models::MessageRole::Assistant => role_counts.assistant += 1,
+                crate::models::MessageRole::Tool => role_counts.tool += 1,
+                crate::models::MessageRole::System => role_counts.system += 1,
+            }
+        }
         match message.role {
             crate::models::MessageRole::User => {
                 let user_text = outline_preview(&message.content);
@@ -172,7 +227,10 @@ pub(crate) fn build_session_turn_outline(messages: &[Message]) -> Vec<SessionTur
             crate::models::MessageRole::Tool | crate::models::MessageRole::System => {}
         }
     }
-    outline
+    SessionTurnOutline {
+        turns: outline,
+        role_counts,
+    }
 }
 
 pub(crate) fn session_window_bounds(total: usize, offset: i64, limit: usize) -> (usize, usize) {

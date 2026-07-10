@@ -2,9 +2,9 @@ import type { Message, MessageRole } from "@/lib/types";
 import { parseTimestamp, formatTimeOnly } from "@/lib/formatters";
 import { isAgentToolMessage } from "@/lib/subagent";
 
-/// Lowercased haystack used by in-session search. Computed once when the
-/// entry is built so per-keystroke search walks
-/// avoid re-lowercasing every entry.
+/// A renderable timeline row: a message, a merged run of tool calls, or a
+/// time separator. `searchHaystack` is the pre-lowercased content in-session
+/// search walks per keystroke.
 export type ProcessedEntry =
   | {
       key: string;
@@ -33,7 +33,11 @@ export type ProcessedEntry =
  */
 export function estimateEntryHeight(entry: ProcessedEntry): number {
   if (entry.type === "time-sep") return 32;
-  if (entry.type === "merged-tools") return 44 + entry.tools.length * 40;
+  // Tool rows render collapsed by default (one summary line); their payload
+  // size only affects the expanded body. A content-based estimate reserves
+  // hundreds of blank pixels per row (measured est 242px vs real 38px), which
+  // the first paint then snaps back, jumping the timeline during scroll.
+  if (entry.type === "merged-tools" || entry.msg.role === "tool") return 44;
   const content = entry.msg.content;
   let height = 44; // role header + vertical padding
   // Alternating prose / fenced-code segments split on ``` markers.
@@ -69,9 +73,26 @@ export function isSearchableRole(role: MessageRole): boolean {
   return role === "user" || role === "assistant";
 }
 
+/** First absolute message index an entry anchors to (null for separators). */
+export function entryFirstMessageIndex(entry: ProcessedEntry): number | null {
+  if (entry.type === "message") return entry.messageIndex;
+  if (entry.type === "merged-tools") return entry.messageIndices[0];
+  return null;
+}
+
+/** Lowercased content, cached per message object: `processMessages` re-runs
+ * over the WHOLE loaded window on every pagination chunk, and re-lowercasing
+ * megabytes of unchanged messages dominated that pass (message objects are
+ * stable references once fetched, so a WeakMap makes this once-per-message). */
+const haystackCache = new WeakMap<Message, string>();
+
 function messageHaystack(msg: Message): string {
   if (!isSearchableRole(msg.role)) return "";
-  return (msg.content ?? "").toLocaleLowerCase();
+  const cached = haystackCache.get(msg);
+  if (cached !== undefined) return cached;
+  const haystack = (msg.content ?? "").toLocaleLowerCase();
+  haystackCache.set(msg, haystack);
+  return haystack;
 }
 
 function isMergeableToolMessage(msg: Message): boolean {

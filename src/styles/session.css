@@ -824,14 +824,28 @@
 /* Messages — content-visibility rendering: every loaded row is real DOM in
  * normal flow; the browser skips layout/paint for off-screen rows but keeps
  * their reserved height, so the list scrolls at full real length with no
- * position estimation. `overflow-anchor` (default, stated for intent) lets the
- * browser's scroll anchoring absorb height corrections and older-page prepends
- * so the read position never jumps. */
+ * position estimation.
+ *
+ * `column-reverse` (rows arrive newest-first in the DOM) anchors the scroll
+ * coordinate system to the BOTTOM: scrollTop is 0 at the newest message and
+ * negative upward. Older pages land at the DOM end — outside the anchored
+ * coordinate space — so prepending history never moves the viewport and needs
+ * NO scrollTop compensation. That compensation was unfixable in WKWebKit: the
+ * top-edge rubber-band animation overrides programmatic scrollTop writes
+ * (react-virtuoso closed the same scenario as wontfix; virtua's Safari issue
+ * has been open for years). Height corrections on the viewport's history side
+ * are likewise absorbed by the engine; only the newest-side needs the manual
+ * ResizeObserver anchoring in SessionView (WKWebView has no native scroll
+ * anchoring — `overflow-anchor: none` keeps Chrome from double-adjusting).
+ * `position: relative` makes rows' offsetTop read against this scroller. */
 .session-messages {
+  position: relative;
+  display: flex;
+  flex-direction: column-reverse;
   flex: 1;
   overflow-y: auto;
   padding: 18px 24px 28px;
-  overflow-anchor: auto;
+  overflow-anchor: none;
   user-select: text;
   -webkit-user-select: text;
   /* Focus is programmatic (keyboard paging), never a visual affordance. */
@@ -851,6 +865,9 @@
   display: flex;
   width: 100%;
   flex-direction: column;
+  /* Flex item in the column-reverse scroller: never squish to fit — overflow
+   * must scroll. */
+  flex-shrink: 0;
   padding-bottom: 12px;
   /* Off-screen rows skip layout+paint; the estimate reserves their height so
    * scrolling stays full-length and stable. `auto` makes the browser remember

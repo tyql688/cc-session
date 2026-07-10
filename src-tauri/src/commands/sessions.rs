@@ -11,7 +11,7 @@ use crate::models::{Message, Provider, SessionDetail, SessionMeta, TokenTotals};
 use crate::services::load_cancel;
 use crate::services::session_view::{
     build_session_turn_outline, session_window_bounds, subagent_meta_title, with_load_guard,
-    LoadRequest, SessionTurnOutlineEntry,
+    LoadRequest, SessionTurnOutline,
 };
 use crate::services::{load_session_meta, SessionLifecycleService};
 
@@ -279,9 +279,9 @@ pub async fn get_session_turn_outline(
     session_id: String,
     request_seq: Option<u64>,
     state: State<'_, AppState>,
-) -> CommandResult<Vec<SessionTurnOutlineEntry>> {
+) -> CommandResult<SessionTurnOutline> {
     let state = state.inner().clone();
-    tokio::task::spawn_blocking(move || -> anyhow::Result<Vec<SessionTurnOutlineEntry>> {
+    tokio::task::spawn_blocking(move || -> anyhow::Result<SessionTurnOutline> {
         let meta = load_session_meta(&state.db, &session_id).map_err(anyhow::Error::msg)?;
         let source_path = meta.source_path.clone();
         // Guard under a dedicated key: window fetches (scroll paging, search

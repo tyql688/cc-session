@@ -62,6 +62,21 @@ export interface SessionTurnOutlineEntry {
   reply_text: string;
 }
 
+/** Session-wide renderable-message counts per role (see the Rust mirror of
+ * isRenderableMessage) — the filter toolbar shows THESE, not the counts of
+ * the loaded window, which grow as pages land. */
+export interface SessionRoleCounts {
+  user: number;
+  assistant: number;
+  tool: number;
+  system: number;
+}
+
+export interface SessionTurnOutline {
+  turns: SessionTurnOutlineEntry[];
+  role_counts: SessionRoleCounts;
+}
+
 /**
  * Wrap a Tauri invocation so failures surface to the user as a toast
  * (plus `console.error`) and then rethrow. Use for user-triggered
@@ -144,7 +159,7 @@ type BackendCommandMap = {
     },
     SessionMessagesWindow
   >;
-  get_session_turn_outline: CommandSpec<{ sessionId: string; requestSeq: number }, SessionTurnOutlineEntry[]>;
+  get_session_turn_outline: CommandSpec<{ sessionId: string; requestSeq: number }, SessionTurnOutline>;
   cancel_session_load: CommandSpec<{ sessionId: string; requestId?: string }, void>;
   resolve_persisted_output: CommandSpec<{ path: string }, string>;
   search_sessions: CommandSpec<{ filters: SearchFilters }, SearchResult[]>;
@@ -279,7 +294,7 @@ export async function getSessionMessagesWindow(
   });
 }
 
-export async function getSessionTurnOutline(sessionId: string): Promise<SessionTurnOutlineEntry[]> {
+export async function getSessionTurnOutline(sessionId: string): Promise<SessionTurnOutline> {
   return invokeCommand("get_session_turn_outline", {
     sessionId,
     requestSeq: nextLoadRequestSeq(),

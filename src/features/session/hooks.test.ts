@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import type { Message } from "@/lib/types";
-import { isRenderableMessage, processMessages } from "@/features/session/hooks";
+import { estimateEntryHeight, isRenderableMessage, processMessages } from "@/features/session/hooks";
 
 const baseMessage: Message = {
   role: "assistant",
@@ -138,5 +138,31 @@ describe("SessionView message processing", () => {
         searchHaystack: "",
       },
     ]);
+  });
+
+  it("reserves only the collapsed height for a large tool payload", () => {
+    const tool: Message = {
+      ...baseMessage,
+      role: "tool",
+      tool_name: "Agent",
+      content: "x".repeat(100_000),
+    };
+    const [entry] = processMessages([tool], 0);
+
+    expect(entry?.type).toBe("message");
+    expect(entry && estimateEntryHeight(entry)).toBe(44);
+  });
+
+  it("does not scale a collapsed tool-group estimate with its message count", () => {
+    const tools: Message[] = Array.from({ length: 200 }, (_, index) => ({
+      ...baseMessage,
+      role: "tool",
+      tool_name: "Read",
+      tool_input: `file-${index}.ts`,
+    }));
+    const [entry] = processMessages(tools, 0);
+
+    expect(entry?.type).toBe("merged-tools");
+    expect(entry && estimateEntryHeight(entry)).toBe(44);
   });
 });

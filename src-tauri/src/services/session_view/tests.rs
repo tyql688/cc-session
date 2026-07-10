@@ -95,7 +95,22 @@ fn build_session_turn_outline_pairs_user_with_first_assistant_reply() {
         Message::new(MessageRole::User, "second question"),
     ];
 
-    let outline = build_session_turn_outline(&messages);
+    let result = build_session_turn_outline(&messages);
+    let outline = &result.turns;
+
+    // Session-wide renderable counts ride along on the same parse.
+    assert_eq!(result.role_counts.user, 2);
+    // Empty-string tool fields must read as absent, mirroring the TS side.
+    let empty_tool = Message {
+        tool_input: Some(String::new()),
+        tool_name: Some(String::new()),
+        ..Message::new(MessageRole::Tool, "")
+    };
+    let empty_result = build_session_turn_outline(&[empty_tool]);
+    assert_eq!(empty_result.role_counts.tool, 0);
+    assert_eq!(result.role_counts.assistant, 2);
+    assert_eq!(result.role_counts.tool, 1);
+    assert_eq!(result.role_counts.system, 1);
 
     assert_eq!(outline.len(), 2);
     assert_eq!(outline[0].ordinal, 0);

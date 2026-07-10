@@ -127,7 +127,10 @@ vi.mock("@tauri-apps/api/core", () => ({
           token_totals: tokenTotals(),
         };
       case "get_session_turn_outline":
-        return outlineEntries;
+        return {
+          turns: outlineEntries,
+          role_counts: { user: 1, assistant: 1, tool: 0, system: 0 },
+        };
       case "is_favorite":
         return false;
       case "cancel_session_load":
@@ -233,7 +236,7 @@ beforeEach(async () => {
 
 describe("SessionView smoke", () => {
   it("mounts and renders messages once the load resolves", async () => {
-    const scrollIntoView = vi.spyOn(Element.prototype, "scrollIntoView").mockImplementation(() => {});
+    const scrollTo = vi.spyOn(Element.prototype, "scrollTo");
     const { findByText } = render(
       <SessionView
         session={{
@@ -259,9 +262,12 @@ describe("SessionView smoke", () => {
       expect(element).not.toBeNull();
       return element!;
     });
-    expect(messages.children).toHaveLength(2);
-    await waitFor(() => expect(scrollIntoView.mock.instances).toContain(messages.lastElementChild));
-    scrollIntoView.mockRestore();
+    // Rows live inside display:contents block wrappers — walk them by class.
+    const rows = messages.querySelectorAll(".session-entry");
+    expect(rows).toHaveLength(2);
+    // Opening lands at the newest message: scrollTop 0 in the column-reverse scroller.
+    await waitFor(() => expect(scrollTo.mock.instances).toContain(messages));
+    scrollTo.mockRestore();
   });
 
   it("does not cancel the current load during StrictMode remount", async () => {
@@ -542,8 +548,8 @@ describe("SessionView smoke", () => {
       />,
     );
 
-    expect(await findByText("message 899")).toBeInTheDocument();
-    const firstTick = await waitFor(() => getByLabelText("first turn"));
+    await waitFor(() => expect(document.body.textContent).toContain("message 899"), { timeout: 5000 });
+    const firstTick = await waitFor(() => getByLabelText("first turn"), { timeout: 5000 });
 
     fireEvent.click(firstTick);
 

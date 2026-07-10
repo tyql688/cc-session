@@ -1,4 +1,4 @@
-import { lazy, Suspense, useState, useMemo } from "react";
+import { useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import type { Message, Provider } from "@/lib/types";
 import { ProviderIcon, UserIcon } from "@/components/icons";
@@ -12,14 +12,40 @@ import { ToolMessage } from "@/features/session/MessageBubble/ToolMessage";
 
 // The markdown engine (markdown-it + shiki/katex/mermaid plugins) is by far
 // the heaviest frontend dependency — load it on demand so the app shell and
-// explorer render without it. Rendering per bubble is eager: the virtualizer
-// only mounts the rows near the viewport, so each mount parses exactly one
-// message. The fallback shows the raw text during the one-time chunk load.
-const Markdown = lazy(() =>
-  import("@/features/session/timeline/Markdown").then((module) => ({
-    default: module.Markdown,
-  })),
-);
+// explorer render without it. The fetch starts as soon as the session feature
+// chunk evaluates (below), racing the session-open IPC instead of waiting for
+// the first bubble to mount.
+const markdownModulePromise = import("@/features/session/timeline/Markdown");
+
+/// Resolves once the markdown chunk is loaded, sync-true afterwards.
+/// SessionView holds its first paint on this: the Suspense fallback (raw text)
+/// has different geometry than rendered markdown, so letting bubbles paint
+/// before the chunk arrives reflows the whole timeline (measured CLS ~0.44 on
+/// first open) — the "bubbles change after opening" glitch.
+export const markdownChunkReady: { loaded: boolean; promise: Promise<void> } = {
+  loaded: false,
+  promise: markdownModulePromise.then(
+    () => {
+      markdownChunkReady.loaded = true;
+    },
+    (error) => {
+      // Chunk failed (dev server restart, corrupted install): bubbles fall
+      // back to raw text — degraded but readable. Don't block opening forever.
+      console.warn("markdown chunk failed to load:", error);
+      markdownChunkReady.loaded = true;
+    },
+  ),
+};
+
+// NOT React.lazy: lazy suspends on first mount even when its promise has
+// already resolved (native import promises carry no status), so every bubble
+// would commit the raw-text fallback once and then swap — the exact reflow
+// the gate exists to prevent. Every MessageBubble mounts under SessionView's
+// markdownChunkReady gate, so this is assigned before any bubble renders.
+let Markdown: typeof import("@/features/session/timeline/Markdown")["Markdown"] | null = null;
+void markdownModulePromise.then((module) => {
+  Markdown = module.Markdown;
+});
 
 const SYSTEM_SUBTYPE_CONFIG: Record<
   string,
@@ -216,9 +242,11 @@ export function MessageBubble(props: { message: Message; provider?: Provider; pa
               <div
                 className={`msg-bubble msg-bubble-${props.message.role}${isCommandMessage() ? " msg-bubble-command" : ""}`}
               >
-                <Suspense fallback={<div className="whitespace-pre-wrap">{displayMarkdown}</div>}>
+                {Markdown ? (
                   <Markdown text={displayMarkdown} />
-                </Suspense>
+                ) : (
+                  <div className="whitespace-pre-wrap">{displayMarkdown}</div>
+                )}
                 {images.length > 0 && (
                   <div className="msg-image-strip">
                     {images.map((image, i) =>

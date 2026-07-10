@@ -87,10 +87,15 @@ across `src-tauri/src/{providers,provider,indexer.rs,db,models.rs}` and
 - The editor is **VSCode-style**: tab groups with split view, plus preview
   (single-click, italic, replaceable) vs pinned (double-click) tabs, owned by
   the editor-groups store.
-- The **session timeline uses CSS `content-visibility`, not a JS virtualizer.**
-  Real rows stay in normal flow so native scroll anchoring holds the reading
-  position steady while messages load backend-windowed; a virtualizer would
-  fight anchoring. Don't swap it out without revalidating the interaction model.
+- The **session timeline is a `column-reverse` + `content-visibility` scroller,
+  not a JS virtualizer.** Real rows stay in normal flow, newest-first in the
+  DOM, so the scroll coordinate system anchors to the newest message: loading
+  older history lands outside that coordinate space and can never move the
+  viewport (WKWebView has no native scroll anchoring, and its rubber-band
+  animation overrides programmatic scrollTop writes — the compensation designs
+  this replaced, including react-virtuoso/virtua, are all broken there).
+  Coordinate math lives in `session/timelineGeometry.ts`. Don't swap the model
+  out without revalidating against WKWebView's elastic scrolling.
 - User-facing strings go through i18n (`react-i18next`), English and Chinese in
   parity.
 
