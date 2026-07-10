@@ -573,3 +573,141 @@ fn parse_session_tail_returns_full_file_when_smaller_than_window() {
         "tail must return all messages when the file is smaller than the requested window"
     );
 }
+
+#[test]
+fn parse_session_links_sub_agent_activity_to_spawn_tool_call() {
+    let dir = TempDir::new().unwrap();
+    let file = dir.path().join("codex.jsonl");
+    fs::write(
+        &file,
+        concat!(
+            "{\"timestamp\":\"2026-04-10T10:00:00Z\",\"type\":\"session_meta\",\"payload\":{\"id\":\"sess-1\",\"cwd\":\"/tmp\",\"cli_version\":\"0.144.0\"}}\n",
+            "{\"timestamp\":\"2026-04-10T10:00:01Z\",\"type\":\"response_item\",\"payload\":{\"type\":\"function_call\",\"call_id\":\"call_1\",\"name\":\"spawn_agent\",\"namespace\":\"collaboration\",\"arguments\":\"{\\\"task_name\\\":\\\"audit\\\"}\"}}\n",
+            "{\"timestamp\":\"2026-04-10T10:00:02Z\",\"type\":\"event_msg\",\"payload\":{\"type\":\"sub_agent_activity\",\"event_id\":\"call_1\",\"agent_thread_id\":\"child-thread-1\",\"agent_path\":\"/root/audit\",\"kind\":\"started\"}}\n"
+        ),
+    )
+    .unwrap();
+    let provider = CodexProvider {
+        home_dir: PathBuf::from("/tmp"),
+    };
+    let parsed = provider.parse_session_file(&file).expect("parsed session");
+    let spawn = parsed
+        .messages
+        .iter()
+        .find(|m| {
+            m.tool_metadata
+                .as_ref()
+                .is_some_and(|meta| meta.raw_name == "spawn_agent")
+        })
+        .expect("spawn tool message");
+    let structured = spawn
+        .tool_metadata
+        .as_ref()
+        .and_then(|m| m.structured.as_ref())
+        .expect("structured metadata");
+    assert_eq!(
+        structured.get("agentId").and_then(|v| v.as_str()),
+        Some("child-thread-1"),
+        "agent_thread_id must surface as agentId for Open-subagent resolution"
+    );
+    assert_eq!(
+        structured.get("agentPath").and_then(|v| v.as_str()),
+        Some("/root/audit")
+    );
+}
+
+#[test]
+fn parse_session_merges_consecutive_agent_reasoning_into_one_thinking_block() {
+    let dir = TempDir::new().unwrap();
+    let file = dir.path().join("codex.jsonl");
+    fs::write(
+        &file,
+        concat!(
+            "{\"timestamp\":\"2026-04-10T10:00:00Z\",\"type\":\"session_meta\",\"payload\":{\"id\":\"sess-1\",\"cwd\":\"/tmp\"}}\n",
+            "{\"timestamp\":\"2026-04-10T10:00:01Z\",\"type\":\"event_msg\",\"payload\":{\"type\":\"agent_reasoning\",\"text\":\"**Plan step one**\\n\\n<!-- -->\"}}\n",
+            "{\"timestamp\":\"2026-04-10T10:00:02Z\",\"type\":\"event_msg\",\"payload\":{\"type\":\"agent_reasoning\",\"text\":\"Step two details\"}}\n",
+            "{\"timestamp\":\"2026-04-10T10:00:03Z\",\"type\":\"response_item\",\"payload\":{\"type\":\"function_call\",\"call_id\":\"call_2\",\"name\":\"exec\",\"arguments\":\"{}\"}}\n",
+            "{\"timestamp\":\"2026-04-10T10:00:04Z\",\"type\":\"event_msg\",\"payload\":{\"type\":\"agent_reasoning\",\"text\":\"After the tool\"}}\n"
+        ),
+    )
+    .unwrap();
+    let provider = CodexProvider {
+        home_dir: PathBuf::from("/tmp"),
+    };
+    let parsed = provider.parse_session_file(&file).expect("parsed session");
+    let thinking: Vec<_> = parsed
+        .messages
+        .iter()
+        .filter(|m| m.content.starts_with("[thinking]\n"))
+        .collect();
+    assert_eq!(
+        thinking.len(),
+        2,
+        "tool call splits reasoning into two blocks"
+    );
+    assert!(
+        thinking[0].content.contains("**Plan step one**")
+            && thinking[0].content.contains("Step two details"),
+        "consecutive sections merge: {:?}",
+        thinking[0].content
+    );
+    assert!(
+        !thinking[0].content.contains("<!-- -->"),
+        "section markers stripped"
+    );
+    assert!(thinking[1].content.contains("After the tool"));
+}
+
+#[test]
+fn parse_session_renders_inter_agent_mail_readable_part() {
+    let dir = TempDir::new().unwrap();
+    let file = dir.path().join("codex.jsonl");
+    fs::write(
+        &file,
+        concat!(
+            "{\"timestamp\":\"2026-04-10T10:00:00Z\",\"type\":\"session_meta\",\"payload\":{\"id\":\"sess-1\",\"cwd\":\"/tmp\"}}\n",
+            "{\"timestamp\":\"2026-04-10T10:00:01Z\",\"type\":\"response_item\",\"payload\":{\"type\":\"agent_message\",\"author\":\"/root\",\"recipient\":\"/root/review\",\"content\":[{\"type\":\"input_text\",\"text\":\"Message Type: NEW_TASK\"},{\"type\":\"encrypted_content\",\"encrypted_content\":\"gAAAA-opaque\"}]}}\n"
+        ),
+    )
+    .unwrap();
+    let provider = CodexProvider {
+        home_dir: PathBuf::from("/tmp"),
+    };
+    let parsed = provider.parse_session_file(&file).expect("parsed session");
+    let mail = parsed
+        .messages
+        .iter()
+        .find(|m| m.content.starts_with("[agent_mail]"))
+        .expect("agent mail row");
+    assert!(mail.content.contains("/root \u{2192} /root/review"));
+    assert!(mail.content.contains("Message Type: NEW_TASK"));
+    assert!(
+        !mail.content.contains("gAAAA-opaque"),
+        "encrypted payload stays out"
+    );
+}
+
+#[test]
+fn parse_session_marks_thread_rollback() {
+    let dir = TempDir::new().unwrap();
+    let file = dir.path().join("codex.jsonl");
+    fs::write(
+        &file,
+        concat!(
+            "{\"timestamp\":\"2026-04-10T10:00:00Z\",\"type\":\"session_meta\",\"payload\":{\"id\":\"sess-1\",\"cwd\":\"/tmp\"}}\n",
+            "{\"timestamp\":\"2026-04-10T10:00:01Z\",\"type\":\"event_msg\",\"payload\":{\"type\":\"thread_rolled_back\",\"num_turns\":2}}\n"
+        ),
+    )
+    .unwrap();
+    let provider = CodexProvider {
+        home_dir: PathBuf::from("/tmp"),
+    };
+    let parsed = provider.parse_session_file(&file).expect("parsed session");
+    assert!(
+        parsed
+            .messages
+            .iter()
+            .any(|m| m.content.contains("[turn_aborted] rolled back 2 turn(s)")),
+        "rollback marker missing"
+    );
+}

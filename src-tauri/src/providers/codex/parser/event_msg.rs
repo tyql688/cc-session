@@ -486,6 +486,77 @@ impl CodexScanAccum {
                 let is_error = status.map(|status| status == "timed_out");
                 enrich_existing_tool_message(message, payload.clone(), is_error, status);
             }
+            // New multi-agent runtime (Codex 0.144+): subagent lifecycle
+            // events. `event_id` is the triggering tool call's call_id;
+            // `agent_thread_id` is the child SESSION id — surfacing it as
+            // `agentId` lets the frontend's "Open subagent" resolve the child
+            // directly (spawn_agent arguments are encrypted, so the old
+            // nickname/description matching has nothing to work with).
+            "sub_agent_activity" => {
+                let Some(call_id) = payload.get("event_id").and_then(|v| v.as_str()) else {
+                    return;
+                };
+                let Some(message) = self
+                    .call_id_map
+                    .message_mut(Some(call_id), &mut self.messages)
+                else {
+                    log::warn!(
+                        "missing Codex subagent tool message for event call_id {call_id} in '{}'",
+                        path.display()
+                    );
+                    return;
+                };
+                let kind = payload.get("kind").and_then(|v| v.as_str());
+                let mut result = serde_json::Map::new();
+                if let Some(id) = payload.get("agent_thread_id").and_then(|v| v.as_str()) {
+                    result.insert("agentId".to_string(), Value::String(id.to_string()));
+                }
+                if let Some(agent_path) = payload.get("agent_path").and_then(|v| v.as_str()) {
+                    result.insert(
+                        "agentPath".to_string(),
+                        Value::String(agent_path.to_string()),
+                    );
+                }
+                enrich_existing_tool_message(message, Value::Object(result), None, kind);
+            }
+            // Reasoning stream sections; consecutive sections merge into one
+            // thinking block so a single model turn doesn't shatter into
+            // dozens of rows (a tool call in between naturally splits them).
+            "agent_reasoning" => {
+                let text = payload
+                    .get("text")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("")
+                    .replace("<!-- -->", "");
+                let text = text.trim();
+                if text.is_empty() {
+                    return;
+                }
+                if let Some(last) = self.messages.last_mut() {
+                    if last.role == MessageRole::System && last.content.starts_with("[thinking]\n")
+                    {
+                        last.content.push_str("\n\n");
+                        last.content.push_str(text);
+                        return;
+                    }
+                }
+                push_system_event(
+                    &mut self.messages,
+                    entry.timestamp.clone(),
+                    format!("[thinking]\n{text}"),
+                );
+            }
+            "thread_rolled_back" => {
+                let turns = payload
+                    .get("num_turns")
+                    .and_then(|v| v.as_u64())
+                    .unwrap_or(0);
+                push_system_event(
+                    &mut self.messages,
+                    entry.timestamp.clone(),
+                    format!("[turn_aborted] rolled back {turns} turn(s)"),
+                );
+            }
             "collab_agent_interaction_end" => {
                 let Some(call_id) = payload.get("call_id").and_then(|v| v.as_str()) else {
                     return;

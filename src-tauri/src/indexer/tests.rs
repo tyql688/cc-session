@@ -403,3 +403,52 @@ fn compute_token_stats_skips_synthetic_model() {
         "<synthetic> entries must not contribute to token stats"
     );
 }
+
+#[test]
+fn session_subtree_nests_multi_level_subagents() {
+    use crate::indexer::build_session_subtree;
+    use std::collections::HashMap;
+
+    let mk = |id: &str, parent: Option<&str>, created: i64| SessionMeta {
+        id: id.into(),
+        provider: Provider::Codex,
+        title: id.into(),
+        project_path: "/tmp/project".into(),
+        project_name: "project".into(),
+        created_at: created,
+        updated_at: created,
+        message_count: 0,
+        file_size_bytes: 0,
+        source_path: format!("/tmp/{id}.jsonl"),
+        is_sidechain: parent.is_some(),
+        variant_name: None,
+        model: None,
+        cc_version: None,
+        git_branch: None,
+        parent_id: parent.map(str::to_string),
+        input_tokens: 0,
+        output_tokens: 0,
+        cache_read_tokens: 0,
+        cache_write_tokens: 0,
+    };
+
+    let root = mk("root", None, 1);
+    let child = mk("child", Some("root"), 2);
+    let grandchild = mk("grandchild", Some("child"), 3);
+
+    let mut children_by_parent: HashMap<&str, Vec<&SessionMeta>> = HashMap::new();
+    children_by_parent.insert("root", vec![&child]);
+    children_by_parent.insert("child", vec![&grandchild]);
+
+    let tree = build_session_subtree(&root, &mut children_by_parent, &Provider::Codex, false);
+    assert_eq!(tree.children.len(), 1, "depth-1 subagent under root");
+    assert_eq!(tree.children[0].id, "child");
+    assert_eq!(
+        tree.children[0].children.len(),
+        1,
+        "depth-2 subagent must nest under its spawning agent, not flatten"
+    );
+    assert_eq!(tree.children[0].children[0].id, "grandchild");
+    assert!(tree.children[0].children[0].is_sidechain);
+    assert!(children_by_parent.is_empty(), "all children consumed");
+}

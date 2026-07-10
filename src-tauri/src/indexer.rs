@@ -55,6 +55,37 @@ fn build_token_stats_batch(
     stats_batch
 }
 
+/// Assemble a session's subtree: children attach recursively wherever their
+/// parent sits, so multi-level subagent chains (Codex `thread_spawn` depth 2+)
+/// nest instead of flattening. Consumes map entries as it descends, which also
+/// makes the recursion terminate on any malformed parent cycle.
+fn build_session_subtree(
+    meta: &SessionMeta,
+    children_by_parent: &mut HashMap<&str, Vec<&SessionMeta>>,
+    provider: &Provider,
+    is_sidechain: bool,
+) -> TreeNode {
+    let mut children = children_by_parent
+        .remove(meta.id.as_str())
+        .unwrap_or_default();
+    children.sort_by_key(|c| c.created_at);
+    let child_nodes: Vec<TreeNode> = children
+        .iter()
+        .map(|c| build_session_subtree(c, children_by_parent, provider, true))
+        .collect();
+    TreeNode {
+        id: meta.id.clone(),
+        label: meta.title.clone(),
+        node_type: TreeNodeType::Session,
+        children: child_nodes,
+        count: 0,
+        provider: Some(provider.clone()),
+        updated_at: Some(meta.updated_at),
+        is_sidechain,
+        project_path: None,
+    }
+}
+
 impl Indexer {
     pub fn new(
         db: Arc<Database>,
@@ -352,12 +383,10 @@ impl Indexer {
                     .unwrap_or_else(|| "(No Project)".to_string());
 
                 let mut top_sessions = Vec::new();
-                let mut subagents = Vec::new();
                 let mut children_by_parent: HashMap<&str, Vec<&SessionMeta>> = HashMap::new();
 
                 for session in sessions.iter() {
                     if let Some(parent_id) = session.parent_id.as_deref() {
-                        subagents.push(session);
                         children_by_parent
                             .entry(parent_id)
                             .or_default()
@@ -367,59 +396,44 @@ impl Indexer {
                     }
                 }
 
-                let top_ids: HashSet<&str> = top_sessions.iter().map(|s| s.id.as_str()).collect();
-
                 let mut session_nodes: Vec<TreeNode> = top_sessions
                     .iter()
                     .map(|s| {
-                        let mut children =
-                            children_by_parent.remove(s.id.as_str()).unwrap_or_default();
-                        children.sort_by_key(|c| c.created_at);
-                        let child_nodes: Vec<TreeNode> = children
-                            .iter()
-                            .map(|c| TreeNode {
-                                id: c.id.clone(),
-                                label: c.title.clone(),
-                                node_type: TreeNodeType::Session,
-                                children: Vec::new(),
-                                count: 0,
-                                provider: Some(provider_enum.clone()),
-                                updated_at: Some(c.updated_at),
-                                is_sidechain: true,
-                                project_path: None,
-                            })
-                            .collect();
-
-                        TreeNode {
-                            id: s.id.clone(),
-                            label: s.title.clone(),
-                            node_type: TreeNodeType::Session,
-                            children: child_nodes,
-                            count: 0,
-                            provider: Some(provider_enum.clone()),
-                            updated_at: Some(s.updated_at),
-                            is_sidechain: s.is_sidechain,
-                            project_path: None,
-                        }
+                        build_session_subtree(
+                            s,
+                            &mut children_by_parent,
+                            &provider_enum,
+                            s.is_sidechain,
+                        )
                     })
                     .collect();
 
-                for orphan in &subagents {
-                    if let Some(ref pid) = orphan.parent_id {
-                        if !top_ids.contains(pid.as_str()) {
-                            session_nodes.push(TreeNode {
-                                id: orphan.id.clone(),
-                                label: orphan.title.clone(),
-                                node_type: TreeNodeType::Session,
-                                children: Vec::new(),
-                                count: 0,
-                                provider: Some(provider_enum.clone()),
-                                updated_at: Some(orphan.updated_at),
-                                is_sidechain: true,
-                                project_path: None,
-                            });
-                        }
-                    }
+                // Whatever is still unattached has a parent outside this
+                // partition (missing/foreign). Root each chain at its
+                // top-most reachable ancestor so nested subagents keep their
+                // hierarchy even without the true parent.
+                let leftover_ids: HashSet<&str> = children_by_parent
+                    .values()
+                    .flatten()
+                    .map(|m| m.id.as_str())
+                    .collect();
+                let leftover_roots: Vec<&SessionMeta> = children_by_parent
+                    .values()
+                    .flatten()
+                    .filter(|m| {
+                        m.parent_id
+                            .as_deref()
+                            .is_none_or(|pid| !leftover_ids.contains(pid))
+                    })
+                    .copied()
+                    .collect();
+                for root in leftover_roots {
+                    session_nodes.push(build_session_subtree(
+                        root,
+                        &mut children_by_parent,
+                        &provider_enum,
+                        true,
+                    ));
                 }
 
                 let count = session_nodes.len() as u32;

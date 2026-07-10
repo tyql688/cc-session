@@ -289,7 +289,8 @@
     "prLink": "PR",
     "error": "错误",
     "turnAborted": "已中断",
-    "contextCompacted": "上下文已压缩"
+    "contextCompacted": "上下文已压缩",
+    "agentMail": "代理通信"
   },
   "tool": {
     "openSubagent": "↗ 打开",

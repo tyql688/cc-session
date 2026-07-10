@@ -19,7 +19,7 @@ use crate::tool_metadata::{
 use super::super::tools::*;
 use super::value_helpers::{
     codex_call_id, codex_content_items_text, codex_image_generation_input, codex_tool_input_value,
-    codex_tool_result_value, enrich_existing_tool_message,
+    codex_tool_result_value, enrich_existing_tool_message, push_system_event,
 };
 use super::{flush_pending_user_message, CodexLine, CodexScanAccum, PendingCodexUserMessage};
 
@@ -341,6 +341,28 @@ impl CodexScanAccum {
                         payload.get("status").and_then(|v| v.as_str()),
                     );
                 }
+            }
+            // Inter-agent mail in multi-agent runs. The payload body is
+            // encrypted by design; only the readable routing header renders.
+            "agent_message" => {
+                let author = payload
+                    .get("author")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("agent");
+                let recipient = payload
+                    .get("recipient")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("agent");
+                let text = codex_content_items_text(payload);
+                let text = text.trim();
+                if text.is_empty() {
+                    return;
+                }
+                push_system_event(
+                    &mut self.messages,
+                    entry.timestamp.clone(),
+                    format!("[agent_mail] {author} \u{2192} {recipient}\n{text}"),
+                );
             }
             "custom_tool_call" => {
                 let raw_name = payload

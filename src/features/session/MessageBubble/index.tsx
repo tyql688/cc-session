@@ -87,6 +87,12 @@ const SYSTEM_SUBTYPE_CONFIG: Record<
     cls: "sys-info",
   },
   pr_link: { icon: "\uD83D\uDD17", labelKey: "system.prLink", cls: "sys-info" },
+  agent_mail: {
+    icon: "\u2709",
+    labelKey: "system.agentMail",
+    cls: "sys-info",
+    collapsible: true,
+  },
   error: { icon: "\u26A0", labelKey: "system.error", cls: "sys-error" },
   turn_aborted: {
     icon: "\u23F9",
