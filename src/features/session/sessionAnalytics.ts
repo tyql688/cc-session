@@ -3,7 +3,7 @@ import type { Message, SessionMeta, ToolMetadata } from "@/lib/types";
 import { toolDisplayName } from "@/lib/tools";
 import { toolVisualKind } from "@/features/session/ToolGlyph";
 
-export interface ToolDistributionItem {
+interface ToolDistributionItem {
   key: string;
   label: string;
   count: number;
@@ -12,7 +12,7 @@ export interface ToolDistributionItem {
   canonicalName: string;
 }
 
-export interface TokenTimelinePoint {
+interface TokenTimelinePoint {
   index: number;
   timestamp: number | null;
   input: number;
@@ -37,7 +37,7 @@ export interface TokenTimelineBucket {
   cumulative: number;
 }
 
-export interface RoleCounts {
+interface RoleCounts {
   user: number;
   assistant: number;
   tool: number;

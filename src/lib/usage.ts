@@ -73,22 +73,26 @@ export function buildDailyChartData(
   metric: ChartMetric = "tokens",
 ): UsageDailyChartData {
   const byDate = new Map<string, Map<string, number>>();
-  let maxValue = 0;
 
   for (const item of dailyUsage) {
-    if (!byDate.has(item.date)) byDate.set(item.date, new Map());
+    const providerMap = byDate.get(item.date) ?? new Map<string, number>();
     const value = metric === "cost" ? item.cost : item.tokens;
-    byDate.get(item.date)!.set(item.provider, value);
+    providerMap.set(item.provider, value);
+    byDate.set(item.date, providerMap);
   }
 
+  let maxValue = 0;
+  const providersWithActivity = new Set<string>();
   for (const providerMap of byDate.values()) {
-    const total = [...providerMap.values()].reduce((sum, value) => sum + value, 0);
+    let total = 0;
+    for (const [provider, value] of providerMap) {
+      total += value;
+      if (value > 0) providersWithActivity.add(provider);
+    }
     if (total > maxValue) maxValue = total;
   }
 
-  const providers = selectedProviderKeys.filter((key) =>
-    [...byDate.values()].some((providerMap) => (providerMap.get(key) ?? 0) > 0),
-  );
+  const providers = selectedProviderKeys.filter((key) => providersWithActivity.has(key));
 
   return {
     dates: [...byDate.keys()].sort(),
@@ -104,8 +108,6 @@ export function buildHoveredDaySummary(
   getProviderMeta: (provider: string) => UsageChartProviderMeta,
 ): HoveredDaySummary | null {
   if (!date) return null;
-
-  if (!chartData.dates.includes(date)) return null;
 
   const providerMap = chartData.byDate.get(date);
   if (!providerMap) return null;

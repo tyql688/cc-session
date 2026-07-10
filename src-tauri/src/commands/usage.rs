@@ -1,4 +1,4 @@
-use std::collections::{HashMap, HashSet};
+mod aggregate;
 
 use anyhow::Context;
 use serde::Serialize;
@@ -6,11 +6,12 @@ use tauri::State;
 
 use super::sessions::load_messages_cached;
 use super::AppState;
-use crate::db::queries::{UsageDateBounds, UsageProjectModelDetailRow, UsageSessionModelDetailRow};
+use crate::db::queries::UsageDateBounds;
 use crate::db::sync::build_tool_stats;
 use crate::error::CommandResult;
 use crate::models::*;
 use crate::services::load_session_meta;
+use aggregate::{build_project_costs, build_recent_sessions};
 
 #[tauri::command]
 pub async fn get_usage_stats(
@@ -454,213 +455,56 @@ fn cutoff_date_for_range_days(days: u32) -> Option<String> {
     Some(cutoff.format("%Y-%m-%d").to_string())
 }
 
-fn build_project_costs(project_model_rows: Vec<UsageProjectModelDetailRow>) -> Vec<ProjectCost> {
-    // Merge across providers: one row per project_path, summing usage from every
-    // tool used in that project, and collecting the set of providers that
-    // contributed. Distinct project paths stay separate even if they share a name.
-    let mut project_map: HashMap<String, ProjectCost> = HashMap::new();
-    let mut project_sessions: HashMap<String, HashSet<String>> = HashMap::new();
-    // Per-(project_path, provider) breakdown so each merged row can expand to
-    // show how much each tool contributed.
-    let mut pp_map: HashMap<(String, String), ProjectProviderUsage> = HashMap::new();
-    let mut pp_sessions: HashMap<(String, String), HashSet<String>> = HashMap::new();
-    // Per-(project_path, model) breakdown for folder detail views.
-    let mut pm_map: HashMap<(String, String), ProjectModelUsage> = HashMap::new();
-    let mut pm_sessions: HashMap<(String, String), HashSet<String>> = HashMap::new();
-
-    for row in project_model_rows {
-        let path = row.project_path.clone();
-        let provider = row.provider.clone();
-        let model = row.model.clone();
-        let tokens =
-            row.input_tokens + row.output_tokens + row.cache_read_tokens + row.cache_write_tokens;
-
-        project_sessions
-            .entry(path.clone())
-            .or_default()
-            .insert(row.session_id.clone());
-        pp_sessions
-            .entry((path.clone(), provider.clone()))
-            .or_default()
-            .insert(row.session_id.clone());
-        pm_sessions
-            .entry((path.clone(), model.clone()))
-            .or_default()
-            .insert(row.session_id);
-
-        let entry = project_map
-            .entry(path.clone())
-            .or_insert_with(|| ProjectCost {
-                project: row.project_name,
-                project_path: path.clone(),
-                providers: Vec::new(),
-                by_provider: Vec::new(),
-                by_model: Vec::new(),
-                sessions: 0,
-                turns: 0,
-                input_tokens: 0,
-                output_tokens: 0,
-                cache_read_tokens: 0,
-                cache_write_tokens: 0,
-                tokens: 0,
-                cost: 0.0,
-            });
-        entry.turns += row.turns;
-        entry.input_tokens += row.input_tokens;
-        entry.output_tokens += row.output_tokens;
-        entry.cache_read_tokens += row.cache_read_tokens;
-        entry.cache_write_tokens += row.cache_write_tokens;
-        entry.tokens += tokens;
-        entry.cost += row.cost_usd;
-
-        let pp = pp_map
-            .entry((path.clone(), provider.clone()))
-            .or_insert_with(|| ProjectProviderUsage {
-                provider,
-                sessions: 0,
-                turns: 0,
-                tokens: 0,
-                cost: 0.0,
-            });
-        pp.turns += row.turns;
-        pp.tokens += tokens;
-        pp.cost += row.cost_usd;
-
-        let pm = pm_map
-            .entry((path, model.clone()))
-            .or_insert_with(|| ProjectModelUsage {
-                model,
-                sessions: 0,
-                turns: 0,
-                tokens: 0,
-                cost: 0.0,
-            });
-        pm.turns += row.turns;
-        pm.tokens += tokens;
-        pm.cost += row.cost_usd;
-    }
-
-    // Group the per-provider rows under their project, with distinct session
-    // counts, each list sorted by cost desc.
-    let mut by_project: HashMap<String, Vec<ProjectProviderUsage>> = HashMap::new();
-    for ((path, provider), mut pp) in pp_map {
-        pp.sessions = pp_sessions
-            .get(&(path.clone(), provider))
-            .map(|sessions| sessions.len() as u64)
-            .unwrap_or(0);
-        by_project.entry(path).or_default().push(pp);
-    }
-    for list in by_project.values_mut() {
-        list.sort_by(|a, b| {
-            b.cost
-                .partial_cmp(&a.cost)
-                .unwrap_or(std::cmp::Ordering::Equal)
-        });
-    }
-
-    let mut by_project_model: HashMap<String, Vec<ProjectModelUsage>> = HashMap::new();
-    for ((path, model), mut pm) in pm_map {
-        pm.sessions = pm_sessions
-            .get(&(path.clone(), model))
-            .map(|sessions| sessions.len() as u64)
-            .unwrap_or(0);
-        by_project_model.entry(path).or_default().push(pm);
-    }
-    for list in by_project_model.values_mut() {
-        list.sort_by(|a, b| {
-            b.cost
-                .partial_cmp(&a.cost)
-                .unwrap_or(std::cmp::Ordering::Equal)
-        });
-    }
-
-    let mut project_costs: Vec<ProjectCost> = project_map
-        .into_iter()
-        .map(|(key, mut cost_row)| {
-            cost_row.sessions = project_sessions
-                .remove(&key)
-                .map(|sessions| sessions.len() as u64)
-                .unwrap_or(0);
-            let breakdown = by_project.remove(&key).unwrap_or_else(|| {
-                log::warn!("missing per-provider breakdown for project_path={key}");
-                Vec::new()
-            });
-            let mut providers: Vec<String> = breakdown.iter().map(|p| p.provider.clone()).collect();
-            providers.sort();
-            let models = by_project_model.remove(&key).unwrap_or_else(|| {
-                log::warn!("missing per-model breakdown for project_path={key}");
-                Vec::new()
-            });
-            cost_row.providers = providers;
-            cost_row.by_provider = breakdown;
-            cost_row.by_model = models;
-            cost_row
-        })
-        .collect();
-    project_costs.sort_by(|a, b| {
-        b.cost
-            .partial_cmp(&a.cost)
-            .unwrap_or(std::cmp::Ordering::Equal)
-    });
-    project_costs
-}
-
-fn build_recent_sessions(
-    session_model_rows: Vec<UsageSessionModelDetailRow>,
-) -> Vec<SessionCostRow> {
-    let mut session_map: HashMap<String, SessionCostRow> = HashMap::new();
-    let mut session_order: Vec<String> = Vec::new();
-    let mut dominant_model: HashMap<String, (String, u64, f64)> = HashMap::new();
-
-    for row in session_model_rows {
-        let tokens =
-            row.input_tokens + row.output_tokens + row.cache_read_tokens + row.cache_write_tokens;
-        let entry = session_map
-            .entry(row.session_id.clone())
-            .or_insert_with(|| {
-                session_order.push(row.session_id.clone());
-                SessionCostRow {
-                    id: row.session_id.clone(),
-                    project: row.project_name.clone(),
-                    project_path: row.project_path.clone(),
-                    provider: row.provider.clone(),
-                    model: String::new(),
-                    updated_at: row.updated_at,
-                    turns: 0,
-                    tokens: 0,
-                    cost: 0.0,
-                }
-            });
-        entry.turns += row.turns;
-        entry.tokens += tokens;
-        entry.cost += row.cost_usd;
-
-        let best = dominant_model
-            .entry(row.session_id)
-            .or_insert_with(|| (row.model.clone(), tokens, row.cost_usd));
-        if tokens > best.1 || (tokens == best.1 && row.cost_usd > best.2 && !row.model.is_empty()) {
-            *best = (row.model, tokens, row.cost_usd);
-        }
-    }
-
-    for (id, (model, _, _)) in dominant_model {
-        if let Some(entry) = session_map.get_mut(&id) {
-            entry.model = model;
-        }
-    }
-
-    session_order
-        .into_iter()
-        .filter_map(|id| session_map.remove(&id))
-        .collect()
-}
-
 #[cfg(test)]
 mod tests {
     use super::{
         build_project_costs, build_recent_sessions, cutoff_date_for_range_days, parse_custom_range,
     };
     use crate::db::queries::{UsageProjectModelDetailRow, UsageSessionModelDetailRow};
+
+    fn project_usage_row(
+        project_path: &str,
+        provider: &str,
+        model: &str,
+        session_id: &str,
+        cost_usd: f64,
+    ) -> UsageProjectModelDetailRow {
+        UsageProjectModelDetailRow {
+            project_path: project_path.to_string(),
+            project_name: "project".to_string(),
+            provider: provider.to_string(),
+            session_id: session_id.to_string(),
+            model: model.to_string(),
+            turns: 1,
+            input_tokens: 10,
+            output_tokens: 0,
+            cache_read_tokens: 0,
+            cache_write_tokens: 0,
+            cost_usd,
+        }
+    }
+
+    fn session_usage_row(
+        session_id: &str,
+        model: &str,
+        input_tokens: u64,
+        cost_usd: f64,
+    ) -> UsageSessionModelDetailRow {
+        UsageSessionModelDetailRow {
+            session_id: session_id.to_string(),
+            project_path: "/tmp/project".to_string(),
+            project_name: "project".to_string(),
+            provider: "codex".to_string(),
+            updated_at: 1_700_000_000,
+            model: model.to_string(),
+            turns: 1,
+            input_tokens,
+            output_tokens: 0,
+            cache_read_tokens: 0,
+            cache_write_tokens: 0,
+            cost_usd,
+        }
+    }
 
     #[test]
     fn custom_range_parses_valid_inclusive_dates() {
@@ -846,6 +690,50 @@ mod tests {
         assert_eq!(recent_sessions[0].project_path, "/tmp/drama/sessionview");
         assert_eq!(recent_sessions[0].turns, 8);
         assert_eq!(recent_sessions[0].tokens, 1_740);
+    }
+
+    #[test]
+    fn recent_sessions_with_interleaved_rows_keep_first_seen_order() {
+        let recent_sessions = build_recent_sessions(vec![
+            session_usage_row("session-b", "model-b1", 10, 0.1),
+            session_usage_row("session-a", "model-a1", 20, 0.2),
+            session_usage_row("session-b", "model-b2", 30, 0.3),
+            session_usage_row("session-c", "model-c1", 5, 0.05),
+            session_usage_row("session-a", "model-a2", 1, 0.01),
+        ]);
+
+        assert_eq!(
+            recent_sessions
+                .iter()
+                .map(|session| session.id.as_str())
+                .collect::<Vec<_>>(),
+            vec!["session-b", "session-a", "session-c"]
+        );
+        assert_eq!(recent_sessions[0].tokens, 40);
+        assert_eq!(recent_sessions[0].model, "model-b2");
+        assert_eq!(recent_sessions[1].tokens, 21);
+    }
+
+    #[test]
+    fn project_costs_with_equal_costs_use_stable_name_order() {
+        let project_costs = build_project_costs(vec![
+            project_usage_row("/tmp/project-z", "zeta", "model-z", "session-z", 1.0),
+            project_usage_row("/tmp/project-z", "alpha", "model-a", "session-a", 1.0),
+            project_usage_row("/tmp/project-a", "codex", "model-c", "session-c", 2.0),
+        ]);
+
+        assert_eq!(
+            project_costs
+                .iter()
+                .map(|project| project.project_path.as_str())
+                .collect::<Vec<_>>(),
+            vec!["/tmp/project-a", "/tmp/project-z"]
+        );
+        assert_eq!(project_costs[1].providers, vec!["alpha", "zeta"]);
+        assert_eq!(project_costs[1].by_provider[0].provider, "alpha");
+        assert_eq!(project_costs[1].by_provider[1].provider, "zeta");
+        assert_eq!(project_costs[1].by_model[0].model, "model-a");
+        assert_eq!(project_costs[1].by_model[1].model, "model-z");
     }
 
     #[test]

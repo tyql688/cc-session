@@ -163,11 +163,8 @@ import { SessionView } from "@/features/session/index";
 beforeAll(() => {
   // happy-dom lacks these browser-only APIs that child components touch.
   Element.prototype.scrollIntoView = () => {};
-  // The virtualizer reads offsetWidth/offsetHeight for both the scroll
-  // container's viewport and each row's measured size; happy-dom reports 0
-  // for all of them, which renders zero rows. Give the container a viewport
-  // and every row a fixed height so windowing math behaves like a real
-  // browser (120 rows × 100px, 800px viewport → ~8 visible + overscan).
+  // Give the scroll container and rows realistic dimensions for pagination
+  // and visibility calculations; happy-dom reports 0 for all of them.
   Object.defineProperty(HTMLElement.prototype, "offsetHeight", {
     configurable: true,
     get() {
@@ -182,9 +179,7 @@ beforeAll(() => {
       return this.classList?.contains("session-messages") ? 800 : 0;
     },
   });
-  // scrollToIndex clamps against scrollHeight - clientHeight; derive
-  // scrollHeight from the virtualizer's spacer so the max offset tracks the
-  // loaded content like a real browser.
+  // Derive a stable scroll viewport for the content-visibility timeline.
   Object.defineProperty(HTMLElement.prototype, "clientHeight", {
     configurable: true,
     get() {
@@ -200,8 +195,8 @@ beforeAll(() => {
       return Number.isFinite(height) ? height : 0;
     },
   });
-  // happy-dom's scrollTo doesn't notify; the virtualizer relies on the
-  // scroll event to track its offset.
+  // happy-dom's scrollTo doesn't notify; the timeline relies on the scroll
+  // event to track its offset.
   Element.prototype.scrollTo = function (
     options?: ScrollToOptions | number,
     y?: number,
@@ -238,6 +233,7 @@ beforeEach(async () => {
 
 describe("SessionView smoke", () => {
   it("mounts and renders messages once the load resolves", async () => {
+    const scrollIntoView = vi.spyOn(Element.prototype, "scrollIntoView").mockImplementation(() => {});
     const { findByText } = render(
       <SessionView
         session={{
@@ -258,9 +254,14 @@ describe("SessionView smoke", () => {
     // The async session-load effect resolves the mocked tail; both messages
     // should appear in the rendered timeline.
     expect(await findByText("Hello there")).toBeInTheDocument();
-    await waitFor(() =>
-      expect(document.querySelector(".session-messages")).not.toBeNull(),
-    );
+    const messages = await waitFor(() => {
+      const element = document.querySelector<HTMLDivElement>(".session-messages");
+      expect(element).not.toBeNull();
+      return element!;
+    });
+    expect(messages.children).toHaveLength(2);
+    await waitFor(() => expect(scrollIntoView.mock.instances).toContain(messages.lastElementChild));
+    scrollIntoView.mockRestore();
   });
 
   it("does not cancel the current load during StrictMode remount", async () => {
@@ -505,6 +506,7 @@ describe("SessionView smoke", () => {
   });
 
   it("re-centers the window on a far minimap jump instead of loading the gap", async () => {
+    const scrollIntoView = vi.spyOn(Element.prototype, "scrollIntoView").mockImplementation(() => {});
     // Open a 900-message session at its newest tail, then jump to the first
     // turn via the minimap. The jump must fetch a small window around the
     // target — NOT the hundreds of messages in between.
@@ -554,6 +556,10 @@ describe("SessionView smoke", () => {
     for (const call of messagesWindowCalls) {
       expect(call?.limit).toBeLessThanOrEqual(600);
     }
-    expect(await findByText("message 0")).toBeInTheDocument();
+    const firstMessage = await findByText("message 0");
+    const firstRow = firstMessage.closest(".session-entry");
+    expect(firstRow).not.toBeNull();
+    expect(scrollIntoView.mock.instances).toContain(firstRow);
+    scrollIntoView.mockRestore();
   }, 10_000);
 });

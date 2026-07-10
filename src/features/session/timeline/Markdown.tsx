@@ -82,6 +82,32 @@ const shikiHtmlCache = new LruCache<string, string>(SHIKI_CACHE_CAPACITY);
 const copyResetTimers = new WeakMap<HTMLButtonElement, number>();
 let highlighterPromise: Promise<Highlighter> | null = null;
 let mermaidId = 0;
+let mermaidEscapeListening = false;
+
+function handleMermaidEscape(event: KeyboardEvent): void {
+  if (event.key !== "Escape") return;
+  const buttons = document.querySelectorAll<HTMLButtonElement>(
+    '.markdown-mermaid-fullscreen button[data-markdown-mermaid-action="fullscreen"]',
+  );
+  if (buttons.length === 0) {
+    setMermaidEscapeListening(false);
+    return;
+  }
+
+  event.preventDefault();
+  for (const button of buttons) button.click();
+}
+
+function setMermaidEscapeListening(enabled: boolean): void {
+  if (enabled === mermaidEscapeListening) return;
+  mermaidEscapeListening = enabled;
+  if (enabled) document.addEventListener("keydown", handleMermaidEscape);
+  else document.removeEventListener("keydown", handleMermaidEscape);
+}
+
+function syncMermaidEscapeListener(): void {
+  setMermaidEscapeListening(document.querySelector(".markdown-mermaid-fullscreen") !== null);
+}
 
 // Mermaid is ~2.8MB and its `initialize` is not free. Load it on demand (only
 // when a diagram is actually present) and initialize once per theme — never
@@ -342,6 +368,7 @@ function zoomMermaidBlock(block: HTMLElement, factor: number): void {
 function setMermaidFullscreen(block: HTMLElement, enabled: boolean, labels: MermaidLabels): void {
   block.classList.toggle("markdown-mermaid-fullscreen", enabled);
   syncMermaidToolbar(block, labels);
+  syncMermaidEscapeListener();
   if (enabled) {
     block.querySelector<HTMLElement>(".markdown-mermaid-canvas")?.focus();
   }
@@ -512,8 +539,8 @@ export const Markdown = memo(function Markdown({ text }: Props) {
 
   // Post-processing runs AFTER paint (useEffect, not useLayoutEffect): a row
   // paints its sanitized HTML immediately, and code-block enhancement / mermaid
-  // rendering follow without blocking the frame — critical when the virtualizer
-  // mounts a fresh row on nearly every scroll frame.
+  // rendering follow without blocking the frame. Timeline rows stay mounted in
+  // normal flow, so keeping this work off the paint path matters on long sessions.
   useEffect(() => {
     const root = rootRef.current;
     if (root === null) return;
@@ -524,22 +551,19 @@ export const Markdown = memo(function Markdown({ text }: Props) {
 
     return () => {
       cancelled = true;
+      syncMermaidEscapeListener();
     };
   }, [copyLabels, html, mermaidLabels, resolvedTheme]);
 
   useEffect(() => {
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key !== "Escape") return;
-      const root = rootRef.current;
-      const fullscreenBlock = root?.querySelector<HTMLElement>(".markdown-mermaid-fullscreen");
-      if (fullscreenBlock === undefined || fullscreenBlock === null) return;
-      event.preventDefault();
-      setMermaidFullscreen(fullscreenBlock, false, mermaidLabels);
+    const root = rootRef.current;
+    return () => {
+      for (const block of root?.querySelectorAll(".markdown-mermaid-fullscreen") ?? []) {
+        block.classList.remove("markdown-mermaid-fullscreen");
+      }
+      syncMermaidEscapeListener();
     };
-
-    document.addEventListener("keydown", handleKeyDown);
-    return () => document.removeEventListener("keydown", handleKeyDown);
-  }, [mermaidLabels]);
+  }, []);
 
   const handleClick = useCallback(
     (event: React.MouseEvent<HTMLDivElement>) => {

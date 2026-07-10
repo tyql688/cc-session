@@ -294,7 +294,7 @@ export interface ProjectCost {
   cost: number;
 }
 
-export interface ProjectToolUsage {
+interface ProjectToolUsage {
   key: string;
   label: string;
   category: string;

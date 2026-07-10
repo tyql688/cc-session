@@ -23,6 +23,16 @@ fn truncate_chars(text: &str, max_chars: usize) -> &str {
     }
 }
 
+fn append_indexable_part(content: &mut String, part: &str) {
+    if part.is_empty() {
+        return;
+    }
+    if !content.is_empty() {
+        content.push('\n');
+    }
+    content.push_str(part);
+}
+
 /// Build the FTS content text from typed messages: full user + assistant
 /// dialogue, plus truncated excerpts of thinking blocks (`[thinking]`-prefixed
 /// System messages) and tool calls (tool name + compact input summary + result
@@ -31,12 +41,12 @@ fn truncate_chars(text: &str, max_chars: usize) -> &str {
 /// indexable content (e.g. OpenCode emits Assistant stubs only for token
 /// accounting).
 fn indexable_content_text(messages: &[Message], fallback: &str) -> String {
-    let mut parts: Vec<String> = Vec::new();
+    let mut content = String::new();
     for message in messages {
         match message.role {
             MessageRole::User | MessageRole::Assistant => {
                 if !message.content.trim().is_empty() {
-                    parts.push(message.content.clone());
+                    append_indexable_part(&mut content, &message.content);
                 }
             }
             MessageRole::System => {
@@ -45,41 +55,40 @@ fn indexable_content_text(messages: &[Message], fallback: &str) -> String {
                 };
                 let thinking = thinking.trim_start();
                 if !thinking.is_empty() {
-                    parts.push(truncate_chars(thinking, THINKING_INDEX_CHARS).to_string());
+                    append_indexable_part(
+                        &mut content,
+                        truncate_chars(thinking, THINKING_INDEX_CHARS),
+                    );
                 }
             }
             MessageRole::Tool => {
-                let mut piece = String::new();
                 if let Some(name) = message.tool_name.as_deref() {
-                    piece.push_str(name);
+                    append_indexable_part(&mut content, name);
                 }
                 if let Some(input) = message.tool_input.as_deref() {
                     if !input.trim().is_empty() {
-                        if !piece.is_empty() {
-                            piece.push('\n');
-                        }
-                        piece.push_str(truncate_chars(input, TOOL_INDEX_CHARS));
+                        append_indexable_part(
+                            &mut content,
+                            truncate_chars(input, TOOL_INDEX_CHARS),
+                        );
                     }
                 }
-                let content = message.content.trim();
-                if !content.is_empty() {
-                    if !piece.is_empty() {
-                        piece.push('\n');
-                    }
-                    piece.push_str(truncate_chars(content, TOOL_INDEX_CHARS));
-                }
-                if !piece.is_empty() {
-                    parts.push(piece);
+                let tool_output = message.content.trim();
+                if !tool_output.is_empty() {
+                    append_indexable_part(
+                        &mut content,
+                        truncate_chars(tool_output, TOOL_INDEX_CHARS),
+                    );
                 }
             }
         }
     }
 
-    if parts.is_empty() {
+    if content.is_empty() {
         return fallback.to_string();
     }
 
-    parts.join("\n")
+    content
 }
 
 pub use crate::provider::TokenStatRow;

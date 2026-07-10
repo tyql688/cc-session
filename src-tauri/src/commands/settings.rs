@@ -127,6 +127,9 @@ pub async fn refresh_pricing_catalog(
 ) -> CommandResult<PricingCatalogStatus> {
     // Bounded timeout: the first-use bootstrap awaits this before the initial
     // reindex, so a hung connection must not block indexing forever.
+    // reqwest's rustls-no-provider feature requires an explicit process-wide
+    // provider before Client construction; updater checks may run later.
+    let _ = rustls::crypto::ring::default_provider().install_default();
     let client = reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(15))
         .build()
@@ -376,4 +379,33 @@ fn sanitize_filename(name: &str) -> String {
         .collect::<String>()
         .trim()
         .to_string()
+}
+
+#[cfg(test)]
+mod tests {
+    use std::io::{Cursor, Read, Write};
+
+    #[test]
+    fn configured_rustls_provider_builds_reqwest_client() {
+        let _ = rustls::crypto::ring::default_provider().install_default();
+        reqwest::Client::builder().build().unwrap();
+    }
+
+    #[test]
+    fn default_zip_options_create_readable_deflated_entries() {
+        let mut writer = zip::ZipWriter::new(Cursor::new(Vec::new()));
+        writer
+            .start_file("session.md", zip::write::SimpleFileOptions::default())
+            .unwrap();
+        writer.write_all(b"session export").unwrap();
+
+        let cursor = writer.finish().unwrap();
+        let mut archive = zip::ZipArchive::new(cursor).unwrap();
+        let mut entry = archive.by_name("session.md").unwrap();
+        let mut content = String::new();
+        entry.read_to_string(&mut content).unwrap();
+
+        assert_eq!(entry.compression(), zip::CompressionMethod::Deflated);
+        assert_eq!(content, "session export");
+    }
 }

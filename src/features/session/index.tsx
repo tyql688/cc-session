@@ -73,7 +73,7 @@ export function SessionView(props: {
   }));
   const loadVersionRef = useRef(0);
   const messagesRef = useRef<HTMLDivElement | null>(null);
-  // State twin of messagesRef: the virtualizer and child effects must re-run
+  // State twin of messagesRef: pagination and child effects must re-run
   // when the scroll container (un)mounts — a bare ref mutation never
   // re-renders, so a snapshot prop goes stale.
   const [messagesEl, setMessagesEl] = useState<HTMLDivElement | null>(null);
@@ -95,6 +95,10 @@ export function SessionView(props: {
 
   // Role-filter slice: hiddenRoles + filteredEntries + roleCounts.
   const { hiddenRoles, roleCounts, filteredEntries, toggleRole } = useRoleFilter(processedEntries, focusMode);
+  const entryIndexByKey = useMemo(
+    () => new Map(filteredEntries.map((entry, index) => [entry.key, index])),
+    [filteredEntries],
+  );
 
   // Rendering is content-visibility: every loaded row is real DOM in normal
   // document flow, and the browser skips layout/paint for off-screen rows
@@ -105,8 +109,7 @@ export function SessionView(props: {
   // never jumps, unlike an absolutely-positioned JS virtualizer. Navigation is
   // driven through these plain DOM scroll callbacks.
   const scrollToItem = useCallback((index: number, align: "start" | "center" | "end") => {
-    const rows = messagesRef.current?.querySelectorAll<HTMLElement>(".session-entry");
-    rows?.[index]?.scrollIntoView({ block: align === "center" ? "center" : align });
+    messagesRef.current?.children.item(index)?.scrollIntoView({ block: align === "center" ? "center" : align });
   }, []);
   const scrollToBottom = useCallback(() => {
     const align = () => {
@@ -115,8 +118,7 @@ export function SessionView(props: {
       // Align the last row's bottom edge to the viewport bottom directly, so an
       // estimate-vs-real height gap on the newest rows can't leave a sliver
       // below it. Re-run next frame after those rows paint at real height.
-      const rows = el.querySelectorAll<HTMLElement>(".session-entry");
-      const last = rows[rows.length - 1];
+      const last = el.lastElementChild;
       if (last) last.scrollIntoView({ block: "end" });
       else el.scrollTo({ top: el.scrollHeight });
     };
@@ -403,7 +405,7 @@ export function SessionView(props: {
         if (row) break;
       }
       // Still nothing (very top padding): the first rendered row is the top one.
-      if (!row) row = el.querySelector(".session-entry");
+      if (!row) row = el.firstElementChild;
       setTopVisibleKey(row?.getAttribute("data-entry-key") ?? null);
       setLastRowVisible(el.scrollHeight - el.scrollTop - el.clientHeight < 4);
       // Edge prefetch: load the adjacent page well before the viewport reaches
@@ -432,19 +434,21 @@ export function SessionView(props: {
       },
       { root, rootMargin: "5000px 0px 5000px 0px" },
     );
-    for (const row of root.querySelectorAll(".session-entry")) io.observe(row);
+    for (const row of root.children) io.observe(row);
     return () => io.disconnect();
   }, [messagesEl, filteredEntries]);
   const topVisibleMessageIndex = useMemo(() => {
     if (!topVisibleKey) return null;
-    const start = filteredEntries.findIndex((entry) => entry.key === topVisibleKey);
-    for (let i = Math.max(0, start); i < filteredEntries.length; i += 1) {
+    // A role-filter change can leave the previous visible key stale until the
+    // next scroll sample. Preserve the old first-row fallback in that window.
+    const start = entryIndexByKey.get(topVisibleKey) ?? 0;
+    for (let i = start; i < filteredEntries.length; i += 1) {
       const entry = filteredEntries[i];
       if (entry?.type === "message") return entry.messageIndex;
       if (entry?.type === "merged-tools") return entry.messageIndices[0];
     }
     return null;
-  }, [topVisibleKey, filteredEntries]);
+  }, [topVisibleKey, entryIndexByKey, filteredEntries]);
   const activeTurn = activeTurnIndex(outline, topVisibleMessageIndex, lastRowVisible);
 
   // Paint search highlights when the query, matches, or active match change.

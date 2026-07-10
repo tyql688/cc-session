@@ -1,6 +1,7 @@
 import path from "node:path";
+import babel from "@rolldown/plugin-babel";
 import tailwindcss from "@tailwindcss/vite";
-import react from "@vitejs/plugin-react";
+import react, { reactCompilerPreset } from "@vitejs/plugin-react";
 import { defineConfig } from "vite";
 
 export default defineConfig({
@@ -11,13 +12,11 @@ export default defineConfig({
   },
   plugins: [
     tailwindcss(),
-    react({
-      // React Compiler: automatic memoization. Removes the manual memo/useMemo
-      // tax that is React's weak axis for high-frequency updates (session viewer).
-      babel: {
-        plugins: [["babel-plugin-react-compiler", { target: "19" }]],
-      },
-    }),
+    react(),
+    // React Compiler moved out of @vitejs/plugin-react's options in v6.
+    // Keep it as a separate, filtered Babel pass so only React-shaped modules
+    // pay the transform cost.
+    babel({ presets: [reactCompilerPreset()] }),
   ],
   server: {
     port: 1420,

@@ -108,6 +108,21 @@ describe("buildDailyChartData", () => {
     expect(chartData.maxValue).toBe(50);
     expect(chartData.byDate.get("2026-04-10")?.get("claude")).toBe(15);
   });
+
+  it("derives totals and active providers from the final provider-day value", () => {
+    const chartData = buildDailyChartData(
+      [
+        { date: "2026-04-09", provider: "claude", tokens: 40, cost: 0.4 },
+        { date: "2026-04-09", provider: "claude", tokens: 10, cost: 0.1 },
+        { date: "2026-04-09", provider: "codex", tokens: 0, cost: 0 },
+      ],
+      ["claude", "codex"],
+    );
+
+    expect(chartData.providers).toEqual(["claude"]);
+    expect(chartData.maxValue).toBe(10);
+    expect(chartData.byDate.get("2026-04-09")?.get("claude")).toBe(10);
+  });
 });
 
 describe("buildHoveredDaySummary", () => {

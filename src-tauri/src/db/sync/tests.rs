@@ -543,6 +543,22 @@ fn indexable_content_indexes_dialogue_thinking_and_tools() {
 }
 
 #[test]
+fn indexable_content_preserves_exact_part_separators_and_whitespace() {
+    use crate::models::MessageRole;
+
+    let messages = vec![
+        indexable_msg(MessageRole::User, " user ", None, None),
+        indexable_msg(MessageRole::Tool, "  result  ", Some("Bash"), Some(" cmd ")),
+        indexable_msg(MessageRole::System, "[thinking]\n  thought ", None, None),
+    ];
+
+    assert_eq!(
+        super::indexable_content_text(&messages, "fallback"),
+        " user \nBash\n cmd \nresult\nthought "
+    );
+}
+
+#[test]
 fn indexable_content_truncates_thinking_at_char_boundary() {
     use crate::models::MessageRole;
 
