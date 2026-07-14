@@ -2,7 +2,6 @@ import { invoke } from "@tauri-apps/api/core";
 import { errorMessage } from "@/lib/errors";
 import { toastError } from "@/stores/toast";
 import type {
-  BatchResult,
   SessionDetail,
   SearchResult,
   SearchFilters,
@@ -10,7 +9,6 @@ import type {
   IndexStats,
   PricingCatalogStatus,
   ProviderSnapshot,
-  TrashMeta,
   SessionMeta,
   TokenTotals,
   UsageStats,
@@ -80,7 +78,7 @@ export interface SessionTurnOutline {
 /**
  * Wrap a Tauri invocation so failures surface to the user as a toast
  * (plus `console.error`) and then rethrow. Use for user-triggered
- * actions (rename, export, delete, resume…) where the caller needs
+ * actions (rename, export, resume…) where the caller needs
  * to know the call failed.
  *
  * The argument is an already-started `Promise<T>` (eager evaluation);
@@ -179,14 +177,6 @@ type BackendCommandMap = {
   get_provider_snapshots: CommandSpec<undefined, ProviderSnapshot[]>;
   resume_session: CommandSpec<{ sessionId: string; terminalApp: string }, void>;
   get_resume_command: CommandSpec<{ sessionId: string }, string>;
-  trash_session: CommandSpec<{ sessionId: string }, void>;
-  list_trash: CommandSpec<undefined, TrashMeta[]>;
-  restore_session: CommandSpec<{ trashId: string }, void>;
-  empty_trash: CommandSpec<undefined, void>;
-  permanent_delete_trash: CommandSpec<{ trashId: string }, void>;
-  trash_sessions_batch: CommandSpec<{ items: string[] }, BatchResult>;
-  restore_sessions_batch: CommandSpec<{ items: string[] }, BatchResult>;
-  permanent_delete_trash_batch: CommandSpec<{ items: string[] }, BatchResult>;
   list_recent_sessions: CommandSpec<{ limit: number }, SessionMeta[]>;
   toggle_favorite: CommandSpec<{ sessionId: string }, boolean>;
   list_favorites: CommandSpec<undefined, SessionMeta[]>;
@@ -384,38 +374,6 @@ export async function resumeSession(sessionId: string, terminalApp: string): Pro
 
 export async function getResumeCommand(sessionId: string): Promise<string> {
   return invokeCommand("get_resume_command", { sessionId });
-}
-
-export async function trashSession(sessionId: string): Promise<void> {
-  return invokeCommand("trash_session", { sessionId });
-}
-
-export async function listTrash(): Promise<TrashMeta[]> {
-  return invokeCommand("list_trash");
-}
-
-export async function restoreSession(trashId: string): Promise<void> {
-  return invokeCommand("restore_session", { trashId });
-}
-
-export async function emptyTrash(): Promise<void> {
-  return invokeCommand("empty_trash");
-}
-
-export async function permanentDeleteTrash(trashId: string): Promise<void> {
-  return invokeCommand("permanent_delete_trash", { trashId });
-}
-
-export async function trashSessionsBatch(items: string[]): Promise<BatchResult> {
-  return invokeCommand("trash_sessions_batch", { items });
-}
-
-export async function restoreSessionsBatch(items: string[]): Promise<BatchResult> {
-  return invokeCommand("restore_sessions_batch", { items });
-}
-
-export async function permanentDeleteTrashBatch(items: string[]): Promise<BatchResult> {
-  return invokeCommand("permanent_delete_trash_batch", { items });
 }
 
 export async function listRecentSessions(limit: number): Promise<SessionMeta[]> {

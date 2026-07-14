@@ -7,8 +7,6 @@ import { isSelected, toggleSelected } from "@/features/explorer/selection";
 import { getProviderColor } from "@/stores/providerSnapshots";
 import { ProviderDot } from "@/components/icons";
 
-export { collectSessionNodes } from "@/lib/tree-utils";
-
 function ChevronIcon(props: { expanded: boolean }) {
   return (
     <svg

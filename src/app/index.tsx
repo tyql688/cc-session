@@ -15,7 +15,6 @@ const SettingsPanel = lazy(() =>
     default: m.SettingsPanel,
   })),
 );
-const TrashView = lazy(() => import("@/features/trash").then((m) => ({ default: m.TrashView })));
 const FavoritesView = lazy(() =>
   import("@/features/favorites/FavoritesView").then((m) => ({
     default: m.FavoritesView,
@@ -34,7 +33,6 @@ import { KeyboardOverlay } from "@/app/KeyboardOverlay";
 import { Button } from "@/components/ui/button";
 import { Toaster } from "@/components/ui/sonner";
 import {
-  trashSession,
   getChildSessions,
   startRebuildIndex,
   getIndexStats,
@@ -401,12 +399,10 @@ export default function App() {
   }, []);
 
   const filteredTree = tree.filter((node) => !disabledProviders.includes(node.id as Provider));
-  const showExplorer =
-    activeView !== "settings" && activeView !== "trash" && activeView !== "usage" && activeView !== "folderAnalytics";
+  const showExplorer = activeView !== "settings" && activeView !== "usage" && activeView !== "folderAnalytics";
   const showExplorerTree =
     !sidebarCollapsed &&
     activeView !== "settings" &&
-    activeView !== "trash" &&
     activeView !== "favorites" &&
     activeView !== "blocked" &&
     activeView !== "usage" &&
@@ -479,20 +475,10 @@ export default function App() {
                 void sync.syncProviders([provider]).then(() => void loadProviderSnapshots(true));
               }}
               onCollapse={() => setSidebarCollapsed(true)}
-              onDeleteSession={async (id: string) => {
-                try {
-                  await trashSession(id);
-                  closeTab(id);
-                  await sync.refreshTree();
-                } catch (e) {
-                  toastError(String(e));
-                }
-              }}
             />
           )}
           <Suspense fallback={null}>
             {activeView === "settings" && <SettingsPanel />}
-            {activeView === "trash" && <TrashView onRefreshTree={sync.refreshTree} />}
             {activeView === "favorites" && <FavoritesView onOpenSession={openSession} />}
             {activeView === "blocked" && <BlockedView onRefreshTree={sync.refreshTree} />}
             {activeView === "usage" && (
@@ -530,7 +516,6 @@ export default function App() {
               onCloseTabsToRight={closeTabsToRight}
               onSplitToRight={splitToRight}
               onPinTab={pinTab}
-              onRefreshTree={sync.refreshTree}
               tree={filteredTree}
               onOpenSession={openSession}
             />

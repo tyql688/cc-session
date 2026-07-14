@@ -24,7 +24,6 @@ export function EditorArea(props: {
   onCloseTabsToRight: (fromId: string) => void;
   onSplitToRight: (sessionId: string) => void;
   onPinTab: (sessionId: string) => void;
-  onRefreshTree: () => void;
   onOpenSession: (session: SessionRef) => void;
   recentSessions: SessionMeta[] | undefined;
   recentSessionsLoading: boolean;
@@ -96,12 +95,10 @@ export function EditorArea(props: {
                     <SessionView
                       key={session.id}
                       session={session}
-                      // Session commands (resume/export/delete/...) are
-                      // document-level events; only the focused group's active
-                      // tab may respond, or split view double-fires them.
+                      // Session commands are document-level events; only the
+                      // focused group's active tab may respond, or split view
+                      // double-fires them.
                       active={isActive && props.isFocused}
-                      onRefreshTree={props.onRefreshTree}
-                      onCloseTab={props.onTabClose}
                     />
                   )}
                 </div>

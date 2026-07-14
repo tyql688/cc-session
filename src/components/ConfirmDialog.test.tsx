@@ -1,15 +1,15 @@
 import { describe, it, expect, vi } from "vitest";
 import { render, fireEvent } from "@testing-library/react";
-import { ConfirmDialog } from "@/components/ConfirmDialog";
+import { ConfirmDialog } from "./ConfirmDialog";
 
 describe("ConfirmDialog", () => {
   it("renders nothing when closed", () => {
     const { queryByRole } = render(
       <ConfirmDialog
         open={false}
-        title="Delete session"
+        title="Clear index"
         message="Are you sure?"
-        confirmLabel="Delete"
+        confirmLabel="Continue"
         onConfirm={() => {}}
         onCancel={() => {}}
       />,
@@ -21,18 +21,18 @@ describe("ConfirmDialog", () => {
     const { getByRole, getByText } = render(
       <ConfirmDialog
         open={true}
-        title="Delete session"
+        title="Clear index"
         message="Are you sure?"
-        confirmLabel="Delete"
+        confirmLabel="Continue"
         onConfirm={() => {}}
         onCancel={() => {}}
       />,
     );
     const dialog = getByRole("alertdialog");
-    expect(dialog).toBeInTheDocument();
-    expect(getByText("Delete session")).toBeInTheDocument();
-    expect(getByText("Are you sure?")).toBeInTheDocument();
-    expect(getByText("Delete")).toBeInTheDocument();
+    expect(dialog).toBeTruthy();
+    expect(getByText("Clear index")).toBeTruthy();
+    expect(getByText("Are you sure?")).toBeTruthy();
+    expect(getByText("Continue")).toBeTruthy();
   });
 
   it("invokes onConfirm when the confirm button is clicked", () => {
@@ -40,14 +40,14 @@ describe("ConfirmDialog", () => {
     const { getByText } = render(
       <ConfirmDialog
         open={true}
-        title="Delete session"
+        title="Clear index"
         message="Are you sure?"
-        confirmLabel="Delete"
+        confirmLabel="Continue"
         onConfirm={onConfirm}
         onCancel={() => {}}
       />,
     );
-    fireEvent.click(getByText("Delete"));
+    fireEvent.click(getByText("Continue"));
     expect(onConfirm).toHaveBeenCalledTimes(1);
   });
 
@@ -55,15 +55,15 @@ describe("ConfirmDialog", () => {
     const { getByText } = render(
       <ConfirmDialog
         open={true}
-        title="Delete session"
+        title="Clear index"
         message="Are you sure?"
-        confirmLabel="Delete"
+        confirmLabel="Continue"
         danger={true}
         onConfirm={() => {}}
         onCancel={() => {}}
       />,
     );
     // The destructive variant carries the destructive token classes.
-    expect(getByText("Delete").className).toContain("destructive");
+    expect(getByText("Continue").className).toContain("destructive");
   });
 });

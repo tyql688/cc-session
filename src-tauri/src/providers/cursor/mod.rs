@@ -27,10 +27,7 @@ use std::path::{Path, PathBuf};
 use rayon::prelude::*;
 
 use crate::models::{Provider, SessionMeta};
-use crate::provider::{
-    per_file_deletion_plan, DeletionPlan, LoadedSession, ParsedSession, ProviderError,
-    SessionProvider,
-};
+use crate::provider::{LoadedSession, ParsedSession, ProviderError, SessionProvider};
 use crate::provider_utils::project_name_from_path;
 
 pub(crate) struct Descriptor;
@@ -297,8 +294,8 @@ impl CursorProvider {
 }
 
 /// True when `source_path` points at an ACP-mode session's
-/// `~/.cursor/acp-sessions/<id>/store.db`. Used to route load_messages
-/// and scan_source through the dedicated reconstructor.
+/// `~/.cursor/acp-sessions/<id>/store.db`. Used to route `load_messages`
+/// through the dedicated reconstructor.
 fn is_acp_store_path(source_path: &str) -> bool {
     let normalised = source_path.replace('\\', "/");
     normalised.contains("/.cursor/acp-sessions/") && normalised.ends_with("/store.db")
@@ -417,35 +414,6 @@ impl SessionProvider for CursorProvider {
         Ok(sessions)
     }
 
-    fn scan_source(&self, source_path: &str) -> Result<Vec<ParsedSession>, ProviderError> {
-        let path = Path::new(source_path);
-        if !path.is_file() {
-            return Ok(Vec::new());
-        }
-        // ACP store.db paths route through the dedicated ACP parser.
-        if is_acp_store_path(source_path) {
-            if let Some(session) = self.parse_acp_session(&path.to_path_buf()) {
-                return Ok(vec![session]);
-            }
-            return Ok(Vec::new());
-        }
-
-        let stores = self.collect_cli_store_paths();
-        let Some(mut session) = parser::parse_session(path, None) else {
-            return Ok(Vec::new());
-        };
-        let lookup = session
-            .meta
-            .parent_id
-            .as_deref()
-            .unwrap_or(&session.meta.id);
-        if !stores.contains_key(lookup) {
-            return Ok(Vec::new()); // IDE session — skip.
-        }
-        self.apply_store_metadata(&mut session, &stores);
-        Ok(vec![session])
-    }
-
     fn load_messages(
         &self,
         session_id: &str,
@@ -466,8 +434,8 @@ impl SessionProvider for CursorProvider {
 
         // Reapply store.db image extraction so `[Image #N]` placeholders
         // in the transcript become `[Image: source: <cache-path>]`
-        // markers the frontend can render. scan_all/scan_source go
-        // through `apply_store_metadata` for the same reason; this is
+        // markers the frontend can render. `scan_all` goes through
+        // `apply_store_metadata` for the same reason; this is
         // the matching path for the on-demand session-open flow.
         //
         // For a subagent transcript, `session_id` is the subagent's id
@@ -485,69 +453,11 @@ impl SessionProvider for CursorProvider {
 
         Ok(LoadedSession::from_messages(messages, warnings))
     }
-
-    fn deletion_plan(&self, meta: &SessionMeta, children: &[SessionMeta]) -> DeletionPlan {
-        // Parent cleanup: the session dir (which only holds subagents/ +
-        // the main jsonl after trash). The `store.db` directory is
-        // intentionally left alone — `cleanup_on_permanent_delete`
-        // removes it on hard-delete, not on trash, so a restored
-        // session still resolves as CLI on the next scan.
-        let cleanup_dirs = PathBuf::from(&meta.source_path)
-            .parent()
-            .filter(|dir| dir.is_dir())
-            .map(Path::to_path_buf)
-            .into_iter()
-            .collect();
-        per_file_deletion_plan(meta, children, cleanup_dirs)
-    }
-
-    fn cleanup_on_permanent_delete(&self, session_id: &str) {
-        // On permanent delete, also remove the store.db directory so
-        // future scans don't keep treating this id as a CLI session.
-        let chats = self.chats_dir();
-        if let Ok(buckets) = std::fs::read_dir(&chats) {
-            for bucket in buckets.flatten() {
-                let candidate = bucket.path().join(session_id);
-                if candidate.is_dir() {
-                    if let Err(error) = std::fs::remove_dir_all(&candidate) {
-                        log::warn!(
-                            "failed to remove Cursor store.db dir '{}': {error}",
-                            candidate.display()
-                        );
-                    }
-                }
-            }
-        }
-
-        // Drop any inline images we extracted from this session into
-        // the shared image cache. Filenames are prefixed with
-        // `cursor-<sessionId>-` so we can clean them up surgically.
-        if let Some(cache_dir) =
-            crate::services::image_cache::image_cache_data_dir().map(|d| d.join("images"))
-        {
-            if let Ok(entries) = std::fs::read_dir(&cache_dir) {
-                let prefix = format!("cursor-{session_id}-");
-                for entry in entries.flatten() {
-                    let path = entry.path();
-                    let name = path.file_name().and_then(|n| n.to_str()).unwrap_or("");
-                    if name.starts_with(&prefix) {
-                        if let Err(error) = std::fs::remove_file(&path) {
-                            log::warn!(
-                                "failed to remove Cursor cached image '{}': {error}",
-                                path.display()
-                            );
-                        }
-                    }
-                }
-            }
-        }
-    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::provider::FileAction;
     use rusqlite::Connection;
     use serde_json::{json, Value};
 
@@ -710,44 +620,6 @@ mod tests {
     }
 
     #[test]
-    fn scan_source_filters_ide_session() {
-        let dir = tempfile::tempdir().unwrap();
-        let path = write_main_transcript(
-            dir.path(),
-            "TestProj",
-            "ide-only",
-            r#"{"role":"user","message":{"content":[{"type":"text","text":"<user_query>hi</user_query>"}]}}"#,
-        );
-        let provider = CursorProvider::with_home(dir.path().to_path_buf());
-        let sessions = provider
-            .scan_source(path.to_string_lossy().as_ref())
-            .unwrap();
-        assert!(sessions.is_empty());
-    }
-
-    #[test]
-    fn scan_source_returns_single_cli_session() {
-        let dir = tempfile::tempdir().unwrap();
-        let sid = "cli-source";
-        let workspace = dir.path().join("ws");
-        std::fs::create_dir_all(&workspace).unwrap();
-        write_store_db(dir.path(), sid, workspace.to_string_lossy().as_ref());
-        let path = write_main_transcript(
-            dir.path(),
-            "TestProj",
-            sid,
-            r#"{"role":"user","message":{"content":[{"type":"text","text":"<user_query>hi</user_query>"}]}}
-{"role":"assistant","message":{"content":[{"type":"text","text":"ok"}]}}"#,
-        );
-        let provider = CursorProvider::with_home(dir.path().to_path_buf());
-        let sessions = provider
-            .scan_source(path.to_string_lossy().as_ref())
-            .unwrap();
-        assert_eq!(sessions.len(), 1);
-        assert_eq!(sessions[0].meta.id, sid);
-    }
-
-    #[test]
     fn acp_session_anchors_timestamps_to_meta_created_at_not_file_mtime() {
         // Cursor's ACP agent holds a long-lived SQLite WAL connection
         // that bumps store.db's mtime on idle checkpoints. We must use
@@ -788,37 +660,5 @@ mod tests {
             sessions.iter().all(|s| s.meta.id != "acp-no-created"),
             "ACP session without meta.createdAt must be skipped"
         );
-    }
-
-    #[test]
-    fn deletion_plan_for_subagent_only_removes_its_file() {
-        use crate::models::SessionMeta;
-        let provider = CursorProvider::with_home(PathBuf::from("/tmp/unused"));
-        let meta = SessionMeta {
-            id: "sub-1".into(),
-            provider: Provider::Cursor,
-            title: "sub".into(),
-            project_path: String::new(),
-            project_name: String::new(),
-            created_at: 0,
-            updated_at: 0,
-            message_count: 1,
-            file_size_bytes: 0,
-            source_path: "/tmp/x.jsonl".into(),
-            is_sidechain: true,
-            variant_name: None,
-            model: None,
-            cc_version: None,
-            git_branch: None,
-            parent_id: Some("parent-1".into()),
-            input_tokens: 0,
-            output_tokens: 0,
-            cache_read_tokens: 0,
-            cache_write_tokens: 0,
-        };
-        let plan = provider.deletion_plan(&meta, &[]);
-        assert_eq!(plan.file_action, FileAction::Remove);
-        assert!(plan.child_plans.is_empty());
-        assert!(plan.cleanup_dirs.is_empty());
     }
 }

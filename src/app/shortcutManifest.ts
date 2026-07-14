@@ -43,7 +43,6 @@ export const SHORTCUT_MANIFEST: ShortcutCategory[] = [
       { keys: formatShortcut("R", { shift: true }), descKey: "keyboard.resumeSession" },
       { keys: formatShortcut("E", { shift: true }), descKey: "keyboard.exportSession" },
       { keys: formatShortcut("D"), descKey: "keyboard.toggleFavorite" },
-      { keys: formatShortcut("⌫"), descKey: "keyboard.deleteSession" },
     ],
   },
   {

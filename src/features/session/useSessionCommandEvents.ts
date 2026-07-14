@@ -6,7 +6,6 @@ export interface UseSessionCommandEventsOptions {
   onResume: () => void;
   onExport: () => void;
   onFavorite: () => void;
-  onDelete: () => void;
   onSessionSearch: () => void;
   onFindNext: () => void;
   onFindPrev: () => void;
@@ -27,7 +26,6 @@ export function useSessionCommandEvents(opts: UseSessionCommandEventsOptions): v
       [SESSION_COMMAND_EVENTS.resume, () => runIfActive(optsRef.current.onResume)],
       [SESSION_COMMAND_EVENTS.exportSession, () => runIfActive(optsRef.current.onExport)],
       [SESSION_COMMAND_EVENTS.favorite, () => runIfActive(optsRef.current.onFavorite)],
-      [SESSION_COMMAND_EVENTS.delete, () => runIfActive(optsRef.current.onDelete)],
       [SESSION_COMMAND_EVENTS.sessionSearch, () => runIfActive(optsRef.current.onSessionSearch)],
       [SESSION_COMMAND_EVENTS.findNext, () => runIfActive(optsRef.current.onFindNext)],
       [SESSION_COMMAND_EVENTS.findPrev, () => runIfActive(optsRef.current.onFindPrev)],

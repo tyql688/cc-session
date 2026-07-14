@@ -7,7 +7,7 @@ enforcement-mapped Rust details.
 Every rule lists its **enforcing tool**:
 
 | Tag | Meaning |
-|-----|---------|
+| ----- | --------- |
 | `fmt` | `cargo fmt --check` (config in `rustfmt.toml`) |
 | `clippy` | `cargo clippy --all-targets --all-features -- -D warnings` (config in `clippy.toml`) |
 | `compiler` | `rustc` / exhaustiveness — a violation fails to compile |
@@ -74,8 +74,8 @@ let value = row.get(idx).unwrap_or_default();
 
 Update every typed boundary: backend provider enum, provider catalog and
 exhaustive entry match, Tauri asset-scope allowlist, frontend provider type,
-theme/style fallback, provider snapshot fallback, resume/trash/indexing behavior,
-and tests. Compile errors list most but not all. — `compiler` (partial) / `review`
+theme/style fallback, provider snapshot fallback, resume/indexing behavior, and
+tests. Compile errors list most but not all. — `compiler` (partial) / `review`
 
 ---
 

@@ -7,8 +7,7 @@ use serde::Deserialize;
 
 use crate::models::{Provider, SessionMeta};
 use crate::provider::{
-    DeletionPlan, LoadedSession, ParsedSession, ProviderError, ScanOutcome, SessionProvider,
-    SourceState,
+    LoadedSession, ParsedSession, ProviderError, ScanOutcome, SessionProvider, SourceState,
 };
 use crate::providers::claude::parser;
 
@@ -323,27 +322,6 @@ impl SessionProvider for CcMirrorProvider {
             parsed,
             unchanged_source_paths,
         })
-    }
-
-    fn scan_source(&self, source_path: &str) -> Result<Vec<ParsedSession>, ProviderError> {
-        let path = PathBuf::from(source_path);
-        let variant = self.variant_by_path(source_path).cloned();
-        let related_paths = crate::provider::jsonl_subagent_related_paths(&path);
-        Ok(related_paths
-            .par_iter()
-            .filter_map(|path| {
-                let mut parsed = parser::parse_session_file(path)?;
-                parsed.meta.provider = Provider::CcMirror;
-                if let Some(variant) = &variant {
-                    Self::apply_variant(&mut parsed, variant);
-                }
-                Some(parsed)
-            })
-            .collect())
-    }
-
-    fn deletion_plan(&self, meta: &SessionMeta, children: &[SessionMeta]) -> DeletionPlan {
-        crate::provider::jsonl_subagents_deletion_plan(meta, children)
     }
 
     fn load_messages(

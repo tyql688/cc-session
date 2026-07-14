@@ -37,15 +37,6 @@ function BlockedIcon() {
   );
 }
 
-function TrashIcon() {
-  return (
-    <svg width="20" height="20" fill="none" stroke="currentColor" strokeWidth="1.5" viewBox="0 0 24 24">
-      <polyline points="3 6 5 6 21 6" />
-      <path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2" />
-    </svg>
-  );
-}
-
 function UsageIcon() {
   return (
     <svg width="20" height="20" fill="none" stroke="currentColor" strokeWidth="1.5" viewBox="0 0 24 24">
@@ -77,7 +68,6 @@ export function ActivityBar(props: { activeView: string; onViewChange: (v: strin
     { id: "usage", label: t("usage.title"), icon: UsageIcon },
     { id: "folderAnalytics", label: t("usage.folderAnalyticsTitle"), icon: FolderAnalyticsIcon },
     { id: "blocked", label: t("settings.blockedFolders"), icon: BlockedIcon },
-    { id: "trash", label: t("trash.title"), icon: TrashIcon },
     {
       id: "settings",
       label: t("settings.title"),

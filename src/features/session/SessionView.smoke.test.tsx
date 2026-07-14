@@ -1,11 +1,12 @@
 import { cleanup, fireEvent, render, waitFor } from "@testing-library/react";
+import "@testing-library/jest-dom/vitest";
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { StrictMode } from "react";
 
-import type { Message, SessionMeta } from "@/lib/types";
-import { SESSION_COMMAND_EVENTS } from "@/lib/session-command-events";
-import { processMessages } from "@/features/session/hooks";
-import { findFirstMatchingEntryIndex } from "@/features/session/search-utils";
+import type { Message, SessionMeta } from "../../lib/types";
+import { SESSION_COMMAND_EVENTS } from "../../lib/session-command-events";
+import { processMessages } from "./hooks";
+import { findFirstMatchingEntryIndex } from "./search-utils";
 
 const LOAD_CANCELED_SENTINEL = "__sessionview_load_canceled__";
 
@@ -161,7 +162,7 @@ vi.mock("@tauri-apps/api/event", () => ({
   listen: vi.fn(async () => () => {}),
 }));
 
-import { SessionView } from "@/features/session/index";
+import { SessionView } from "./index";
 
 beforeAll(() => {
   // happy-dom lacks these browser-only APIs that child components touch.
@@ -193,7 +194,7 @@ beforeAll(() => {
     configurable: true,
     get() {
       if (!this.classList?.contains("session-messages")) return 0;
-      const inner = this.querySelector<HTMLElement>(".session-messages-inner");
+      const inner = this.querySelector(".session-messages-inner") as HTMLElement | null;
       const height = inner ? Number.parseInt(inner.style.height, 10) : 0;
       return Number.isFinite(height) ? height : 0;
     },
@@ -249,8 +250,6 @@ describe("SessionView smoke", () => {
           project_path: META.project_path,
         }}
         active={true}
-        onRefreshTree={() => {}}
-        onCloseTab={() => {}}
       />,
     );
 
@@ -284,8 +283,6 @@ describe("SessionView smoke", () => {
             project_path: META.project_path,
           }}
           active={true}
-          onRefreshTree={() => {}}
-          onCloseTab={() => {}}
         />
       </StrictMode>,
     );
@@ -320,8 +317,6 @@ describe("SessionView smoke", () => {
           project_path: META.project_path,
         }}
         active={true}
-        onRefreshTree={() => {}}
-        onCloseTab={() => {}}
       />,
     );
 
@@ -356,8 +351,6 @@ describe("SessionView smoke", () => {
           project_path: META.project_path,
         }}
         active={true}
-        onRefreshTree={() => {}}
-        onCloseTab={() => {}}
       />,
     );
 
@@ -407,8 +400,6 @@ describe("SessionView smoke", () => {
           project_path: META.project_path,
         }}
         active={true}
-        onRefreshTree={() => {}}
-        onCloseTab={() => {}}
       />,
     );
 
@@ -468,8 +459,6 @@ describe("SessionView smoke", () => {
           project_path: META.project_path,
         }}
         active={true}
-        onRefreshTree={() => {}}
-        onCloseTab={() => {}}
       />,
     );
 
@@ -543,8 +532,6 @@ describe("SessionView smoke", () => {
           project_path: META.project_path,
         }}
         active={true}
-        onRefreshTree={() => {}}
-        onCloseTab={() => {}}
       />,
     );
 

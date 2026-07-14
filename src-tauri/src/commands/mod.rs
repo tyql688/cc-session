@@ -4,7 +4,6 @@ mod session_tail;
 mod sessions;
 mod settings;
 mod terminal;
-pub mod trash;
 mod usage;
 
 use std::collections::{HashMap, HashSet};
@@ -53,7 +52,6 @@ pub use search::*;
 pub use sessions::*;
 pub use settings::*;
 pub use terminal::*;
-pub use trash::*;
 pub use usage::*;
 
 pub(crate) fn load_session_detail_for_tests(

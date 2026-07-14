@@ -170,19 +170,6 @@ impl Database {
         Ok(out)
     }
 
-    pub(crate) fn count_sessions_for_source(
-        &self,
-        provider_key: &str,
-        source_path: &str,
-    ) -> Result<u64, rusqlite::Error> {
-        let conn = self.lock_read()?;
-        conn.query_row(
-            "SELECT COUNT(*) FROM sessions WHERE provider = ?1 AND source_path = ?2",
-            params![provider_key, source_path],
-            |row| row.get(0),
-        )
-    }
-
     pub(crate) fn provider_session_counts(&self) -> Result<HashMap<String, u64>, rusqlite::Error> {
         let conn = self.lock_read()?;
         let mut stmt = conn.prepare("SELECT provider, COUNT(*) FROM sessions GROUP BY provider")?;

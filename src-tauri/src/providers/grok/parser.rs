@@ -185,8 +185,8 @@ fn read_summary(summary_path: &Path) -> Option<GrokSummary> {
 /// Parse one session from its `chat_history.jsonl` path. Returns `None`
 /// (with a logged warning) when the transcript is empty or unreadable.
 ///
-/// A missing `summary.json` is survivable: trash-restore brings back only the
-/// chat file, and the session id / cwd are also encoded in the path
+/// A missing `summary.json` is survivable because the session id / cwd are
+/// also encoded in the path
 /// (`<percent-encoded-cwd>/<session-id>/chat_history.jsonl`).
 pub(crate) fn parse_session_file(chat_path: &Path) -> Option<ParsedSession> {
     let session_dir = chat_path.parent()?;

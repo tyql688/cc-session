@@ -1,12 +1,12 @@
 use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 
-use crate::models::{Provider, SessionMeta, TrashMeta};
+use crate::models::Provider;
 use crate::pricing::PricingCatalog;
 
 use super::{
-    default_compute_token_stats_from_messages, infer_restore_action, DeletionPlan, LoadedSession,
-    ParsedSession, ProviderError, RestoreAction, ScanOutcome, SourceState, TokenStatRow,
+    default_compute_token_stats_from_messages, LoadedSession, ParsedSession, ProviderError,
+    ScanOutcome, SourceState, TokenStatRow,
 };
 
 /// Static metadata for a provider. Implemented by zero-sized descriptor structs
@@ -64,13 +64,6 @@ pub trait SessionProvider: Send + Sync {
         })
     }
 
-    fn scan_source(&self, source_path: &str) -> Result<Vec<ParsedSession>, ProviderError> {
-        Ok(self
-            .scan_all()?
-            .into_iter()
-            .filter(|session| session.meta.source_path == source_path)
-            .collect())
-    }
     fn load_messages(
         &self,
         session_id: &str,
@@ -92,31 +85,4 @@ pub trait SessionProvider: Send + Sync {
     ) -> Vec<TokenStatRow> {
         default_compute_token_stats_from_messages(parsed, pricing_catalog, seen_hashes)
     }
-
-    /// Return a deletion plan for this session.
-    /// Provider decides all file actions; command layer executes mechanically.
-    fn deletion_plan(&self, meta: &SessionMeta, children: &[SessionMeta]) -> DeletionPlan;
-
-    /// Determine how to restore a trashed session.
-    /// Default: MoveBack for dedicated files, UndoSharedDeletion for shared.
-    /// If neither applies (e.g. failed move before metadata write), do no-op.
-    fn restore_action(&self, entry: &TrashMeta) -> RestoreAction {
-        infer_restore_action(entry)
-    }
-
-    /// Permanently remove session data from a shared source (DB/file).
-    /// Called by `execute_purge` when `FileAction::Shared`.
-    /// Default: no-op (dedicated-file providers don't need this).
-    fn purge_from_source(
-        &self,
-        _source_path: &str,
-        _session_id: &str,
-    ) -> Result<(), ProviderError> {
-        Ok(())
-    }
-
-    /// Additional cleanup when a session is permanently deleted (empty trash / permanent delete).
-    /// Called after the main file and directory cleanup.
-    /// Default: no-op. Override to clean up provider-specific external data.
-    fn cleanup_on_permanent_delete(&self, _session_id: &str) {}
 }

@@ -60,7 +60,7 @@ across `src-tauri/src/{providers,provider,indexer.rs,db,models.rs}` and
   for its own fields. Provider identity and metadata are bridged through a
   `Provider` enum + descriptor (`provider/`), so **adding a provider is a
   cross-layer change**, not just a parser: enum + catalog + Tauri asset-scope
-  allowlist + frontend provider type + theme/snapshot fallback + resume/trash
+  allowlist + frontend provider type + theme/snapshot fallback + resume
   behavior + tests. Exhaustive `match` on `Provider` makes the compiler surface
   most of these.
 - **Indexing** (`indexer.rs`) is incremental: providers short-circuit unchanged

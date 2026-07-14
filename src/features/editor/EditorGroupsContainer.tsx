@@ -22,7 +22,6 @@ export function EditorGroupsContainer(props: {
   onCloseTabsToRight: (fromId: string) => void;
   onSplitToRight: (sessionId: string) => void;
   onPinTab: (sessionId: string) => void;
-  onRefreshTree: () => void;
   tree: TreeNode[];
   onOpenSession: (session: SessionRef) => void;
 }) {
@@ -178,7 +177,6 @@ export function EditorGroupsContainer(props: {
             onCloseTabsToRight={props.onCloseTabsToRight}
             onSplitToRight={props.onSplitToRight}
             onPinTab={props.onPinTab}
-            onRefreshTree={props.onRefreshTree}
             onOpenSession={props.onOpenSession}
             recentSessions={recentSessions}
             recentSessionsLoading={recentSessionsLoading}

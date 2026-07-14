@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
-import { buildFavoritesTree, buildTrashTree } from "@/lib/tree-builders";
-import type { SessionMeta, TrashMeta } from "@/lib/types";
+import { buildFavoritesTree } from "./tree-builders";
+import type { SessionMeta } from "./types";
 
 function makeSession(overrides: Partial<SessionMeta> = {}): SessionMeta {
   return {
@@ -19,20 +19,6 @@ function makeSession(overrides: Partial<SessionMeta> = {}): SessionMeta {
     output_tokens: 0,
     cache_read_tokens: 0,
     cache_write_tokens: 0,
-    ...overrides,
-  };
-}
-
-function makeTrashItem(overrides: Partial<TrashMeta> = {}): TrashMeta {
-  return {
-    id: "trash-1",
-    provider: "claude",
-    title: "Trashed Session",
-    original_path: "/home/user/.claude/projects/myproject/session.jsonl",
-    trashed_at: 1711800000,
-    trash_file: "/trash/trash-1.jsonl",
-    project_name: "myproject",
-    variant_name: undefined,
     ...overrides,
   };
 }
@@ -134,92 +120,5 @@ describe("buildFavoritesTree", () => {
     expect(tree[0].node_type).toBe("provider");
     expect(tree[0].children).toHaveLength(2);
     expect(tree[0].children[0].node_type).toBe("project");
-  });
-});
-
-describe("buildTrashTree", () => {
-  const labels = { unknown: "Unknown", untitled: "Untitled" };
-
-  it("returns [] for empty input", () => {
-    expect(buildTrashTree([], labels)).toEqual([]);
-  });
-
-  it("derives project from provider-aware original_path fallback", () => {
-    const items = [
-      makeTrashItem({
-        id: "t1",
-        project_name: "",
-        original_path: "/home/user/.claude/projects/myproject/session.jsonl",
-      }),
-    ];
-    const tree = buildTrashTree(items, labels);
-
-    expect(tree).toHaveLength(1);
-    expect(tree[0].node_type).toBe("provider");
-    expect(tree[0].children).toHaveLength(1);
-    expect(tree[0].children[0].label).toBe("myproject");
-    expect(tree[0].children[0].children).toHaveLength(1);
-    expect(tree[0].children[0].children[0].id).toBe("t1");
-  });
-
-  it("does not treat codex session ids as project names", () => {
-    const items = [
-      makeTrashItem({
-        id: "t1",
-        provider: "codex",
-        project_name: "",
-        original_path:
-          "/Users/test/.codex/sessions/2026/05/09/rollout-2026-05-09T12-00-00-abc123.jsonl",
-      }),
-    ];
-
-    const tree = buildTrashTree(items, labels);
-    expect(tree[0].children[0].label).toBe("Unknown");
-  });
-
-  it("falls back to unknown for kimi legacy entries", () => {
-    const items = [
-      makeTrashItem({
-        id: "t1",
-        provider: "kimi",
-        project_name: "",
-        original_path:
-          "/Users/test/.kimi/sessions/d43b8ea075dfbc269128c50a437f3627/de8cd3a2-30c1-40bf-ad19-f43acc708caa/wire.jsonl",
-      }),
-    ];
-
-    const tree = buildTrashTree(items, labels);
-    expect(tree[0].children[0].label).toBe("Unknown");
-  });
-
-  it("falls back to unknown for codex legacy entries", () => {
-    const items = [
-      makeTrashItem({
-        id: "t1",
-        provider: "codex",
-        project_name: "",
-        original_path:
-          "/Users/test/.codex/sessions/2026/04/08/rollout-2026-04-08T13-13-10-019d6b82-3dd6-7981-a67b-6b13b9166661.jsonl",
-      }),
-    ];
-
-    const tree = buildTrashTree(items, labels);
-    expect(tree[0].children[0].label).toBe("Unknown");
-  });
-
-  it("groups cc-mirror trash entries as top-level variant groups", () => {
-    const items = [
-      makeTrashItem({
-        id: "t1",
-        provider: "cc-mirror",
-        variant_name: "cczai",
-        project_name: "proj-a",
-      }),
-    ];
-
-    const tree = buildTrashTree(items, labels);
-    expect(tree[0].label).toBe("cczai");
-    expect(tree[0].node_type).toBe("provider");
-    expect(tree[0].children[0].label).toBe("proj-a");
   });
 });

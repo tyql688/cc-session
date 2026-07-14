@@ -842,122 +842,6 @@ fn kimi_subagent_is_separate_session_with_parent_link() {
 }
 
 #[test]
-fn kimi_deletion_plan_trashes_parent_and_subagents_individually() {
-    use sessionview_lib::provider::FileAction;
-    let provider = kimi_fixture_provider();
-    let parent = parse_fixture_session(NATIVE_SUBAGENT_PARENT_ID);
-    let child = parse_fixture_session(&format!("{NATIVE_SUBAGENT_PARENT_ID}:agent-0"));
-    let plan = provider.deletion_plan(&parent.meta, std::slice::from_ref(&child.meta));
-    // Parent file goes to trash as its own entry.
-    assert_eq!(plan.file_action, FileAction::Remove);
-    // Each child wire.jsonl gets a Remove plan so it lands in trash
-    // individually and can be restored.
-    assert_eq!(plan.child_plans.len(), 1);
-    assert_eq!(plan.child_plans[0].file_action, FileAction::Remove);
-    assert_eq!(plan.child_plans[0].id, child.meta.id);
-    // After moves, the session_dir (state.json + empty agents/) gets
-    // wiped so the source tree stays consistent.
-    assert_eq!(plan.cleanup_dirs.len(), 1);
-    assert!(plan.cleanup_dirs[0]
-        .to_string_lossy()
-        .ends_with(NATIVE_SUBAGENT_PARENT_ID));
-}
-
-#[test]
-fn kimi_deletion_plan_for_parent_skips_whole_session_dir_when_unknown_agent_present() {
-    use sessionview_lib::provider::FileAction;
-    // Build an isolated session tree in a TempDir so we can drop a
-    // stray un-indexed agent next to the parent's `main` without
-    // racing the shared fixture used by other tests. Mirrors the
-    // real on-disk layout: <root>/sessions/<wd>/<session>/agents/<agent>/wire.jsonl.
-    //
-    // `agent-stray` exists ONLY as an empty directory — no wire.jsonl
-    // — so scan_all doesn't pick it up as a (phantom) session, but
-    // deletion_plan's `read_dir(agents/)` still sees it and must
-    // refuse to nuke the whole session_dir.
-    let tmp = TempDir::new().unwrap();
-    let session_dir = tmp
-        .path()
-        .join("sessions")
-        .join("wd_demo")
-        .join("session_toctou");
-    std::fs::create_dir_all(session_dir.join("agents").join("main")).unwrap();
-    std::fs::create_dir_all(session_dir.join("agents").join("agent-0")).unwrap();
-    std::fs::create_dir_all(session_dir.join("agents").join("agent-stray")).unwrap();
-    let metadata_line =
-        r#"{"type":"metadata","protocol_version":"1.0","created_at":1779700000000}"#;
-    let user_line = r#"{"type":"context.append_message","message":{"role":"user","content":[{"type":"text","text":"hi"}],"toolCalls":[],"origin":{"kind":"user"}}}"#;
-    std::fs::write(
-        session_dir.join("agents/main/wire.jsonl"),
-        format!("{metadata_line}\n{user_line}\n"),
-    )
-    .unwrap();
-    std::fs::write(
-        session_dir.join("agents/agent-0/wire.jsonl"),
-        format!("{metadata_line}\n{user_line}\n"),
-    )
-    .unwrap();
-    std::fs::write(
-        session_dir.join("state.json"),
-        r#"{
-            "title": "toctou",
-            "agents": {
-                "main": {"type":"main","parentAgentId":null},
-                "agent-0": {"type":"sub","parentAgentId":"main"}
-            }
-        }"#,
-    )
-    .unwrap();
-
-    let provider = KimiProvider::with_root(tmp.path().to_path_buf());
-    let sessions = provider.scan_all().expect("scan");
-    let parent = sessions
-        .iter()
-        .find(|s| !s.meta.is_sidechain)
-        .expect("parent");
-    let child = sessions
-        .iter()
-        .find(|s| s.meta.is_sidechain)
-        .expect("known child");
-    let plan = provider.deletion_plan(&parent.meta, std::slice::from_ref(&child.meta));
-
-    assert_eq!(plan.file_action, FileAction::Remove);
-    // Cleanup must target only main + known children, never the
-    // session_dir wholesale (which would destroy agent-stray). Compare
-    // file_name() rather than path suffix to stay platform-agnostic
-    // (Windows uses `\`, not `/`).
-    for dir in &plan.cleanup_dirs {
-        let name = dir
-            .file_name()
-            .and_then(|n| n.to_str())
-            .expect("named cleanup dir");
-        assert!(
-            name == "main" || name == "agent-0",
-            "unexpected cleanup target {}",
-            dir.display()
-        );
-    }
-    assert!(plan
-        .cleanup_dirs
-        .iter()
-        .all(|d| d.file_name().and_then(|n| n.to_str()) != Some("session_toctou")));
-}
-
-#[test]
-fn kimi_deletion_plan_for_subagent_only_removes_its_own_dir() {
-    use sessionview_lib::provider::FileAction;
-    let provider = kimi_fixture_provider();
-    let child = parse_fixture_session(&format!("{NATIVE_SUBAGENT_PARENT_ID}:agent-0"));
-    let plan = provider.deletion_plan(&child.meta, &[]);
-    assert_eq!(plan.file_action, FileAction::Remove);
-    assert!(plan.child_plans.is_empty());
-    // cleanup_dirs targets the agent's own folder only; the parent
-    // session dir must NOT be touched when a subagent is removed solo.
-    assert_eq!(plan.cleanup_dirs.len(), 1);
-    assert!(plan.cleanup_dirs[0].to_string_lossy().ends_with("agent-0"));
-}
-
-#[test]
 fn kimi_migrated_session_format_a_basic_parse() {
     let s = parse_fixture_session(LEGACY_MIGRATED_ID);
     assert_eq!(s.meta.title, "Migrated legacy");
@@ -2377,30 +2261,6 @@ fn grok_parent_surfaces_child_session_ids_and_agent_id_metadata() {
 }
 
 #[test]
-fn grok_deletion_plan_trashes_children_and_sweeps_both_session_dirs() {
-    use sessionview_lib::provider::FileAction;
-
-    let provider = grok_fixture_provider();
-    let parent = parse_grok_fixture_session(GROK_BASIC_ID);
-    let child = parse_grok_fixture_session(GROK_CHILD_ID);
-
-    let plan = provider.deletion_plan(&parent.meta, std::slice::from_ref(&child.meta));
-    assert_eq!(plan.file_action, FileAction::Remove);
-    assert_eq!(plan.child_plans.len(), 1);
-    assert_eq!(plan.child_plans[0].id, GROK_CHILD_ID);
-    assert_eq!(plan.child_plans[0].file_action, FileAction::Remove);
-    let parent_dir = PathBuf::from(&parent.meta.source_path)
-        .parent()
-        .unwrap()
-        .to_path_buf();
-    let child_dir = PathBuf::from(&child.meta.source_path)
-        .parent()
-        .unwrap()
-        .to_path_buf();
-    assert_eq!(plan.cleanup_dirs, vec![parent_dir, child_dir]);
-}
-
-#[test]
 fn grok_turn_usage_attached_to_final_assistant_message() {
     let session = parse_grok_fixture_session(GROK_BASIC_ID);
     let closing = session
@@ -2600,9 +2460,9 @@ fn grok_compacted_session_reconstructs_history_from_updates() {
 }
 
 #[test]
-fn grok_restored_session_parses_without_summary_json() {
-    // Trash-restore brings back only chat_history.jsonl; id and cwd are
-    // recovered from the path (dir name / percent-encoded parent dir).
+fn grok_session_parses_without_summary_json() {
+    // The id and cwd can be recovered from the path when summary.json is
+    // unavailable (dir name / percent-encoded parent dir).
     let tmp = tempfile::tempdir().unwrap();
     let session_dir = tmp
         .path()
@@ -2620,7 +2480,7 @@ fn grok_restored_session_parses_without_summary_json() {
     .unwrap();
 
     let provider = GrokProvider::with_root(tmp.path().to_path_buf());
-    let sessions = provider.scan_all().expect("scan restored session");
+    let sessions = provider.scan_all().expect("scan session");
     assert_eq!(sessions.len(), 1);
     let meta = &sessions[0].meta;
     assert_eq!(meta.id, "01900000-0000-7000-8000-00000000000f");

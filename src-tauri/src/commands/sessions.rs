@@ -9,11 +9,11 @@ use crate::db::Database;
 use crate::error::{CommandError, CommandResult};
 use crate::models::{Message, Provider, SessionDetail, SessionMeta, TokenTotals};
 use crate::services::load_cancel;
+use crate::services::load_session_meta;
 use crate::services::session_view::{
     build_session_turn_outline, session_window_bounds, subagent_meta_title, with_load_guard,
     LoadRequest, SessionTurnOutline,
 };
-use crate::services::{load_session_meta, SessionLifecycleService};
 
 use super::session_tail::try_tail_fast_path;
 use super::AppState;
@@ -372,17 +372,6 @@ pub async fn get_child_session_counts(
             .db
             .child_session_counts(&parent_ids)
             .context("failed to load child session counts")
-    })
-    .await
-    .context("task join error")?
-    .map_err(CommandError::from)
-}
-
-#[tauri::command]
-pub async fn delete_session(session_id: String, state: State<'_, AppState>) -> CommandResult<()> {
-    let state = state.inner().clone();
-    tokio::task::spawn_blocking(move || {
-        SessionLifecycleService::new(&state.db).purge_session(&session_id)
     })
     .await
     .context("task join error")?

@@ -8,10 +8,10 @@ use rayon::prelude::*;
 
 use std::collections::HashMap;
 
-use crate::models::{Provider, SessionMeta};
+use crate::models::Provider;
 use crate::provider::{
-    partition_files_by_freshness, per_file_deletion_plan, DeletionPlan, LoadedSession,
-    ParsedSession, ProviderError, ScanOutcome, SessionProvider, SourceState,
+    partition_files_by_freshness, LoadedSession, ParsedSession, ProviderError, ScanOutcome,
+    SessionProvider, SourceState,
 };
 
 pub(crate) struct Descriptor;
@@ -152,20 +152,6 @@ impl SessionProvider for PiProvider {
         })
     }
 
-    fn scan_source(&self, source_path: &str) -> Result<Vec<ParsedSession>, ProviderError> {
-        let path = PathBuf::from(source_path);
-        if !path.exists() {
-            return Ok(Vec::new());
-        }
-        let session = parser::parse_session_file(&path).ok_or_else(|| {
-            ProviderError::Parse(format!(
-                "failed to parse Pi session file '{}'",
-                path.display()
-            ))
-        })?;
-        Ok(vec![session])
-    }
-
     fn load_messages(
         &self,
         _session_id: &str,
@@ -182,18 +168,11 @@ impl SessionProvider for PiProvider {
             ProviderError::Parse(format!("Failed to load Pi session: {}", source_path))
         })
     }
-
-    fn deletion_plan(&self, meta: &SessionMeta, children: &[SessionMeta]) -> DeletionPlan {
-        // Pi sessions are flat .jsonl files (subagents included) — no
-        // session dir to clean up.
-        per_file_deletion_plan(meta, children, Vec::new())
-    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::provider::FileAction;
     use crate::provider::ProviderDescriptor;
 
     #[test]
@@ -230,101 +209,6 @@ mod tests {
     fn descriptor_color() {
         let descriptor = Descriptor;
         assert_eq!(descriptor.color(), "#000000");
-    }
-
-    fn session_meta(id: &str, source_path: &str, parent_id: Option<&str>) -> SessionMeta {
-        SessionMeta {
-            id: id.to_string(),
-            provider: Provider::Pi,
-            title: format!("Session {id}"),
-            project_path: "/tmp/project".to_string(),
-            project_name: "project".to_string(),
-            created_at: 1,
-            updated_at: 2,
-            message_count: 1,
-            file_size_bytes: 10,
-            source_path: source_path.to_string(),
-            is_sidechain: parent_id.is_some(),
-            variant_name: None,
-            model: None,
-            cc_version: None,
-            git_branch: None,
-            parent_id: parent_id.map(str::to_string),
-            input_tokens: 0,
-            output_tokens: 0,
-            cache_read_tokens: 0,
-            cache_write_tokens: 0,
-        }
-    }
-
-    #[test]
-    fn deletion_plan_for_parent_removes_child_session_files() {
-        let provider = PiProvider::with_home(PathBuf::from("/tmp/home"));
-        let parent = session_meta(
-            "11111111-1111-4111-a111-111111111111",
-            "/tmp/home/.pi/agent/sessions/project/parent.jsonl",
-            None,
-        );
-        let child = session_meta(
-            "22222222-2222-4222-a222-222222222222",
-            "/tmp/home/.pi/agent/sessions/project/child.jsonl",
-            Some(&parent.id),
-        );
-
-        let plan = provider.deletion_plan(&parent, std::slice::from_ref(&child));
-
-        assert_eq!(plan.file_action, FileAction::Remove);
-        assert!(plan.cleanup_dirs.is_empty());
-        assert_eq!(plan.child_plans.len(), 1);
-        assert_eq!(plan.child_plans[0].id, child.id);
-        assert_eq!(plan.child_plans[0].source_path, child.source_path);
-        assert_eq!(plan.child_plans[0].title, child.title);
-        assert_eq!(plan.child_plans[0].file_action, FileAction::Remove);
-    }
-
-    #[test]
-    fn deletion_plan_for_child_removes_only_itself() {
-        let provider = PiProvider::with_home(PathBuf::from("/tmp/home"));
-        let parent = session_meta(
-            "11111111-1111-4111-a111-111111111111",
-            "/tmp/home/.pi/agent/sessions/project/parent.jsonl",
-            None,
-        );
-        let child = session_meta(
-            "22222222-2222-4222-a222-222222222222",
-            "/tmp/home/.pi/agent/sessions/project/child.jsonl",
-            Some(&parent.id),
-        );
-
-        let plan = provider.deletion_plan(&child, std::slice::from_ref(&parent));
-
-        assert_eq!(plan.file_action, FileAction::Remove);
-        assert!(plan.child_plans.is_empty());
-        assert!(plan.cleanup_dirs.is_empty());
-    }
-
-    #[test]
-    fn scan_source_errors_when_existing_file_is_unparseable() {
-        let tmp = tempfile::tempdir().unwrap();
-        let path = tmp.path().join("bad.jsonl");
-        std::fs::write(&path, "not json").unwrap();
-        let provider = PiProvider::with_home(tmp.path().to_path_buf());
-
-        match provider.scan_source(path.to_str().unwrap()) {
-            Ok(_) => panic!("expected parse error for malformed Pi source"),
-            Err(error) => assert!(matches!(error, ProviderError::Parse(_))),
-        }
-    }
-
-    #[test]
-    fn scan_source_returns_empty_when_file_is_missing() {
-        let tmp = tempfile::tempdir().unwrap();
-        let path = tmp.path().join("missing.jsonl");
-        let provider = PiProvider::with_home(tmp.path().to_path_buf());
-
-        let sessions = provider.scan_source(path.to_str().unwrap()).unwrap();
-
-        assert!(sessions.is_empty());
     }
 
     #[test]

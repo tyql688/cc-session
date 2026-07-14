@@ -7,7 +7,6 @@ import type { SessionRef, TreeNode } from "@/lib/types";
 import {
   getResumeCommand,
   resumeSession,
-  trashSessionsBatch,
   exportSessionsBatch,
   toggleFavorite,
   renameSession,
@@ -25,7 +24,7 @@ import {
 } from "@/stores/settings";
 import { ContextMenu } from "@/components/ContextMenu";
 import { InputDialog } from "@/components/InputDialog";
-import { TreeNodeComponent, collectSessionNodes } from "@/features/explorer/TreeNode";
+import { TreeNodeComponent } from "@/features/explorer/TreeNode";
 import {
   toggleSelected,
   clearSelection,
@@ -68,7 +67,6 @@ export function Explorer(props: {
   activeSessionId: string | null;
   onOpenSession: (s: SessionRef) => void;
   onPreviewSession: (s: SessionRef) => void;
-  onDeleteSession?: (id: string) => void;
   onExportSession?: (id: string) => void;
   onRefreshTree?: () => void;
   onRefreshProvider?: (provider: SessionRef["provider"]) => void;
@@ -255,34 +253,8 @@ export function Explorer(props: {
 
   // --- Batch operations ---
 
-  async function trashAllUnderNode(node: TreeNode) {
-    const sessions = collectSessionNodes(node);
-    if (sessions.length === 0) return;
-    const result = await trashSessionsBatch(sessions.map((s) => s.id));
-    props.onRefreshTree?.();
-    if (result.failed > 0) {
-      toastError(`${result.failed}/${result.succeeded + result.failed} ${t("toast.trashFailed")}`);
-    }
-    if (result.succeeded > 0) {
-      toast(`${result.succeeded} ${t("toast.trashed")}`);
-    }
-  }
-
   function findSessionProjectPath(sessionId: string): string {
     return sessionProjectPathMap.get(sessionId) ?? "";
-  }
-
-  async function trashSelected() {
-    const sel = useSelectionStore.getState().selectedIds;
-    if (sel.size === 0) return;
-    const result = await trashSessionsBatch([...sel]);
-    clearSelection();
-    props.onRefreshTree?.();
-    if (result.failed > 0) {
-      toastError(`${result.failed}/${result.succeeded + result.failed} ${t("toast.trashFailed")}`);
-    } else {
-      toast(t("toast.trashed"));
-    }
   }
 
   async function exportSelectedBatch() {
@@ -317,16 +289,11 @@ export function Explorer(props: {
       toggleFavorite,
       setRenameTarget,
       onExportSession: props.onExportSession,
-      onDeleteSession: props.onDeleteSession,
     });
   }
 
   function selectionMenuItems() {
-    return buildSelectionMenuItems({
-      t,
-      trashSelected,
-      exportSelectedBatch,
-    });
+    return buildSelectionMenuItems({ t, exportSelectedBatch });
   }
 
   function nodeMenuItems() {
@@ -344,7 +311,6 @@ export function Explorer(props: {
           return next;
         });
       },
-      trashAllUnderNode,
       onRefreshTree: props.onRefreshTree,
       onRefreshProvider: props.onRefreshProvider,
       addBlockedFolder,

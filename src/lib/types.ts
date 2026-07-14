@@ -1,20 +1,8 @@
-/** Every supported provider, as the single runtime source of truth — the
- * `Provider` type derives from this array, so a hand-maintained list
- * elsewhere (which is how "pi" once went missing from tree grouping) can't
- * silently drift again. */
-export const PROVIDERS = [
-  "claude",
-  "codex",
-  "antigravity",
-  "opencode",
-  "kimi",
-  "cursor",
-  "cc-mirror",
-  "pi",
-  "grok",
-] as const;
+/** Every supported provider, kept as one tuple so the union derives from a
+ * single source list. */
+type ProviderValues = ["claude", "codex", "antigravity", "opencode", "kimi", "cursor", "cc-mirror", "pi", "grok"];
 
-export type Provider = (typeof PROVIDERS)[number];
+export type Provider = ProviderValues[number];
 
 export interface SessionMeta {
   id: string;
@@ -195,23 +183,6 @@ export interface ProviderSnapshot {
   path: string;
   exists: boolean;
   session_count: number;
-}
-
-export interface TrashMeta {
-  id: string;
-  provider: string;
-  title: string;
-  original_path: string;
-  trashed_at: number;
-  trash_file: string;
-  project_name: string;
-  variant_name?: string;
-}
-
-export interface BatchResult {
-  succeeded: number;
-  failed: number;
-  errors: string[];
 }
 
 export interface PrevPeriodTotals {

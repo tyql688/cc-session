@@ -2,8 +2,8 @@ use crate::db::Database;
 use crate::models::{Message, MessageRole, Provider, SessionMeta, TokenUsage};
 use crate::pricing::PricingCatalog;
 use crate::provider::{
-    default_compute_token_stats_from_messages, DeletionPlan, FileAction, LoadedSession,
-    ParsedSession, ProviderError, SessionProvider, TokenStatRow,
+    default_compute_token_stats_from_messages, LoadedSession, ParsedSession, ProviderError,
+    SessionProvider, TokenStatRow,
 };
 use std::collections::HashSet;
 use std::path::PathBuf;
@@ -31,14 +31,6 @@ impl SessionProvider for DefaultStatsProvider {
         _source_path: &str,
     ) -> Result<LoadedSession, ProviderError> {
         Ok(LoadedSession::new(Vec::new()))
-    }
-
-    fn deletion_plan(&self, _meta: &SessionMeta, _children: &[SessionMeta]) -> DeletionPlan {
-        DeletionPlan {
-            file_action: FileAction::Skip,
-            child_plans: Vec::new(),
-            cleanup_dirs: Vec::new(),
-        }
     }
 }
 

@@ -533,31 +533,6 @@ pub struct SearchFilters {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct TrashMeta {
-    pub id: String,
-    pub provider: String,
-    pub title: String,
-    pub original_path: String,
-    pub trashed_at: i64,
-    pub trash_file: String,
-    #[serde(default)]
-    pub project_name: String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub variant_name: Option<String>,
-    /// Parent session ID (set on child entries so restore can group them).
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub parent_id: Option<String>,
-}
-
-/// Per-item success/failure counts for batch operations.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct BatchResult {
-    pub succeeded: u32,
-    pub failed: u32,
-    pub errors: Vec<String>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct UsageStats {
     pub total_sessions: u64,
     pub total_turns: u64,

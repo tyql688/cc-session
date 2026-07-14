@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { createKeyboardHandler, type KeyboardDeps } from "@/app/KeyboardShortcuts";
-import { SESSION_COMMAND_EVENTS } from "@/lib/session-command-events";
+import { createKeyboardHandler, type KeyboardDeps } from "./KeyboardShortcuts";
+import { SESSION_COMMAND_EVENTS } from "../lib/session-command-events";
 
 function makeDeps(overrides: Partial<KeyboardDeps> = {}): KeyboardDeps {
   return {
@@ -28,7 +28,7 @@ function keydown(key: string, mods: Partial<KeyboardEventInit> = {}): KeyboardEv
 
 describe("createKeyboardHandler", () => {
   beforeEach(() => {
-    document.body.innerHTML = "";
+    document.body.replaceChildren();
     (document.activeElement as HTMLElement | null)?.blur?.();
   });
 
@@ -36,22 +36,6 @@ describe("createKeyboardHandler", () => {
     const deps = makeDeps();
     createKeyboardHandler(deps)(keydown("W", { metaKey: true }));
     expect(deps.closeTab).toHaveBeenCalledWith("tab-1");
-  });
-
-  it("does not delete the session while typing in an input", () => {
-    const deleted = vi.fn();
-    document.addEventListener(SESSION_COMMAND_EVENTS.delete, deleted);
-    const input = document.createElement("input");
-    document.body.appendChild(input);
-    input.focus();
-
-    createKeyboardHandler(makeDeps())(keydown("Backspace", { metaKey: true }));
-    expect(deleted).not.toHaveBeenCalled();
-
-    input.blur();
-    createKeyboardHandler(makeDeps())(keydown("Backspace", { metaKey: true }));
-    expect(deleted).toHaveBeenCalledTimes(1);
-    document.removeEventListener(SESSION_COMMAND_EVENTS.delete, deleted);
   });
 
   it("Cmd+B toggles the sidebar and Cmd+D toggles favorite", () => {

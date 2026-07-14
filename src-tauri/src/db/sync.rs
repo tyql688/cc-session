@@ -221,10 +221,6 @@ fn should_delete_provider_snapshot(
     current_count <= 10 || (alive_count as f64 / current_count as f64) > 0.5
 }
 
-fn should_delete_source_snapshot(current_count: u64, scan_count: u64) -> bool {
-    scan_count == 0 || current_count <= 10 || (scan_count as f64 / current_count as f64) > 0.5
-}
-
 impl Database {
     pub fn sync_provider_snapshot(
         &self,
@@ -270,43 +266,6 @@ impl Database {
                     &provider_key,
                     &snapshot_sources.source_paths,
                 )?;
-                conn.execute(
-                    "DELETE FROM favorites WHERE session_id NOT IN (SELECT id FROM sessions)",
-                    [],
-                )?;
-            }
-            Ok(())
-        })
-    }
-
-    pub(crate) fn sync_source_snapshot(
-        &self,
-        provider: &Provider,
-        source_path: &str,
-        sessions: &[ParsedSession],
-    ) -> Result<(), rusqlite::Error> {
-        let provider_key = provider.key().to_string();
-        let ids: HashSet<String> = sessions
-            .iter()
-            .map(|parsed| parsed.meta.id.clone())
-            .collect();
-
-        let current_count = self.count_sessions_for_source(&provider_key, source_path)?;
-        let scan_count = sessions.len() as u64;
-        // For single-source sync, scan_count==0 is a valid signal (file deleted).
-        // Only apply ratio guard when both sides are non-zero.
-        let should_delete = should_delete_source_snapshot(current_count, scan_count);
-
-        if !should_delete {
-            log::warn!(
-                "provider {provider:?} source {source_path:?} scan returned {scan_count} sessions but DB has {current_count}, skipping destructive sync");
-        }
-
-        self.with_transaction(|conn| {
-            upsert_parsed_sessions_on(conn, sessions)?;
-
-            if should_delete {
-                delete_missing_sessions_for_source(conn, &provider_key, source_path, &ids)?;
                 conn.execute(
                     "DELETE FROM favorites WHERE session_id NOT IN (SELECT id FROM sessions)",
                     [],
@@ -362,16 +321,6 @@ impl Database {
                 source_mtime = 0",
             [],
         )?;
-        Ok(())
-    }
-
-    /// Delete this session and all its children from DB.
-    pub(crate) fn delete_session(&self, id: &str) -> Result<(), rusqlite::Error> {
-        let conn = self.lock_write()?;
-        conn.execute("DELETE FROM favorites WHERE session_id IN (SELECT id FROM sessions WHERE parent_id = ?1)", params![id])?;
-        conn.execute("DELETE FROM sessions WHERE parent_id = ?1", params![id])?;
-        conn.execute("DELETE FROM favorites WHERE session_id = ?1", params![id])?;
-        conn.execute("DELETE FROM sessions WHERE id = ?1", params![id])?;
         Ok(())
     }
 

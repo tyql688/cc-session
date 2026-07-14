@@ -2,15 +2,15 @@ pub mod parser;
 mod tools;
 
 use std::collections::HashMap;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
 use rayon::prelude::*;
 use walkdir::WalkDir;
 
-use crate::models::{Provider, SessionMeta};
+use crate::models::Provider;
 use crate::provider::{
-    partition_files_by_freshness, ChildPlan, DeletionPlan, FileAction, LoadedSession,
-    ParsedSession, ProviderError, ScanOutcome, SessionProvider, SourceState,
+    partition_files_by_freshness, LoadedSession, ParsedSession, ProviderError, ScanOutcome,
+    SessionProvider, SourceState,
 };
 
 pub use parser::session_id_for_path;
@@ -149,123 +149,6 @@ impl SessionProvider for KimiProvider {
             parsed,
             unchanged_source_paths,
         })
-    }
-
-    fn scan_source(&self, source_path: &str) -> Result<Vec<ParsedSession>, ProviderError> {
-        let path = PathBuf::from(source_path);
-        let index = self.load_session_index();
-        Ok(parser::parse_session(&path, &index).into_iter().collect())
-    }
-
-    fn deletion_plan(&self, meta: &SessionMeta, children: &[SessionMeta]) -> DeletionPlan {
-        // Subagent: remove only its own agents/<name>/ directory.
-        if meta.parent_id.is_some() {
-            let agent_dir = Path::new(&meta.source_path).parent().map(Path::to_path_buf);
-            let cleanup_dirs = agent_dir
-                .filter(|p| p.is_dir())
-                .into_iter()
-                .collect::<Vec<_>>();
-            return DeletionPlan {
-                file_action: FileAction::Remove,
-                child_plans: Vec::new(),
-                cleanup_dirs,
-            };
-        }
-
-        // Parent: trash main/wire.jsonl AND each child wire.jsonl
-        // individually so each gets its own restorable trash entry
-        // (mirrors the Claude/Codex subagent pattern).
-        //
-        // For cleanup we only nuke the whole session_dir when we can
-        // prove the `agents/` directory contains nothing beyond `main`
-        // plus the children we're about to trash — otherwise an un-
-        // indexed agent (race window, parse failure, or kimi-code
-        // adding state we haven't caught up to) would be destroyed
-        // silently. When in doubt, only remove the individual agent
-        // dirs we control and let the session_dir + state.json leak as
-        // a small orphan; source-sync handles the DB side.
-        //
-        // source_path is `<session_dir>/agents/main/wire.jsonl`.
-        let main_agent_dir = Path::new(&meta.source_path).parent().map(Path::to_path_buf);
-        let session_dir = main_agent_dir
-            .as_deref()
-            .and_then(Path::parent)
-            .and_then(Path::parent)
-            .map(Path::to_path_buf);
-
-        let child_plans: Vec<ChildPlan> = children
-            .iter()
-            .map(|c| ChildPlan {
-                id: c.id.clone(),
-                source_path: c.source_path.clone(),
-                title: c.title.clone(),
-                file_action: FileAction::Remove,
-            })
-            .collect();
-
-        // Build the set of agent names we're going to clear from disk.
-        let mut planned_agent_names: std::collections::HashSet<String> =
-            std::collections::HashSet::new();
-        planned_agent_names.insert("main".to_string());
-        for c in children {
-            if let Some(name) = Path::new(&c.source_path)
-                .parent()
-                .and_then(Path::file_name)
-                .map(|n| n.to_string_lossy().to_string())
-            {
-                planned_agent_names.insert(name);
-            }
-        }
-
-        // Inspect what's actually on disk under `agents/`. If every
-        // entry is in our plan, we're safe to take down the whole
-        // session_dir. Any unexpected entry blocks the full sweep.
-        let safe_to_remove_session_dir = session_dir.as_deref().is_some_and(|sdir| {
-            let agents_dir = sdir.join("agents");
-            match std::fs::read_dir(&agents_dir) {
-                Ok(entries) => entries.filter_map(Result::ok).all(|e| {
-                    e.file_name()
-                        .to_str()
-                        .is_some_and(|n| planned_agent_names.contains(n))
-                }),
-                // Can't enumerate — fall back to per-agent cleanup
-                // rather than risk an unintended remove_dir_all.
-                Err(_) => false,
-            }
-        });
-
-        let mut cleanup_dirs: Vec<PathBuf> = Vec::new();
-        if safe_to_remove_session_dir {
-            if let Some(dir) = session_dir.filter(|p| p.is_dir()) {
-                cleanup_dirs.push(dir);
-            }
-        } else {
-            if let Some(dir) = main_agent_dir.filter(|p| p.is_dir()) {
-                cleanup_dirs.push(dir);
-            }
-            for c in children {
-                if let Some(dir) = Path::new(&c.source_path).parent() {
-                    if dir.is_dir() {
-                        cleanup_dirs.push(dir.to_path_buf());
-                    }
-                }
-            }
-        }
-
-        DeletionPlan {
-            file_action: FileAction::Remove,
-            child_plans,
-            cleanup_dirs,
-        }
-    }
-
-    fn restore_action(&self, entry: &crate::models::TrashMeta) -> crate::provider::RestoreAction {
-        if entry.trash_file.is_empty() {
-            // Embedded / no file moved — nothing to restore individually.
-            crate::provider::RestoreAction::Noop
-        } else {
-            crate::provider::RestoreAction::MoveBack
-        }
     }
 
     fn load_messages(

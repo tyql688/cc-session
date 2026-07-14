@@ -8,12 +8,11 @@ use walkdir::WalkDir;
 
 use std::collections::{HashMap, HashSet};
 
-use crate::models::{Provider, SessionMeta, TokenTotals};
+use crate::models::{Provider, TokenTotals};
 use crate::pricing::{self, PricingCatalog};
 use crate::provider::{
-    jsonl_subagents_deletion_plan, partition_files_by_freshness, timestamp_to_local_date,
-    DeletionPlan, LoadedSession, ParsedSession, ProviderError, ScanOutcome, SessionProvider,
-    SourceState, TokenStatRow,
+    partition_files_by_freshness, timestamp_to_local_date, LoadedSession, ParsedSession,
+    ProviderError, ScanOutcome, SessionProvider, SourceState, TokenStatRow,
 };
 
 pub(crate) struct Descriptor;
@@ -200,15 +199,6 @@ impl SessionProvider for CodexProvider {
             parsed,
             unchanged_source_paths,
         })
-    }
-
-    fn scan_source(&self, source_path: &str) -> Result<Vec<ParsedSession>, ProviderError> {
-        let path = PathBuf::from(source_path);
-        Ok(self.parse_session_file(&path).into_iter().collect())
-    }
-
-    fn deletion_plan(&self, meta: &SessionMeta, children: &[SessionMeta]) -> DeletionPlan {
-        jsonl_subagents_deletion_plan(meta, children)
     }
 
     fn load_messages(
@@ -475,62 +465,5 @@ mod tests {
             "input + cache_read must not double-count cached tokens"
         );
         assert_eq!(r.output_tokens, 50);
-    }
-
-    #[test]
-    fn codex_parent_deletion_plan_includes_children() {
-        let provider = CodexProvider {
-            home_dir: PathBuf::from("/tmp"),
-        };
-
-        let parent = SessionMeta {
-            id: "parent".to_string(),
-            provider: Provider::Codex,
-            title: "parent".to_string(),
-            project_path: String::new(),
-            project_name: String::new(),
-            created_at: 0,
-            updated_at: 0,
-            message_count: 0,
-            file_size_bytes: 0,
-            source_path: "/tmp/parent.jsonl".to_string(),
-            is_sidechain: false,
-            variant_name: None,
-            model: None,
-            cc_version: None,
-            git_branch: None,
-            parent_id: None,
-            input_tokens: 0,
-            output_tokens: 0,
-            cache_read_tokens: 0,
-            cache_write_tokens: 0,
-        };
-
-        let child = SessionMeta {
-            id: "child".to_string(),
-            provider: Provider::Codex,
-            title: "child".to_string(),
-            project_path: String::new(),
-            project_name: String::new(),
-            created_at: 0,
-            updated_at: 0,
-            message_count: 0,
-            file_size_bytes: 0,
-            source_path: "/tmp/child.jsonl".to_string(),
-            is_sidechain: true,
-            variant_name: None,
-            model: None,
-            cc_version: None,
-            git_branch: None,
-            parent_id: Some("parent".to_string()),
-            input_tokens: 0,
-            output_tokens: 0,
-            cache_read_tokens: 0,
-            cache_write_tokens: 0,
-        };
-
-        let plan = provider.deletion_plan(&parent, &[child]);
-        assert_eq!(plan.child_plans.len(), 1);
-        assert_eq!(plan.child_plans[0].id, "child");
     }
 }

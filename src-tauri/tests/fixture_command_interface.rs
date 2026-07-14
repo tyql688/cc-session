@@ -5,7 +5,7 @@ use std::sync::{Arc, Mutex};
 
 use sessionview_lib::command_test_helpers;
 use sessionview_lib::db::Database;
-use sessionview_lib::models::{Provider, ProviderSnapshot, SessionDetail, SessionMeta, TrashMeta};
+use sessionview_lib::models::{Provider, ProviderSnapshot, SessionDetail, SessionMeta};
 use sessionview_lib::providers::claude::parser::parse_session_file;
 use tempfile::TempDir;
 
@@ -90,7 +90,7 @@ fn write_claude_fixture(home: &Path) -> PathBuf {
 }
 
 #[test]
-fn command_interface_uses_fixture_provider_data_without_manual_deletes() {
+fn command_interface_uses_fixture_provider_data() {
     let _env_lock = ENV_LOCK.lock().expect("env lock");
     let home = TempDir::new().expect("home temp dir");
     let data_home = TempDir::new().expect("data temp dir");
@@ -133,42 +133,4 @@ fn command_interface_uses_fixture_provider_data_without_manual_deletes() {
     let resume_command = command_test_helpers::get_resume_command(&db, "fixture-session-001")
         .expect("get resume command");
     assert_eq!(resume_command, "claude --resume fixture-session-001");
-
-    command_test_helpers::trash_session(&db, "fixture-session-001").expect("trash session");
-    assert!(
-        !source_path.exists(),
-        "source should be removed from original location after trash"
-    );
-    assert!(
-        command_test_helpers::get_session_detail(&db, "fixture-session-001").is_err(),
-        "trashed session should disappear from indexed detail"
-    );
-
-    let trash_entries: Vec<TrashMeta> = command_test_helpers::list_trash().expect("list trash");
-    let trash_entry = trash_entries
-        .iter()
-        .find(|entry| entry.id == "fixture-session-001")
-        .expect("fixture session in trash");
-    assert_eq!(trash_entry.project_name, "my-project");
-    assert!(!trash_entry.trash_file.is_empty());
-
-    command_test_helpers::restore_session(&db, "fixture-session-001").expect("restore session");
-    assert!(
-        source_path.exists(),
-        "restored session should move back to original source path"
-    );
-    let restored: SessionDetail =
-        command_test_helpers::get_session_detail(&db, "fixture-session-001")
-            .expect("restored session detail");
-    assert_eq!(restored.meta.project_name, "my-project");
-
-    command_test_helpers::delete_session(&db, "fixture-session-001").expect("delete session");
-    assert!(
-        !source_path.exists(),
-        "direct delete should permanently remove source file"
-    );
-    assert!(
-        command_test_helpers::get_session_detail(&db, "fixture-session-001").is_err(),
-        "deleted session should be unavailable"
-    );
 }

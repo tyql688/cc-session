@@ -4,7 +4,6 @@ import {
   getSessionOpenWindow,
   getSessionTurnOutline,
   cancelSessionLoad,
-  trashSession,
   resumeSession,
   isLoadCanceledError,
   type SessionRoleCounts,
@@ -14,7 +13,6 @@ import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { useI18n } from "@/i18n/index";
 import { markdownChunkReady } from "@/features/session/MessageBubble";
 import { TimelineList } from "@/features/session/TimelineList";
-import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { ExportDialog } from "@/features/session/ExportDialog";
 import { SessionAnalyticsDialog } from "@/features/session/SessionAnalyticsDialog";
 import { setFocusMode, useFocusMode, useTerminalApp } from "@/stores/settings";
@@ -46,12 +44,7 @@ const ROLE_TOGGLE_COLORS: Record<MessageRole, string> = {
     "data-pressed:bg-[color-mix(in_srgb,var(--accent-secondary)_12%,transparent)] data-pressed:text-(--accent-secondary)",
 };
 
-export function SessionView(props: {
-  session: SessionRef;
-  active: boolean;
-  onRefreshTree: () => void;
-  onCloseTab: (id: string) => void;
-}) {
+export function SessionView(props: { session: SessionRef; active: boolean }) {
   const { t } = useI18n();
   const terminalApp = useTerminalApp();
   const focusMode = useFocusMode();
@@ -322,7 +315,6 @@ export function SessionView(props: {
     };
   }, []);
 
-  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [showExportDialog, setShowExportDialog] = useState(false);
   const [showAnalyticsDialog, setShowAnalyticsDialog] = useState(false);
 
@@ -358,19 +350,6 @@ export function SessionView(props: {
     setMeta((prev) => ({ ...prev, title: props.session.title }));
   }, [props.session.title]);
 
-  const handleDelete = async () => {
-    try {
-      await trashSession(props.session.id);
-      setShowDeleteConfirm(false);
-      props.onCloseTab(props.session.id);
-      props.onRefreshTree();
-      toast(t("toast.trashed"));
-    } catch (_e) {
-      setShowDeleteConfirm(false);
-      toastError(t("toast.trashFailed"));
-    }
-  };
-
   const handleResume = async () => {
     try {
       await resumeSession(props.session.id, terminalApp);
@@ -385,7 +364,6 @@ export function SessionView(props: {
     onResume: () => void handleResume(),
     onExport: () => setShowExportDialog(true),
     onFavorite: () => void handleToggleFavorite(),
-    onDelete: () => setShowDeleteConfirm(true),
     onFindNext: () => navigateMatch(1),
     onFindPrev: () => navigateMatch(-1),
     onSessionSearch: () => {
@@ -521,7 +499,6 @@ export function SessionView(props: {
         onAnalyze={() => setShowAnalyticsDialog(true)}
         onResume={handleResume}
         onExport={() => setShowExportDialog(true)}
-        onDelete={() => setShowDeleteConfirm(true)}
       />
 
       {/* Filter toolbar — only show roles that have messages. Counts are the
@@ -619,16 +596,6 @@ export function SessionView(props: {
           />
         </div>
       )}
-
-      <ConfirmDialog
-        open={showDeleteConfirm}
-        title={t("confirm.deleteTitle")}
-        message={t("confirm.deleteMsg")}
-        confirmLabel={t("confirm.confirm")}
-        onConfirm={handleDelete}
-        onCancel={() => setShowDeleteConfirm(false)}
-        danger={true}
-      />
 
       <ExportDialog open={showExportDialog} session={meta} onClose={() => setShowExportDialog(false)} />
       <SessionAnalyticsDialog

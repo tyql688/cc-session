@@ -1,12 +1,11 @@
 use rayon::prelude::*;
 use std::collections::HashMap;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use walkdir::WalkDir;
 
-use crate::models::{Provider, SessionMeta};
+use crate::models::Provider;
 use crate::provider::{
-    per_file_deletion_plan, DeletionPlan, LoadedSession, ParsedSession, ProviderDescriptor,
-    ProviderError, SessionProvider,
+    LoadedSession, ParsedSession, ProviderDescriptor, ProviderError, SessionProvider,
 };
 
 struct ParentInfo {
@@ -129,31 +128,6 @@ impl SessionProvider for AntigravityProvider {
         }
 
         Ok(sessions)
-    }
-
-    fn scan_source(&self, source_path: &str) -> Result<Vec<ParsedSession>, ProviderError> {
-        let path = PathBuf::from(source_path);
-        let parsed = parser::parse_session_file(&path).ok_or_else(|| {
-            ProviderError::Parse(format!(
-                "failed to parse Antigravity session file '{}'",
-                path.display()
-            ))
-        })?;
-        Ok(vec![parsed])
-    }
-
-    fn deletion_plan(&self, meta: &SessionMeta, children: &[SessionMeta]) -> DeletionPlan {
-        // Transcript lives at <conversation>/.system_generated/logs/
-        // transcript.jsonl — clean up the whole conversation dir.
-        let cleanup_dirs = PathBuf::from(&meta.source_path)
-            .parent()
-            .and_then(Path::parent)
-            .and_then(Path::parent)
-            .filter(|dir| dir.is_dir())
-            .map(Path::to_path_buf)
-            .into_iter()
-            .collect();
-        per_file_deletion_plan(meta, children, cleanup_dirs)
     }
 
     fn load_messages(

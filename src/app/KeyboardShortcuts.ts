@@ -190,14 +190,5 @@ export function createKeyboardHandler(deps: KeyboardDeps): (e: KeyboardEvent) =>
       dispatchSessionCommand(e.shiftKey ? SESSION_COMMAND_EVENTS.findPrev : SESSION_COMMAND_EVENTS.findNext);
       return;
     }
-
-    // Cmd+Backspace: Delete session. NEVER while typing — on macOS
-    // Cmd+Backspace is delete-to-line-start, and hijacking it from a text
-    // field opened the session-delete confirm mid-keystroke.
-    if (mod && e.key === "Backspace" && !typing) {
-      e.preventDefault();
-      dispatchSessionCommand(SESSION_COMMAND_EVENTS.delete);
-      return;
-    }
   };
 }

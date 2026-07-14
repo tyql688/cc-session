@@ -3,7 +3,6 @@ export const SESSION_COMMAND_EVENTS = {
   resume: "sessionview:resume",
   exportSession: "sessionview:export",
   favorite: "sessionview:favorite",
-  delete: "sessionview:delete",
   findNext: "sessionview:find-next",
   findPrev: "sessionview:find-prev",
 } as const;

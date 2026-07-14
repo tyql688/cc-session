@@ -8,10 +8,10 @@ use rayon::prelude::*;
 
 use std::collections::HashMap;
 
-use crate::models::{Provider, SessionMeta};
+use crate::models::Provider;
 use crate::provider::{
-    partition_files_by_freshness, DeletionPlan, LoadedSession, ParsedSession, ProviderError,
-    ScanOutcome, SessionProvider, SourceState,
+    partition_files_by_freshness, LoadedSession, ParsedSession, ProviderError, ScanOutcome,
+    SessionProvider, SourceState,
 };
 
 pub(crate) struct Descriptor;
@@ -147,19 +147,6 @@ impl SessionProvider for ClaudeProvider {
             parsed,
             unchanged_source_paths,
         })
-    }
-
-    fn scan_source(&self, source_path: &str) -> Result<Vec<ParsedSession>, ProviderError> {
-        let path = PathBuf::from(source_path);
-        let related_paths = crate::provider::jsonl_subagent_related_paths(&path);
-        Ok(related_paths
-            .par_iter()
-            .filter_map(parser::parse_session_file)
-            .collect())
-    }
-
-    fn deletion_plan(&self, meta: &SessionMeta, children: &[SessionMeta]) -> DeletionPlan {
-        crate::provider::jsonl_subagents_deletion_plan(meta, children)
     }
 
     fn load_messages(

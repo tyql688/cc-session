@@ -95,24 +95,6 @@ impl ImageCacheService {
         let cache_path = self.cache_dir.join(Self::cache_name(original_path));
         cache_path.exists().then_some(cache_path)
     }
-
-    /// Remove every cache entry referenced by `messages`. Used when a
-    /// session is permanently deleted so we don't leak disk space.
-    pub(crate) fn cleanup_images(&self, messages: &[Message]) {
-        let paths = extract_image_paths(messages);
-        for path in &paths {
-            let cache_name = Self::cache_name(path);
-            let cache_path = self.cache_dir.join(&cache_name);
-            if cache_path.exists() {
-                if let Err(e) = std::fs::remove_file(&cache_path) {
-                    log::warn!(
-                        "failed to remove cached image {}: {e}",
-                        cache_path.display()
-                    );
-                }
-            }
-        }
-    }
 }
 
 // ---------------------------------------------------------------------------
@@ -203,9 +185,6 @@ mod tests {
         let cached = service.resolve_cached_path(img_path_str);
         assert!(cached.is_some());
         assert_eq!(std::fs::read(cached.unwrap()).unwrap(), b"fake png data");
-
-        service.cleanup_images(&messages);
-        assert!(service.resolve_cached_path(img_path_str).is_none());
     }
 
     #[test]

@@ -16,7 +16,6 @@ export interface SessionMenuContext {
   toggleFavorite: (id: string) => Promise<boolean>;
   setRenameTarget: (target: { id: string; label: string }) => void;
   onExportSession?: (id: string) => void;
-  onDeleteSession?: (id: string) => void;
 }
 
 export function buildSessionMenuItems(ctx: SessionMenuContext): MenuItemDef[] {
@@ -86,35 +85,26 @@ export function buildSessionMenuItems(ctx: SessionMenuContext): MenuItemDef[] {
         ctx.setRenameTarget({ id: node.id, label: node.label });
       },
     },
-    { label: "", separator: true, onClick: () => {} },
   ];
   if (ctx.onExportSession) {
-    items.push({
-      label: t("contextMenu.export"),
-      onClick: () => ctx.onExportSession?.(node.id),
-    });
-  }
-  if (ctx.onDeleteSession) {
-    items.push({
-      label: t("contextMenu.delete"),
-      onClick: () => ctx.onDeleteSession?.(node.id),
-    });
+    items.push(
+      { label: "", separator: true, onClick: () => {} },
+      {
+        label: t("contextMenu.export"),
+        onClick: () => ctx.onExportSession?.(node.id),
+      },
+    );
   }
   return items;
 }
 
 export interface SelectionMenuContext {
   t: (key: string) => string;
-  trashSelected: () => void;
   exportSelectedBatch: () => void;
 }
 
 export function buildSelectionMenuItems(ctx: SelectionMenuContext): MenuItemDef[] {
   return [
-    {
-      label: () => `${ctx.t("contextMenu.deleteSelected")} (${selectionCount()})`,
-      onClick: ctx.trashSelected,
-    },
     {
       label: () => `${ctx.t("contextMenu.exportSelected")} (${selectionCount()})`,
       onClick: ctx.exportSelectedBatch,
@@ -128,7 +118,6 @@ export interface NodeMenuContext {
   collapseAllChildren: (node: TreeNode) => void;
   expandAllChildren: (node: TreeNode) => void;
   collapseNode: (nodeId: string) => void;
-  trashAllUnderNode: (node: TreeNode) => void;
   onRefreshTree?: () => void;
   onRefreshProvider?: (provider: Provider) => void;
   addBlockedFolder: (path: string) => void;
@@ -148,11 +137,6 @@ export function buildNodeMenuItems(ctx: NodeMenuContext): MenuItemDef[] {
           if (node.provider) ctx.onRefreshProvider?.(node.provider);
           else ctx.onRefreshTree?.();
         },
-      },
-      { label: "", separator: true, onClick: () => {} },
-      {
-        label: t("contextMenu.deleteAll"),
-        onClick: () => ctx.trashAllUnderNode(node),
       },
     ];
   }
@@ -199,10 +183,5 @@ export function buildNodeMenuItems(ctx: NodeMenuContext): MenuItemDef[] {
           },
         ]
       : []),
-    { label: "", separator: true, onClick: () => {} },
-    {
-      label: t("contextMenu.deleteAll"),
-      onClick: () => ctx.trashAllUnderNode(node),
-    },
   ];
 }

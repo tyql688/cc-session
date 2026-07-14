@@ -238,8 +238,8 @@ pub(super) fn scan_pb_hash_refs(bytes: &[u8]) -> Vec<String> {
 }
 
 /// Write raw image bytes to `cache_dir`, naming the file
-/// `cursor-<session>-<sha256>.<ext>` so `cleanup_on_permanent_delete`
-/// can clear them surgically. Returns the cached path on success.
+/// `cursor-<session>-<sha256>.<ext>` to preserve session provenance and
+/// avoid collisions. Returns the cached path on success.
 /// Callers pass the already-resolved cache dir so tests can inject a
 /// tempdir without touching the user's real app data dir.
 pub(super) fn write_image_to_cache(

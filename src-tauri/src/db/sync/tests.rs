@@ -69,17 +69,6 @@ fn provider_snapshot_delete_guard_counts_preserved_sources_as_alive() {
 }
 
 #[test]
-fn source_snapshot_delete_guard_treats_empty_scan_as_deleted_file() {
-    assert!(super::should_delete_source_snapshot(100, 0));
-}
-
-#[test]
-fn source_snapshot_delete_guard_uses_ratio_for_non_empty_scans() {
-    assert!(super::should_delete_source_snapshot(100, 51));
-    assert!(!super::should_delete_source_snapshot(100, 50));
-}
-
-#[test]
 fn replace_token_stats_clears_existing_rows_when_empty() {
     let dir = TempDir::new().unwrap();
     let db = Database::open(dir.path()).unwrap();

@@ -62,11 +62,6 @@ export function formatTreeTime(epoch: number, now: Date = new Date()): string {
   return `${String(d.getFullYear()).slice(2)}/${d.getMonth() + 1}/${d.getDate()}`;
 }
 
-export function formatAbsoluteTime(epoch: number): string {
-  if (!epoch) return "\u2014";
-  return new Date(epoch * 1000).toLocaleString();
-}
-
 /** Local-calendar date as `YYYY-MM-DD`. */
 export function toLocalISODate(date: Date = new Date()): string {
   const yyyy = date.getFullYear();

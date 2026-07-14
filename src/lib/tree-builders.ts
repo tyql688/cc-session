@@ -1,36 +1,5 @@
-import type { SessionMeta, TrashMeta, TreeNode, Provider } from "@/lib/types";
-import { PROVIDERS } from "@/lib/types";
+import type { SessionMeta, TreeNode, Provider } from "@/lib/types";
 import { getProviderLabel, getProviderSortOrder } from "@/stores/providerSnapshots";
-
-// Derived from the canonical PROVIDERS list — the previous hand-written copy
-// was missing "pi", silently dropping Pi sessions from provider grouping.
-const KNOWN_PROVIDER_KEYS = new Set<string>(PROVIDERS);
-
-function parseProviderKey(provider: string): Provider | null {
-  return KNOWN_PROVIDER_KEYS.has(provider) ? (provider as Provider) : null;
-}
-
-function projectFromTrashPath(item: TrashMeta, unknownLabel: string): string {
-  const provider = item.provider || "claude";
-  const path = item.original_path.replaceAll("\\", "/");
-  const segments = path.split("/").filter(Boolean);
-  if (segments.length === 0) {
-    return unknownLabel;
-  }
-
-  const projectsIndex = segments.lastIndexOf("projects");
-  if (projectsIndex >= 0 && projectsIndex + 1 < segments.length) {
-    return segments[projectsIndex + 1] || unknownLabel;
-  }
-
-  switch (provider) {
-    case "claude":
-    case "cc-mirror":
-      return segments.at(-2) || unknownLabel;
-    default:
-      return unknownLabel;
-  }
-}
 
 type ProviderGroup<T> = {
   provider: Provider;
@@ -103,67 +72,6 @@ export function buildFavoritesTree(sessions: SessionMeta[], noProjectLabel: stri
     }
     tree.push({
       id: `fav-${providerKey}`,
-      label: group.label,
-      node_type: "provider" as const,
-      children: projectNodes,
-      count: projectNodes.reduce((sum, node) => sum + node.count, 0),
-      provider: group.provider,
-    });
-  }
-
-  return tree;
-}
-
-export function buildTrashTree(items: TrashMeta[], labels: { unknown: string; untitled: string }): TreeNode[] {
-  const providerMap = new Map<string, ProviderGroup<TrashMeta[]>>();
-
-  for (const item of items) {
-    const provider = parseProviderKey(item.provider || "claude");
-    if (!provider) {
-      console.warn(`skipping trash entry ${item.id} with unsupported provider ${item.provider}`);
-      continue;
-    }
-    const key = providerGroupKey(provider, item.variant_name);
-    const project = item.project_name?.trim() || projectFromTrashPath(item, labels.unknown);
-
-    if (!providerMap.has(key)) {
-      providerMap.set(key, {
-        provider,
-        label: getProviderLabel(provider, item.variant_name),
-        projectMap: new Map(),
-      });
-    }
-
-    const projectMap = providerMap.get(key)!.projectMap;
-    if (!projectMap.has(project)) {
-      projectMap.set(project, []);
-    }
-    projectMap.get(project)!.push(item);
-  }
-
-  const tree: TreeNode[] = [];
-  for (const [providerKey, group] of sortProviderGroups([...providerMap.entries()])) {
-    const projectNodes: TreeNode[] = [];
-    for (const [project, sessions] of group.projectMap) {
-      const sessionNodes: TreeNode[] = sessions.map((item) => ({
-        id: item.id,
-        label: item.title || labels.untitled,
-        node_type: "session" as const,
-        children: [],
-        count: 0,
-        provider: group.provider,
-      }));
-      projectNodes.push({
-        id: `trash-${providerKey}-${project}`,
-        label: project,
-        node_type: "project" as const,
-        children: sessionNodes,
-        count: sessionNodes.length,
-        provider: null,
-      });
-    }
-    tree.push({
-      id: `trash-${providerKey}`,
       label: group.label,
       node_type: "provider" as const,
       children: projectNodes,

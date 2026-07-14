@@ -48,7 +48,6 @@
   "session": {
     "messages": "条消息",
     "export": "导出",
-    "delete": "删除",
     "resume": "恢复会话",
     "created": "创建于",
     "noMessages": "此会话没有消息",
@@ -111,8 +110,6 @@
     "favoriteAdded": "已添加到收藏",
     "favoriteRemoved": "已从收藏移除",
     "favoriteFailed": "收藏切换失败",
-    "trashed": "会话已移至回收站",
-    "trashFailed": "删除会话失败",
     "resumed": "已在终端中恢复会话",
     "resumeFailed": "恢复会话失败",
     "idCopied": "会话 ID 已复制",
@@ -150,10 +147,7 @@
     "rename": "重命名"
   },
   "confirm": {
-    "deleteTitle": "删除会话",
-    "deleteMsg": "确定要删除此会话吗？此操作无法撤销。",
-    "cancel": "取消",
-    "confirm": "删除"
+    "cancel": "取消"
   },
   "status": {
     "indexed": "已索引",
@@ -183,7 +177,6 @@
     "resumeSession": "恢复会话",
     "exportSession": "导出会话",
     "toggleFavorite": "切换收藏",
-    "deleteSession": "删除会话",
     "findInSession": "在会话中搜索",
     "openSettings": "打开设置",
     "globalSearch": "全局搜索",
@@ -205,14 +198,11 @@
     "copySessionId": "复制会话 ID",
     "copyResumeCommand": "复制恢复命令",
     "resumeSession": "恢复会话",
-    "delete": "删除",
     "export": "导出",
     "collapseAll": "全部折叠",
     "expandAll": "全部展开",
     "refresh": "刷新",
-    "deleteAll": "删除所有会话",
     "blockFolder": "屏蔽此文件夹",
-    "deleteSelected": "删除选中",
     "exportSelected": "导出选中",
     "toggleFavorite": "切换收藏",
     "rename": "重命名",
@@ -363,17 +353,6 @@
   },
   "blocked": {
     "hint": "右键项目文件夹，选择「屏蔽此文件夹」"
-  },
-  "trash": {
-    "title": "回收站",
-    "empty": "回收站为空",
-    "restore": "恢复",
-    "restoreOk": "会话恢复成功",
-    "permanentDelete": "永久删除",
-    "emptyTrash": "清空回收站",
-    "emptyTrashConfirm": "永久删除所有已回收的会话？此操作无法撤销。",
-    "restoreAllConfirm": "恢复该组中的所有会话？",
-    "deleteAllConfirm": "永久删除该组中的所有会话？此操作无法撤销。"
   },
   "usage": {
     "title": "用量统计",

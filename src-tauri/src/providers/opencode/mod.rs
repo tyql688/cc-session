@@ -10,8 +10,7 @@ use rusqlite::{params, Connection};
 
 use crate::models::{Message, Provider, SessionMeta};
 use crate::provider::{
-    ChildPlan, DeletionPlan, FileAction, LoadedSession, ParsedSession, ProviderError, ScanOutcome,
-    SessionProvider, SourceState,
+    LoadedSession, ParsedSession, ProviderError, ScanOutcome, SessionProvider, SourceState,
 };
 use crate::provider_utils::session_title;
 
@@ -553,68 +552,5 @@ impl SessionProvider for OpenCodeProvider {
         }
 
         Ok(LoadedSession::new(messages))
-    }
-
-    fn deletion_plan(&self, _meta: &SessionMeta, children: &[SessionMeta]) -> DeletionPlan {
-        let child_plans = children
-            .iter()
-            .map(|c| ChildPlan {
-                id: c.id.clone(),
-                source_path: c.source_path.clone(),
-                title: c.title.clone(),
-                file_action: FileAction::Shared,
-            })
-            .collect();
-
-        DeletionPlan {
-            file_action: FileAction::Shared,
-            child_plans,
-            cleanup_dirs: Vec::new(),
-        }
-    }
-
-    fn purge_from_source(&self, source_path: &str, session_id: &str) -> Result<(), ProviderError> {
-        let mut conn = Connection::open(source_path)?;
-        let tx = conn.transaction()?;
-
-        tx.execute(
-            "DELETE FROM part WHERE session_id = ?1",
-            params![session_id],
-        )?;
-        tx.execute(
-            "DELETE FROM message WHERE session_id = ?1",
-            params![session_id],
-        )?;
-        tx.execute(
-            "DELETE FROM todo WHERE session_id = ?1",
-            params![session_id],
-        )?;
-        tx.execute(
-            "DELETE FROM session_share WHERE session_id = ?1",
-            params![session_id],
-        )?;
-
-        // Delete child sessions (subagents)
-        let child_ids = {
-            let mut child_stmt = tx.prepare("SELECT id FROM session WHERE parent_id = ?1")?;
-            let ids = child_stmt
-                .query_map(params![session_id], |row| row.get(0))?
-                .collect::<Result<Vec<String>, _>>()?;
-            ids
-        };
-        for cid in &child_ids {
-            tx.execute("DELETE FROM part WHERE session_id = ?1", params![cid])?;
-            tx.execute("DELETE FROM message WHERE session_id = ?1", params![cid])?;
-            tx.execute("DELETE FROM todo WHERE session_id = ?1", params![cid])?;
-            tx.execute(
-                "DELETE FROM session_share WHERE session_id = ?1",
-                params![cid],
-            )?;
-            tx.execute("DELETE FROM session WHERE id = ?1", params![cid])?;
-        }
-        tx.execute("DELETE FROM session WHERE id = ?1", params![session_id])?;
-
-        tx.commit()?;
-        Ok(())
     }
 }

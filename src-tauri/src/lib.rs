@@ -10,7 +10,6 @@ pub mod provider_utils;
 pub mod providers;
 pub mod services;
 pub mod tool_metadata;
-pub mod trash_state;
 
 use std::sync::Arc;
 
@@ -26,8 +25,8 @@ pub mod exporter_test_helpers {
 pub mod command_test_helpers {
     use crate::commands::{get_resume_command_for_tests, load_session_detail_for_tests};
     use crate::db::Database;
-    use crate::models::{ProviderSnapshot, SessionDetail, TrashMeta};
-    use crate::services::{ProviderSnapshotService, SessionLifecycleService};
+    use crate::models::{ProviderSnapshot, SessionDetail};
+    use crate::services::ProviderSnapshotService;
 
     pub fn get_session_detail(db: &Database, session_id: &str) -> anyhow::Result<SessionDetail> {
         load_session_detail_for_tests(db, session_id)
@@ -40,22 +39,6 @@ pub mod command_test_helpers {
     pub fn get_resume_command(db: &Database, session_id: &str) -> anyhow::Result<String> {
         get_resume_command_for_tests(db, session_id)
     }
-
-    pub fn trash_session(db: &Database, session_id: &str) -> anyhow::Result<()> {
-        Ok(SessionLifecycleService::new(db).trash_session(session_id)?)
-    }
-
-    pub fn list_trash() -> anyhow::Result<Vec<TrashMeta>> {
-        Ok(SessionLifecycleService::list_trash()?)
-    }
-
-    pub fn restore_session(db: &Database, trash_id: &str) -> anyhow::Result<()> {
-        Ok(SessionLifecycleService::new(db).restore_session(trash_id)?)
-    }
-
-    pub fn delete_session(db: &Database, session_id: &str) -> anyhow::Result<()> {
-        Ok(SessionLifecycleService::new(db).purge_session(session_id)?)
-    }
 }
 
 use commands::AppState;
@@ -63,62 +46,6 @@ use db::Database;
 use indexer::Indexer;
 #[cfg(any(target_os = "windows", target_os = "linux"))]
 use tauri::Manager;
-
-/// Detect and fix inconsistencies left by interrupted trash operations.
-/// Called once at app startup, after DB is opened.
-fn audit_trash_consistency(db: &db::Database) {
-    let Ok(trash_dir) = trash_state::trash_dir() else {
-        return;
-    };
-    let entries = match services::SessionLifecycleService::list_trash() {
-        Ok(entries) => entries,
-        Err(e) => {
-            log::warn!("trash audit: failed to list trash metadata: {e}");
-            return;
-        }
-    };
-    if entries.is_empty() {
-        return;
-    }
-
-    for entry in &entries {
-        // Auto-fix: session in both trash_meta AND DB → complete interrupted trash
-        let session_exists_in_db = match db.get_session(&entry.id) {
-            Ok(session) => session.is_some(),
-            Err(e) => {
-                log::warn!(
-                    "trash audit: failed to query session {} in DB: {e}",
-                    entry.id
-                );
-                false
-            }
-        };
-        if session_exists_in_db {
-            log::warn!(
-                "trash audit: session {} found in both trash and DB — completing interrupted trash",
-                entry.id
-            );
-            if let Err(e) = db.delete_session(&entry.id) {
-                log::warn!(
-                    "trash audit: failed to delete session {} from DB: {e}",
-                    entry.id
-                );
-            }
-        }
-
-        // Log: trash file referenced but missing
-        if !entry.trash_file.is_empty() {
-            let trash_file_path = trash_dir.join(&entry.trash_file);
-            if !trash_file_path.exists() {
-                log::warn!(
-                    "trash audit: session {} references missing trash file: {}",
-                    entry.id,
-                    entry.trash_file
-                );
-            }
-        }
-    }
-}
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -142,8 +69,6 @@ pub fn run() {
             std::process::exit(1);
         }
     };
-
-    audit_trash_consistency(&db);
 
     let providers = provider::all_runtimes();
 
@@ -185,7 +110,6 @@ pub fn run() {
             commands::get_child_session_counts,
             commands::search_sessions,
             commands::rename_session,
-            commands::delete_session,
             commands::get_session_count,
             commands::export_session,
             commands::get_index_stats,
@@ -199,14 +123,6 @@ pub fn run() {
             commands::get_resume_command,
             commands::detect_terminal,
             commands::resume_session,
-            commands::trash_session,
-            commands::trash_sessions_batch,
-            commands::list_trash,
-            commands::restore_session,
-            commands::restore_sessions_batch,
-            commands::empty_trash,
-            commands::permanent_delete_trash,
-            commands::permanent_delete_trash_batch,
             commands::export_sessions_batch,
             commands::toggle_favorite,
             commands::list_recent_sessions,

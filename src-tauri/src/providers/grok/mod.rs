@@ -5,12 +5,11 @@ use std::path::{Path, PathBuf};
 
 use rayon::prelude::*;
 
-use crate::models::{Provider, SessionMeta, TokenTotals};
+use crate::models::{Provider, TokenTotals};
 use crate::pricing::{self, PricingCatalog};
 use crate::provider::{
-    partition_files_by_freshness, timestamp_to_local_date, ChildPlan, DeletionPlan, FileAction,
-    LoadedSession, ParsedSession, ProviderError, ScanOutcome, SessionProvider, SourceState,
-    TokenStatRow,
+    partition_files_by_freshness, timestamp_to_local_date, LoadedSession, ParsedSession,
+    ProviderError, ScanOutcome, SessionProvider, SourceState, TokenStatRow,
 };
 
 pub(crate) struct Descriptor;
@@ -143,20 +142,6 @@ impl SessionProvider for GrokProvider {
         })
     }
 
-    fn scan_source(&self, source_path: &str) -> Result<Vec<ParsedSession>, ProviderError> {
-        let path = PathBuf::from(source_path);
-        if !path.exists() {
-            return Ok(Vec::new());
-        }
-        let session = parser::parse_session_file(&path).ok_or_else(|| {
-            ProviderError::Parse(format!(
-                "failed to parse Grok session file '{}'",
-                path.display()
-            ))
-        })?;
-        Ok(vec![session])
-    }
-
     fn load_messages(
         &self,
         session_id: &str,
@@ -239,35 +224,6 @@ impl SessionProvider for GrokProvider {
         }
         stats_map.into_values().collect()
     }
-
-    fn deletion_plan(&self, meta: &SessionMeta, children: &[SessionMeta]) -> DeletionPlan {
-        // Trash the chat file (restorable), sweep the whole session dir.
-        // Subagent children are sibling dirs and get the same treatment.
-        let session_dir_of = |source_path: &str| {
-            Path::new(source_path)
-                .parent()
-                .filter(|dir| dir.is_dir())
-                .map(Path::to_path_buf)
-        };
-        let mut cleanup_dirs: Vec<_> = session_dir_of(&meta.source_path).into_iter().collect();
-        let child_plans: Vec<ChildPlan> = children
-            .iter()
-            .map(|child| {
-                cleanup_dirs.extend(session_dir_of(&child.source_path));
-                ChildPlan {
-                    id: child.id.clone(),
-                    source_path: child.source_path.clone(),
-                    title: child.title.clone(),
-                    file_action: FileAction::Remove,
-                }
-            })
-            .collect();
-        DeletionPlan {
-            file_action: FileAction::Remove,
-            child_plans,
-            cleanup_dirs,
-        }
-    }
 }
 
 #[cfg(test)]
@@ -296,52 +252,5 @@ mod tests {
     #[test]
     fn descriptor_display_key() {
         assert_eq!(Descriptor.display_key(None), "grok");
-    }
-
-    #[test]
-    fn scan_source_returns_empty_when_file_is_missing() {
-        let tmp = tempfile::tempdir().unwrap();
-        let provider = GrokProvider::with_root(tmp.path().to_path_buf());
-        let missing = tmp.path().join("missing").join("chat_history.jsonl");
-        let sessions = provider.scan_source(missing.to_str().unwrap()).unwrap();
-        assert!(sessions.is_empty());
-    }
-
-    #[test]
-    fn deletion_plan_removes_whole_session_dir() {
-        let tmp = tempfile::tempdir().unwrap();
-        let session_dir = tmp.path().join("sessions").join("%2Ftmp%2Fp").join("s-1");
-        std::fs::create_dir_all(&session_dir).unwrap();
-        let source = session_dir.join("chat_history.jsonl");
-        std::fs::write(&source, "").unwrap();
-
-        let provider = GrokProvider::with_root(tmp.path().to_path_buf());
-        let meta = SessionMeta {
-            id: "s-1".to_string(),
-            provider: Provider::Grok,
-            title: "t".to_string(),
-            project_path: "/tmp/p".to_string(),
-            project_name: "p".to_string(),
-            created_at: 1,
-            updated_at: 2,
-            message_count: 1,
-            file_size_bytes: 0,
-            source_path: source.to_string_lossy().to_string(),
-            is_sidechain: false,
-            variant_name: None,
-            model: None,
-            cc_version: None,
-            git_branch: None,
-            parent_id: None,
-            input_tokens: 0,
-            output_tokens: 0,
-            cache_read_tokens: 0,
-            cache_write_tokens: 0,
-        };
-
-        let plan = provider.deletion_plan(&meta, &[]);
-        assert_eq!(plan.file_action, FileAction::Remove);
-        assert!(plan.child_plans.is_empty());
-        assert_eq!(plan.cleanup_dirs, vec![session_dir]);
     }
 }

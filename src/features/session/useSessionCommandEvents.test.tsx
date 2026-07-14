@@ -1,11 +1,8 @@
 import { renderHook } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 
-import {
-  dispatchSessionCommand,
-  SESSION_COMMAND_EVENTS,
-} from "@/lib/session-command-events";
-import { useSessionCommandEvents } from "@/features/session/useSessionCommandEvents";
+import { dispatchSessionCommand, SESSION_COMMAND_EVENTS } from "../../lib/session-command-events";
+import { useSessionCommandEvents } from "./useSessionCommandEvents";
 
 describe("useSessionCommandEvents", () => {
   it("runs every session command while the view is active", () => {
@@ -16,24 +13,20 @@ describe("useSessionCommandEvents", () => {
         onResume: () => commands.push("resume"),
         onExport: () => commands.push("export"),
         onFavorite: () => commands.push("favorite"),
-        onDelete: () => commands.push("delete"),
         onSessionSearch: () => commands.push("sessionSearch"),
+        onFindNext: () => commands.push("findNext"),
+        onFindPrev: () => commands.push("findPrev"),
       }),
     );
 
     dispatchSessionCommand(SESSION_COMMAND_EVENTS.resume);
     dispatchSessionCommand(SESSION_COMMAND_EVENTS.exportSession);
     dispatchSessionCommand(SESSION_COMMAND_EVENTS.favorite);
-    dispatchSessionCommand(SESSION_COMMAND_EVENTS.delete);
     dispatchSessionCommand(SESSION_COMMAND_EVENTS.sessionSearch);
+    dispatchSessionCommand(SESSION_COMMAND_EVENTS.findNext);
+    dispatchSessionCommand(SESSION_COMMAND_EVENTS.findPrev);
 
-    expect(commands).toEqual([
-      "resume",
-      "export",
-      "favorite",
-      "delete",
-      "sessionSearch",
-    ]);
+    expect(commands).toEqual(["resume", "export", "favorite", "sessionSearch", "findNext", "findPrev"]);
   });
 
   it("ignores commands while inactive and reads active state live", () => {
@@ -45,8 +38,9 @@ describe("useSessionCommandEvents", () => {
           onResume: () => commands.push("resume"),
           onExport: () => {},
           onFavorite: () => {},
-          onDelete: () => {},
           onSessionSearch: () => {},
+          onFindNext: () => {},
+          onFindPrev: () => {},
         }),
       { initialProps: { active: false } },
     );
@@ -66,8 +60,9 @@ describe("useSessionCommandEvents", () => {
         onResume: () => commands.push("resume"),
         onExport: () => {},
         onFavorite: () => {},
-        onDelete: () => {},
         onSessionSearch: () => {},
+        onFindNext: () => {},
+        onFindPrev: () => {},
       }),
     );
 

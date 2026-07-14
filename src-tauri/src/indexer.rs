@@ -130,14 +130,9 @@ impl Indexer {
         let pricing_catalog = self.cached_pricing_catalog();
         let now_millis = epoch_millis(SystemTime::now())?;
 
-        let excluded = crate::trash_state::shared_deleted_ids();
         let provider_refs = self.selected_providers(filter);
-        let works = self.collect_provider_work(
-            &provider_refs,
-            pricing_catalog.as_ref(),
-            &excluded,
-            force_parse,
-        )?;
+        let works =
+            self.collect_provider_work(&provider_refs, pricing_catalog.as_ref(), force_parse)?;
 
         // Phase 2 (sequential, DB writer): commit each provider's snapshot.
         // SQLite has a single writer mutex; serializing here avoids contention
@@ -206,7 +201,6 @@ impl Indexer {
         &self,
         providers: &[&dyn SessionProvider],
         pricing_catalog: Option<&PricingCatalog>,
-        excluded: &HashSet<String>,
         force_parse: bool,
     ) -> ServiceResult<Vec<ProviderWork>> {
         // Phase 1 (parallel, CPU/IO): scan each provider's files and compute
@@ -215,9 +209,7 @@ impl Indexer {
         // scan), so providers don't share state and can run in parallel.
         providers
             .par_iter()
-            .map(|provider| {
-                self.scan_provider_work(*provider, pricing_catalog, excluded, force_parse)
-            })
+            .map(|provider| self.scan_provider_work(*provider, pricing_catalog, force_parse))
             .collect()
     }
 
@@ -225,7 +217,6 @@ impl Indexer {
         &self,
         provider: &dyn SessionProvider,
         pricing_catalog: Option<&PricingCatalog>,
-        excluded: &HashSet<String>,
         force_parse: bool,
     ) -> ServiceResult<ProviderWork> {
         let provider_kind = provider.provider();
@@ -250,13 +241,8 @@ impl Indexer {
         let outcome = provider.scan_incremental(&known).map_err(|e| {
             ServiceError::ScanProvider(provider_kind.key().to_string(), e.to_string())
         })?;
-        let mut sessions = outcome.parsed;
+        let sessions = outcome.parsed;
         let unchanged_source_paths = outcome.unchanged_source_paths;
-
-        if !excluded.is_empty() {
-            sessions.retain(|session| !excluded.contains(&session.meta.id));
-        }
-
         let stats_batch = build_token_stats_batch(provider, &sessions, pricing_catalog);
 
         Ok(ProviderWork {
@@ -319,7 +305,7 @@ impl Indexer {
         }
         self.db
             .set_meta("usage_last_refreshed_at", &chrono::Utc::now().to_rfc3339())
-            .map_err(|e| ServiceError::StoreUsageLastRefreshed(e.to_string()))?;
+            .map_err(|error| ServiceError::StoreUsageLastRefreshed(error.to_string()))?;
         Ok(())
     }
 

@@ -38,7 +38,7 @@ Your data stays local. SessionView builds a local index for search and analytics
 - **Search without digging through folders**: global full-text search plus in-session find.
 - **Understand the work**: token timelines, tool-call mix, context/cache pressure, cost trends, and model breakdowns.
 - **Resume fast**: reopen a session in the matching terminal agent when the source tool supports it.
-- **Keep history tidy**: rename, favorite, export, trash/restore, hide noisy folders, and manage batches.
+- **Keep history organized**: rename, favorite, export, and hide noisy folders.
 - **Stay keyboard-friendly**: navigate tabs, panes, search, and common actions without leaving the keyboard.
 
 ## Session Analytics
@@ -68,7 +68,7 @@ When a tool exposes enough information, SessionView can also resume the selected
 Grab the latest build from [**Releases**](https://github.com/tyql688/sessionview/releases):
 
 | Platform | File |
-|----------|------|
+| ---------- | ------ |
 | macOS | `.dmg` |
 | Windows | `.exe` (NSIS installer) |
 | Linux | `.deb` / `.AppImage` |

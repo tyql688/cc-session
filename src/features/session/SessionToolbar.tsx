@@ -1,5 +1,5 @@
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import { ChartColumn, Download, SquareTerminal, Star, Trash2 } from "lucide-react";
+import { ChartColumn, Download, SquareTerminal, Star } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { getResumeCommand } from "@/lib/tauri";
@@ -18,7 +18,6 @@ export function SessionToolbar(props: {
   onAnalyze: () => void;
   onResume: () => void;
   onExport: () => void;
-  onDelete: () => void;
 }) {
   const { t, locale } = useI18n();
 
@@ -111,10 +110,6 @@ export function SessionToolbar(props: {
             <Button variant="outline" size="sm" onClick={props.onExport}>
               <Download className="size-3.5" aria-hidden="true" />
               {t("session.export")}
-            </Button>
-            <Button variant="destructive" size="sm" onClick={props.onDelete}>
-              <Trash2 className="size-3.5" aria-hidden="true" />
-              {t("session.delete")}
             </Button>
           </div>
         </TooltipProvider>

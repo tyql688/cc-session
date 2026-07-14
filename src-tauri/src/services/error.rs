@@ -9,8 +9,8 @@
 //! and `crate::error::CommandError`).
 //!
 //! `Anyhow(anyhow::Error)` is the transparent passthrough used for errors
-//! propagated from `anyhow`-typed helpers (`trash_state`, `provider::trash`,
-//! `Provider::require_runtime` / `parse_strict`). Rendering uses the full
+//! propagated from `anyhow`-typed helpers (`Provider::require_runtime` /
+//! `parse_strict`). Rendering uses the full
 //! context chain (`{:#}`), which matches the flat `format!("...: {e}")`
 //! strings those helpers used to produce. `Message(String)` remains for
 //! already-formatted strings.
@@ -29,8 +29,8 @@ pub enum ServiceError {
     Message(String),
 
     /// Passthrough for errors propagated from `anyhow`-typed helpers
-    /// (`trash_state`, `provider::trash`, `Provider::require_runtime` /
-    /// `parse_strict`). The `{:#}` rendering preserves the full context
+    /// (`Provider::require_runtime` / `parse_strict`). The `{:#}` rendering
+    /// preserves the full context
     /// chain, byte-identical to the old flat `format!("...: {e}")` text.
     #[error("{0:#}")]
     Anyhow(#[from] anyhow::Error),
@@ -40,36 +40,13 @@ pub enum ServiceError {
     LoadSession(String, String),
     #[error("session not found: {0}")]
     SessionNotFound(String),
-    #[error("failed to load child sessions for {0}: {1}")]
-    LoadChildSessions(String, String),
-
-    // --- session_lifecycle ---
-    #[error("trash meta lock poisoned")]
-    TrashMetaLockPoisoned,
-    #[error("failed to delete from db: {0}")]
-    DbDelete(String),
-    #[error("No trash metadata found")]
-    NoTrashMetadata,
-    #[error("failed to inspect unsupported trash file: {0}")]
-    InspectUnsupportedTrashFile(String),
-    #[error("failed to remove unsupported trash directory: {0}")]
-    RemoveUnsupportedTrashDir(String),
-    #[error("failed to remove unsupported trash file: {0}")]
-    RemoveUnsupportedTrashFile(String),
-
-    // --- source_sync ---
-    #[error("failed to scan source: {0}")]
-    ScanSource(String),
-    #[error("failed to sync source snapshot: {0}")]
-    SyncSourceSnapshot(String),
-    #[error("failed to store usage_last_refreshed_at: {0}")]
-    StoreUsageLastRefreshed(String),
-
     // --- provider_snapshots ---
     #[error("failed to load provider session counts: {0}")]
     LoadProviderSessionCounts(String),
 
     // --- indexer ---
+    #[error("failed to store usage_last_refreshed_at: {0}")]
+    StoreUsageLastRefreshed(String),
     #[error("failed to load {0} source snapshot: {1}")]
     LoadProviderSourceSnapshot(String, String),
     #[error("failed to scan {0} provider: {1}")]
@@ -116,16 +93,16 @@ mod tests {
     #[test]
     fn anyhow_passthrough_preserves_context_chain() {
         let err: ServiceError = anyhow::anyhow!("boom")
-            .context("failed to create trash directory")
+            .context("failed to open provider data")
             .into();
-        assert_eq!(rendered(err), "failed to create trash directory: boom");
+        assert_eq!(rendered(err), "failed to open provider data: boom");
     }
 
     #[test]
     fn message_passthrough_preserves_text_verbatim() {
         // An already-formatted string surfaced via `From<String>`.
-        let err: ServiceError = "failed to create trash directory: boom".to_string().into();
-        assert_eq!(rendered(err), "failed to create trash directory: boom");
+        let err: ServiceError = "failed to open provider data: boom".to_string().into();
+        assert_eq!(rendered(err), "failed to open provider data: boom");
     }
 
     #[test]
@@ -141,73 +118,12 @@ mod tests {
     }
 
     #[test]
-    fn load_child_sessions_matches_old_flat_string() {
-        let err = ServiceError::LoadChildSessions("sess-1".into(), "db locked".into());
+    fn load_provider_session_counts_matches_old_flat_string() {
+        let err = ServiceError::LoadProviderSessionCounts("db locked".into());
         assert_eq!(
             rendered(err),
-            "failed to load child sessions for sess-1: db locked"
+            "failed to load provider session counts: db locked"
         );
-    }
-
-    #[test]
-    fn trash_meta_lock_poisoned_matches_old_flat_string() {
-        assert_eq!(
-            rendered(ServiceError::TrashMetaLockPoisoned),
-            "trash meta lock poisoned"
-        );
-    }
-
-    #[test]
-    fn db_delete_matches_old_flat_string() {
-        let err = ServiceError::DbDelete("UNIQUE constraint".into());
-        assert_eq!(rendered(err), "failed to delete from db: UNIQUE constraint");
-    }
-
-    #[test]
-    fn no_trash_metadata_matches_old_flat_string() {
-        assert_eq!(
-            rendered(ServiceError::NoTrashMetadata),
-            "No trash metadata found"
-        );
-    }
-
-    #[test]
-    fn inspect_unsupported_trash_file_matches_old_flat_string() {
-        let err = ServiceError::InspectUnsupportedTrashFile("permission denied".into());
-        assert_eq!(
-            rendered(err),
-            "failed to inspect unsupported trash file: permission denied"
-        );
-    }
-
-    #[test]
-    fn remove_unsupported_trash_dir_matches_old_flat_string() {
-        let err = ServiceError::RemoveUnsupportedTrashDir("not empty".into());
-        assert_eq!(
-            rendered(err),
-            "failed to remove unsupported trash directory: not empty"
-        );
-    }
-
-    #[test]
-    fn remove_unsupported_trash_file_matches_old_flat_string() {
-        let err = ServiceError::RemoveUnsupportedTrashFile("permission denied".into());
-        assert_eq!(
-            rendered(err),
-            "failed to remove unsupported trash file: permission denied"
-        );
-    }
-
-    #[test]
-    fn scan_source_matches_old_flat_string() {
-        let err = ServiceError::ScanSource("io error".into());
-        assert_eq!(rendered(err), "failed to scan source: io error");
-    }
-
-    #[test]
-    fn sync_source_snapshot_matches_old_flat_string() {
-        let err = ServiceError::SyncSourceSnapshot("db locked".into());
-        assert_eq!(rendered(err), "failed to sync source snapshot: db locked");
     }
 
     #[test]
@@ -216,15 +132,6 @@ mod tests {
         assert_eq!(
             rendered(err),
             "failed to store usage_last_refreshed_at: db locked"
-        );
-    }
-
-    #[test]
-    fn load_provider_session_counts_matches_old_flat_string() {
-        let err = ServiceError::LoadProviderSessionCounts("db locked".into());
-        assert_eq!(
-            rendered(err),
-            "failed to load provider session counts: db locked"
         );
     }
 
