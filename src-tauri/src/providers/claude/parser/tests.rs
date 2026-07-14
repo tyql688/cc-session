@@ -26,6 +26,43 @@ fn parse_session_file_counts_malformed_lines_without_aborting() {
 }
 
 #[test]
+fn parse_session_file_reads_camel_case_ai_title() {
+    let dir = TempDir::new().unwrap();
+    let file = dir.path().join("session.jsonl");
+    let user = r#"{"type":"user","timestamp":"2026-04-10T10:00:00Z","message":{"content":"first prompt"}}"#;
+    let ai_title = r#"{"type":"ai-title","aiTitle":"Generated session name","sessionId":"s1"}"#;
+    fs::write(&file, format!("{user}\n{ai_title}\n")).unwrap();
+
+    let parsed = parse_session_file(&file).expect("parsed");
+    assert_eq!(parsed.meta.title, "Generated session name");
+}
+
+#[test]
+fn parse_session_file_prefers_camel_case_custom_title_over_ai_title() {
+    let dir = TempDir::new().unwrap();
+    let file = dir.path().join("session.jsonl");
+    let user = r#"{"type":"user","timestamp":"2026-04-10T10:00:00Z","message":{"content":"first prompt"}}"#;
+    let ai_title = r#"{"type":"ai-title","aiTitle":"AI name","sessionId":"s1"}"#;
+    let custom = r#"{"type":"custom-title","customTitle":"User name","sessionId":"s1"}"#;
+    fs::write(&file, format!("{user}\n{ai_title}\n{custom}\n")).unwrap();
+
+    let parsed = parse_session_file(&file).expect("parsed");
+    assert_eq!(parsed.meta.title, "User name");
+}
+
+#[test]
+fn parse_session_file_reads_legacy_title_key_on_title_entries() {
+    let dir = TempDir::new().unwrap();
+    let file = dir.path().join("session.jsonl");
+    let user = r#"{"type":"user","timestamp":"2026-04-10T10:00:00Z","message":{"content":"first prompt"}}"#;
+    let legacy = r#"{"type":"ai-title","title":"Legacy name","sessionId":"s1"}"#;
+    fs::write(&file, format!("{user}\n{legacy}\n")).unwrap();
+
+    let parsed = parse_session_file(&file).expect("parsed");
+    assert_eq!(parsed.meta.title, "Legacy name");
+}
+
+#[test]
 fn parse_session_file_deduplicates_same_message_request_pair() {
     let dir = TempDir::new().unwrap();
     let file = dir.path().join("session.jsonl");

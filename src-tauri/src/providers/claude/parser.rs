@@ -221,9 +221,15 @@ fn scan_jsonl_lines<R: BufRead>(reader: R, path: &Path, accum: &mut ScanAccum) -
                 "system" => {
                     handle_system_message(&entry, &mut accum.state, timestamp);
                 }
+                // Current Claude Code writes `customTitle` / `aiTitle`;
+                // `title` is kept as a legacy fallback key.
                 "custom-title" => {
                     flush_pending(&mut accum.state);
-                    if let Some(t) = entry.get("title").and_then(|t| t.as_str()) {
+                    if let Some(t) = entry
+                        .get("customTitle")
+                        .or_else(|| entry.get("title"))
+                        .and_then(|t| t.as_str())
+                    {
                         if !t.trim().is_empty() {
                             accum.custom_title = Some(t.to_string());
                         }
@@ -231,7 +237,11 @@ fn scan_jsonl_lines<R: BufRead>(reader: R, path: &Path, accum: &mut ScanAccum) -
                 }
                 "ai-title" => {
                     flush_pending(&mut accum.state);
-                    if let Some(t) = entry.get("title").and_then(|t| t.as_str()) {
+                    if let Some(t) = entry
+                        .get("aiTitle")
+                        .or_else(|| entry.get("title"))
+                        .and_then(|t| t.as_str())
+                    {
                         if !t.trim().is_empty() {
                             accum.ai_title = Some(t.to_string());
                         }
