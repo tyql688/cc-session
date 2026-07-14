@@ -281,6 +281,18 @@ impl CursorProvider {
         if !info.image_paths.is_empty() {
             substitute_image_placeholders(&mut session.messages, &info.image_paths);
         }
+        // The chats-side `meta.json` carries Cursor's own session title
+        // (e.g. an auto-generated thread name); it beats the transcript
+        // parser's first-user-message fallback. Main sessions only — a
+        // subagent's `lookup_id` is its parent, and the parent title must
+        // not clobber the subagent's task-derived one.
+        if session.meta.parent_id.is_none() {
+            if let Some(session_dir) = store.parent() {
+                if let Some(title) = acp::load_meta_json(session_dir).title {
+                    session.meta.title = title;
+                }
+            }
+        }
     }
 }
 
@@ -641,6 +653,35 @@ mod tests {
         // No store.db → IDE session → expected to be filtered.
         let provider = CursorProvider::with_home(dir.path().to_path_buf());
         assert!(provider.scan_all().unwrap().is_empty());
+    }
+
+    #[test]
+    fn scan_all_overlays_meta_json_title_on_cli_transcript_session() {
+        let dir = tempfile::tempdir().unwrap();
+        let sid = "cli-titled";
+        write_main_transcript(
+            dir.path(),
+            "TestProj",
+            sid,
+            r#"{"role":"user","message":{"content":[{"type":"text","text":"<user_query>a very long first prompt</user_query>"}]}}
+{"role":"assistant","message":{"content":[{"type":"text","text":"ok"}]}}"#,
+        );
+        write_store_db(dir.path(), sid, "/tmp/ws");
+        std::fs::write(
+            dir.path()
+                .join(".cursor")
+                .join("chats")
+                .join("hash1")
+                .join(sid)
+                .join("meta.json"),
+            r#"{"schemaVersion":1,"createdAtMs":1,"hasConversation":true,"title":"Named By Cursor","updatedAtMs":2}"#,
+        )
+        .unwrap();
+
+        let provider = CursorProvider::with_home(dir.path().to_path_buf());
+        let sessions = provider.scan_all().unwrap();
+        assert_eq!(sessions.len(), 1);
+        assert_eq!(sessions[0].meta.title, "Named By Cursor");
     }
 
     #[test]
