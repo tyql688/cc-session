@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.6.2] - Unreleased
+
+### Removed
+
+- Session deletion and trash/restore functionality across the frontend, IPC
+  boundary, provider runtimes, and backend lifecycle services.
+
 ## [0.6.1] - 2026-07-11
 
 ### Added
