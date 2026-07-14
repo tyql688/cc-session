@@ -146,6 +146,27 @@ describe("MessageBubble", () => {
     expect(markdownMock).not.toHaveBeenCalled();
   });
 
+  it("collapses Grok/Pi [Compaction] summaries like context_compacted", () => {
+    const detail = "This session is being continued from a previous conversation. Summary: built the demo.";
+    const { container } = render(
+      <MessageBubble
+        message={message({
+          role: "system",
+          content: `[Compaction] ${detail}`,
+        })}
+      />,
+    );
+
+    const toggle = container.querySelector<HTMLButtonElement>(".msg-system-toggle");
+    expect(toggle).not.toBeNull();
+    if (!toggle) throw new Error("missing compaction toggle");
+    expect(toggle).not.toHaveTextContent(detail);
+
+    fireEvent.click(toggle);
+
+    expect(container.querySelector(".msg-system-body")?.textContent).toBe(detail);
+  });
+
   it("hides context compacted content until expanded", () => {
     const detail = "very long compacted context\nwith more retained conversation details";
     const { container } = render(

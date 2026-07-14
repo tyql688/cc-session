@@ -106,6 +106,15 @@ const SYSTEM_SUBTYPE_CONFIG: Record<
     collapsible: true,
     hideCollapsedDetail: true,
   },
+  // Grok/Pi compaction summaries \u2014 same collapsed treatment as Codex's
+  // context_compacted marker instead of a wall of summary text.
+  Compaction: {
+    icon: "\u2702",
+    labelKey: "system.contextCompacted",
+    cls: "sys-compact",
+    collapsible: true,
+    hideCollapsedDetail: true,
+  },
 };
 
 const LEGACY_LOCAL_COMMAND_PREFIX = "[local_command]";
