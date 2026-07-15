@@ -11,6 +11,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogClose, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 import { COPY_FEEDBACK_MS } from "@/features/session/MessageBubble/TokenUsage";
+import { MERMAID_THEME_VARIABLES, mountMermaidSvg } from "@/features/session/timeline/mermaidTheme";
 import { useI18n } from "@/i18n/index";
 import { openExternalUrl } from "@/lib/external-links";
 import { LruCache } from "@/lib/markdown/lru";
@@ -37,7 +38,7 @@ const MERMAID_MIN_SCALE = 0.35;
 const MERMAID_MAX_SCALE = 4;
 const MERMAID_ZOOM_STEP = 1.2;
 
-type MermaidAction = "fullscreen" | "zoomIn" | "zoomOut" | "reset";
+type MermaidAction = "copy" | "fullscreen" | "zoomIn" | "zoomOut" | "reset";
 
 interface Props {
   text: string;
@@ -49,6 +50,8 @@ interface CopyLabels {
 }
 
 interface MermaidLabels {
+  copied: string;
+  copySource: string;
   exitFullscreen: string;
   resetZoom: string;
   viewFullscreen: string;
@@ -125,7 +128,8 @@ async function ensureMermaid(theme: "light" | "dark"): Promise<MermaidApi> {
     const natural = { useMaxWidth: false };
     mermaid.initialize({
       startOnLoad: false,
-      theme: theme === "dark" ? "dark" : "default",
+      theme: "base",
+      themeVariables: MERMAID_THEME_VARIABLES[theme],
       flowchart: natural,
       sequence: natural,
       gantt: natural,
@@ -205,17 +209,17 @@ function createCopyButton(labels: CopyLabels): HTMLButtonElement {
   return button;
 }
 
-function setCopyButtonCopied(button: HTMLButtonElement, labels: CopyLabels): void {
+function setCopyButtonCopied(button: HTMLButtonElement, copiedLabel: string, copyLabel: string): void {
   const previousTimer = copyResetTimers.get(button);
   if (previousTimer !== undefined) window.clearTimeout(previousTimer);
 
-  button.title = labels.copied;
-  button.setAttribute("aria-label", labels.copied);
+  button.title = copiedLabel;
+  button.setAttribute("aria-label", copiedLabel);
   button.innerHTML = CHECK_ICON;
 
   const timer = window.setTimeout(() => {
-    button.title = labels.copyCode;
-    button.setAttribute("aria-label", labels.copyCode);
+    button.title = copyLabel;
+    button.setAttribute("aria-label", copyLabel);
     button.innerHTML = COPY_ICON;
     copyResetTimers.delete(button);
   }, COPY_FEEDBACK_MS);
@@ -290,6 +294,7 @@ function createMermaidToolbar(labels: MermaidLabels): HTMLElement {
   const toolbar = document.createElement("div");
   toolbar.className = "markdown-mermaid-toolbar";
   toolbar.append(
+    createMermaidButton("copy", labels.copySource, COPY_ICON),
     createMermaidButton("zoomOut", labels.zoomOut, ZOOM_OUT_ICON),
     createMermaidButton("zoomIn", labels.zoomIn, ZOOM_IN_ICON),
     createMermaidButton("reset", labels.resetZoom, RESET_ICON),
@@ -299,6 +304,13 @@ function createMermaidToolbar(labels: MermaidLabels): HTMLElement {
 }
 
 function syncMermaidToolbar(block: HTMLElement, labels: MermaidLabels): void {
+  const copyButton = block.querySelector<HTMLButtonElement>('button[data-markdown-mermaid-action="copy"]');
+  if (copyButton !== null && !copyResetTimers.has(copyButton)) {
+    copyButton.title = labels.copySource;
+    copyButton.setAttribute("aria-label", labels.copySource);
+    copyButton.innerHTML = COPY_ICON;
+  }
+
   const fullscreenButton = block.querySelector<HTMLButtonElement>('button[data-markdown-mermaid-action="fullscreen"]');
   if (fullscreenButton !== null) {
     const isFullscreen = block.classList.contains("markdown-mermaid-fullscreen");
@@ -447,7 +459,7 @@ async function renderMermaidBlocks(
       const { svg, bindFunctions } = await mermaid.render(id, source);
       if (isCancelled() || !block.isConnected) return;
       content.classList.remove("markdown-mermaid-error");
-      content.innerHTML = svg;
+      mountMermaidSvg(content, svg);
       applyMermaidTransform(block);
       bindFunctions?.(content);
       block.dataset.mermaidRendered = "true";
@@ -528,6 +540,8 @@ export const Markdown = memo(function Markdown({ text }: Props) {
   );
   const mermaidLabels = useMemo(
     () => ({
+      copied: t("markdown.copied"),
+      copySource: t("markdown.copyMermaidSource"),
       exitFullscreen: t("markdown.exitFullscreen"),
       resetZoom: t("markdown.resetZoom"),
       viewFullscreen: t("markdown.viewFullscreen"),
@@ -583,7 +597,7 @@ export const Markdown = memo(function Markdown({ text }: Props) {
 
         navigator.clipboard
           .writeText(code)
-          .then(() => setCopyButtonCopied(copyButton, copyLabels))
+          .then(() => setCopyButtonCopied(copyButton, copyLabels.copied, copyLabels.copyCode))
           .catch(() => {
             toastError(t("toast.copyFailed"));
           });
@@ -597,7 +611,19 @@ export const Markdown = memo(function Markdown({ text }: Props) {
         if (block === null) return;
 
         const action = mermaidButton.dataset.markdownMermaidAction;
-        if (action === "fullscreen") {
+        if (action === "copy") {
+          const source = block.dataset.mermaidSource;
+          if (source === undefined) {
+            toastError(t("toast.copyFailed"));
+            return;
+          }
+          navigator.clipboard
+            .writeText(source)
+            .then(() => setCopyButtonCopied(mermaidButton, mermaidLabels.copied, mermaidLabels.copySource))
+            .catch(() => {
+              toastError(t("toast.copyFailed"));
+            });
+        } else if (action === "fullscreen") {
           setMermaidFullscreen(block, !block.classList.contains("markdown-mermaid-fullscreen"), mermaidLabels);
         } else if (action === "zoomIn") {
           zoomMermaidBlock(block, MERMAID_ZOOM_STEP);

@@ -3,14 +3,21 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { i18next } from "@/i18n/index";
 import { clearMarkdownCache } from "@/lib/markdown";
 import { Markdown } from "@/features/session/timeline/Markdown";
+import { setTheme } from "@/stores/theme";
 
 const mermaidMock = vi.hoisted(() => ({
   initialize: vi.fn(),
   render: vi.fn(async () => ({
     bindFunctions: vi.fn(),
-    svg: '<svg viewBox="0 0 100 40"><text>A</text></svg>',
+    svg: [
+      '<svg id="mock-mermaid" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 40">',
+      "<style>#mock-mermaid .node{fill:#e8f2ff;}</style>",
+      '<g class="node"><text>A</text></g>',
+      "</svg>",
+    ].join(""),
   })),
 }));
+const clipboardWrite = vi.fn<(text: string) => Promise<void>>();
 
 vi.mock("mermaid", () => ({
   default: {
@@ -24,17 +31,47 @@ describe("Markdown", () => {
     clearMarkdownCache();
     mermaidMock.initialize.mockClear();
     mermaidMock.render.mockClear();
+    clipboardWrite.mockReset();
+    clipboardWrite.mockResolvedValue();
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: { writeText: clipboardWrite },
+    });
     await i18next.changeLanguage("en");
   });
 
-  it("enhances mermaid diagrams with fullscreen and pan-zoom controls", async () => {
+  it("enhances mermaid diagrams with source copy, fullscreen, and pan-zoom controls", async () => {
     const { container } = render(<Markdown text={"```mermaid\ngraph TD\n  A-->B\n```"} />);
 
     await waitFor(() => expect(mermaidMock.render).toHaveBeenCalledTimes(1));
 
     const block = container.querySelector<HTMLElement>(".markdown-mermaid-block");
+    const content = container.querySelector<HTMLElement>(".markdown-mermaid-content");
     expect(block).not.toBeNull();
     expect(container.querySelector(".markdown-mermaid-content svg")).toBeInTheDocument();
+    expect(content?.querySelector(":scope > style[data-mermaid-stylesheet]")).toHaveTextContent(
+      "#mock-mermaid .node{fill:#e8f2ff;}",
+    );
+    expect(content?.querySelector("svg style")).toBeInTheDocument();
+    expect(mermaidMock.initialize).toHaveBeenCalledWith(
+      expect.objectContaining({
+        theme: "base",
+        themeVariables: expect.objectContaining({
+          background: "#ffffff",
+          primaryColor: "#e8f2ff",
+          primaryTextColor: "#1d1d1f",
+          lineColor: "#66717f",
+          signalColor: "#456f9e",
+          sequenceNumberColor: "#ffffff",
+        }),
+      }),
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Copy Mermaid source" }));
+    await waitFor(() => expect(clipboardWrite).toHaveBeenCalledWith(block?.dataset.mermaidSource));
+    expect(block?.dataset.mermaidSource).toContain("graph TD");
+    expect(block?.dataset.mermaidSource).not.toContain("```");
+    expect(screen.getByRole("button", { name: "Copied" })).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "View fullscreen" }));
     expect(block).toHaveClass("markdown-mermaid-fullscreen");
@@ -48,6 +85,31 @@ describe("Markdown", () => {
 
     fireEvent.keyDown(document, { key: "Escape" });
     expect(block).not.toHaveClass("markdown-mermaid-fullscreen");
+  });
+
+  it("reinitializes Mermaid with a legible dark palette", async () => {
+    setTheme("dark");
+    const view = render(<Markdown text={"```mermaid\ngraph TD\n  A-->B\n```"} />);
+
+    try {
+      await waitFor(() => expect(mermaidMock.render).toHaveBeenCalledTimes(1));
+      expect(mermaidMock.initialize).toHaveBeenCalledWith(
+        expect.objectContaining({
+          theme: "base",
+          themeVariables: expect.objectContaining({
+            background: "#191b20",
+            primaryColor: "#27384f",
+            primaryTextColor: "#f1f3f5",
+            lineColor: "#aeb6c2",
+            signalColor: "#8fb8e8",
+            sequenceNumberColor: "#172033",
+          }),
+        }),
+      );
+    } finally {
+      view.unmount();
+      setTheme("light");
+    }
   });
 
   it("shares one Escape listener across fullscreen diagrams", async () => {

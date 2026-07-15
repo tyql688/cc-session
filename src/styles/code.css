@@ -155,44 +155,6 @@
   font-size: 1em;
 }
 
-/* Mermaid diagram blocks */
-.mermaid-block {
-  border-radius: 6px;
-  overflow: hidden;
-}
-.mermaid-toolbar {
-  display: flex;
-  justify-content: flex-end;
-  padding: 4px 8px;
-  background: var(--bg-tab-hover);
-}
-.mermaid-toggle {
-  font-size: 12px;
-  color: var(--text-secondary);
-  background: none;
-  border: none;
-  cursor: pointer;
-  padding: 2px 6px;
-  border-radius: 3px;
-}
-.mermaid-toggle:hover {
-  background: var(--bg-sidebar);
-  color: var(--text-primary);
-}
-.mermaid-diagram {
-  padding: 16px;
-  display: flex;
-  justify-content: center;
-  overflow-x: auto;
-  background: var(--bg-primary);
-  border-radius: 0 0 6px 6px;
-  min-height: 60px;
-}
-.mermaid-diagram svg {
-  max-width: 100%;
-  height: auto;
-}
-
 /* highlight.js overrides — force our code-block styling */
 .code-block .hljs {
   background: transparent;
