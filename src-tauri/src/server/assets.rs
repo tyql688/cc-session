@@ -37,12 +37,18 @@ fn asset_response(path: &str, file: rust_embed::EmbeddedFile) -> Response {
     } else {
         "no-cache"
     };
+    // Release builds embed assets as &'static [u8]; serve them zero-copy
+    // instead of cloning multi-hundred-KB chunks per request.
+    let body = match file.data {
+        std::borrow::Cow::Borrowed(bytes) => axum::body::Bytes::from_static(bytes),
+        std::borrow::Cow::Owned(bytes) => axum::body::Bytes::from(bytes),
+    };
     (
         [
             (header::CONTENT_TYPE, mime.as_ref().to_string()),
             (header::CACHE_CONTROL, cache_control.to_string()),
         ],
-        file.data.into_owned(),
+        body,
     )
         .into_response()
 }

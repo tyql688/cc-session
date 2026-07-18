@@ -57,10 +57,8 @@ pub async fn reindex(state: AppState) -> CommandResult<usize> {
     }
 
     let worker_state = state.clone();
-    let result = match tokio::task::spawn_blocking(move || worker_state.indexer.reindex()).await {
-        Ok(result) => result.map_err(CommandError::from),
-        Err(error) => Err(CommandError::from(anyhow!("task join error: {error:#}"))),
-    };
+    let result =
+        super::blocking(move || worker_state.indexer.reindex().map_err(anyhow::Error::from)).await;
     state.maintenance_running.store(false, Ordering::SeqCst);
     result
 }
@@ -79,7 +77,7 @@ pub async fn reindex_providers(
     }
 
     let worker_state = state.clone();
-    let result = match tokio::task::spawn_blocking(move || {
+    let result = super::blocking(move || -> anyhow::Result<usize> {
         let filter: Vec<crate::models::Provider> = providers
             .iter()
             .filter_map(|s| crate::models::Provider::parse(s))
@@ -87,24 +85,17 @@ pub async fn reindex_providers(
         if filter.is_empty() {
             return Ok(0);
         }
-        worker_state
+        Ok(worker_state
             .indexer
-            .reindex_providers(Some(&filter), aggressive.unwrap_or(false))
+            .reindex_providers(Some(&filter), aggressive.unwrap_or(false))?)
     })
-    .await
-    {
-        Ok(result) => result.map_err(CommandError::from),
-        Err(error) => Err(CommandError::from(anyhow!("task join error: {error:#}"))),
-    };
+    .await;
     state.maintenance_running.store(false, Ordering::SeqCst);
     result
 }
 
 pub async fn get_tree(state: AppState) -> CommandResult<Vec<crate::models::TreeNode>> {
-    tokio::task::spawn_blocking(move || state.indexer.build_tree())
-        .await
-        .context("task join error")?
-        .map_err(CommandError::from)
+    super::blocking(move || state.indexer.build_tree()).await
 }
 
 pub async fn get_session_detail(
@@ -112,7 +103,7 @@ pub async fn get_session_detail(
     request_seq: Option<u64>,
     state: AppState,
 ) -> CommandResult<SessionDetail> {
-    let result = tokio::task::spawn_blocking(move || -> anyhow::Result<SessionDetail> {
+    super::blocking(move || -> anyhow::Result<SessionDetail> {
         let meta = load_session_meta(&state.db, &session_id).map_err(anyhow::Error::msg)?;
         let source_path = meta.source_path.clone();
         let request = LoadRequest {
@@ -136,19 +127,14 @@ pub async fn get_session_detail(
             })
         })
     })
-    .await;
-    result
-        .context("task join error")?
-        .map_err(CommandError::from)
+    .await
 }
 
 pub async fn get_session_meta(session_id: String, state: AppState) -> CommandResult<SessionMeta> {
-    tokio::task::spawn_blocking(move || -> anyhow::Result<SessionMeta> {
+    super::blocking(move || -> anyhow::Result<SessionMeta> {
         load_session_meta(&state.db, &session_id).map_err(anyhow::Error::msg)
     })
     .await
-    .context("task join error")?
-    .map_err(CommandError::from)
 }
 
 pub async fn get_session_open_window(
@@ -159,7 +145,7 @@ pub async fn get_session_open_window(
     request_seq: Option<u64>,
     state: AppState,
 ) -> CommandResult<SessionOpenWindow> {
-    tokio::task::spawn_blocking(move || -> anyhow::Result<SessionOpenWindow> {
+    super::blocking(move || -> anyhow::Result<SessionOpenWindow> {
         let mut meta = load_session_meta(&state.db, &session_id).map_err(anyhow::Error::msg)?;
         let source_path = meta.source_path.clone();
         with_load_guard(
@@ -200,8 +186,6 @@ pub async fn get_session_open_window(
         )
     })
     .await
-    .context("task join error")?
-    .map_err(CommandError::from)
 }
 
 pub async fn get_session_messages_window(
@@ -212,7 +196,7 @@ pub async fn get_session_messages_window(
     request_seq: Option<u64>,
     state: AppState,
 ) -> CommandResult<SessionMessagesWindow> {
-    tokio::task::spawn_blocking(move || -> anyhow::Result<SessionMessagesWindow> {
+    super::blocking(move || -> anyhow::Result<SessionMessagesWindow> {
         let meta = load_session_meta(&state.db, &session_id).map_err(anyhow::Error::msg)?;
         let source_path = meta.source_path.clone();
         with_load_guard(
@@ -252,8 +236,6 @@ pub async fn get_session_messages_window(
         )
     })
     .await
-    .context("task join error")?
-    .map_err(CommandError::from)
 }
 
 pub async fn get_session_turn_outline(
@@ -261,7 +243,7 @@ pub async fn get_session_turn_outline(
     request_seq: Option<u64>,
     state: AppState,
 ) -> CommandResult<SessionTurnOutline> {
-    tokio::task::spawn_blocking(move || -> anyhow::Result<SessionTurnOutline> {
+    super::blocking(move || -> anyhow::Result<SessionTurnOutline> {
         let meta = load_session_meta(&state.db, &session_id).map_err(anyhow::Error::msg)?;
         let source_path = meta.source_path.clone();
         // Guard under a dedicated key: window fetches (scroll paging, search
@@ -285,8 +267,6 @@ pub async fn get_session_turn_outline(
         })
     })
     .await
-    .context("task join error")?
-    .map_err(CommandError::from)
 }
 
 pub async fn cancel_session_load(
@@ -314,7 +294,7 @@ pub async fn get_child_sessions(
     parent_id: String,
     state: AppState,
 ) -> CommandResult<Vec<SessionMeta>> {
-    tokio::task::spawn_blocking(move || -> anyhow::Result<Vec<SessionMeta>> {
+    super::blocking(move || -> anyhow::Result<Vec<SessionMeta>> {
         let mut sessions = state
             .db
             .get_child_sessions(&parent_id)
@@ -334,23 +314,19 @@ pub async fn get_child_sessions(
         Ok(sessions)
     })
     .await
-    .context("task join error")?
-    .map_err(CommandError::from)
 }
 
 pub async fn get_child_session_counts(
     parent_ids: Vec<String>,
     state: AppState,
 ) -> CommandResult<HashMap<String, u64>> {
-    tokio::task::spawn_blocking(move || {
+    super::blocking(move || {
         state
             .db
             .child_session_counts(&parent_ids)
             .context("failed to load child session counts")
     })
     .await
-    .context("task join error")?
-    .map_err(CommandError::from)
 }
 
 pub async fn rename_session(
@@ -358,32 +334,28 @@ pub async fn rename_session(
     new_title: String,
     state: AppState,
 ) -> CommandResult<()> {
-    tokio::task::spawn_blocking(move || {
+    super::blocking(move || {
         state
             .db
             .rename_session(&session_id, &new_title)
             .context("failed to rename session")
     })
     .await
-    .context("task join error")?
-    .map_err(CommandError::from)
 }
 
 pub async fn get_session_count(state: AppState) -> CommandResult<u64> {
-    let count = tokio::task::spawn_blocking(move || {
+    let count = super::blocking(move || {
         state
             .db
             .session_count()
             .context("failed to get session count")
     })
-    .await
-    .context("task join error")?
-    .map_err(CommandError::from)?;
+    .await?;
     Ok(count)
 }
 
 pub async fn toggle_favorite(session_id: String, state: AppState) -> CommandResult<bool> {
-    tokio::task::spawn_blocking(move || -> anyhow::Result<bool> {
+    super::blocking(move || -> anyhow::Result<bool> {
         let is_fav = state
             .db
             .is_favorite(&session_id)
@@ -404,15 +376,13 @@ pub async fn toggle_favorite(session_id: String, state: AppState) -> CommandResu
         }
     })
     .await
-    .context("task join error")?
-    .map_err(CommandError::from)
 }
 
 pub async fn list_recent_sessions(
     limit: usize,
     state: AppState,
 ) -> CommandResult<Vec<SessionMeta>> {
-    tokio::task::spawn_blocking(move || -> anyhow::Result<Vec<SessionMeta>> {
+    super::blocking(move || -> anyhow::Result<Vec<SessionMeta>> {
         let mut sessions = state
             .db
             .list_recent_sessions(limit)
@@ -421,12 +391,10 @@ pub async fn list_recent_sessions(
         Ok(sessions)
     })
     .await
-    .context("task join error")?
-    .map_err(CommandError::from)
 }
 
 pub async fn list_favorites(state: AppState) -> CommandResult<Vec<SessionMeta>> {
-    tokio::task::spawn_blocking(move || -> anyhow::Result<Vec<SessionMeta>> {
+    super::blocking(move || -> anyhow::Result<Vec<SessionMeta>> {
         let mut sessions = state
             .db
             .list_favorites()
@@ -435,20 +403,16 @@ pub async fn list_favorites(state: AppState) -> CommandResult<Vec<SessionMeta>> 
         Ok(sessions)
     })
     .await
-    .context("task join error")?
-    .map_err(CommandError::from)
 }
 
 pub async fn is_favorite(session_id: String, state: AppState) -> CommandResult<bool> {
-    tokio::task::spawn_blocking(move || {
+    super::blocking(move || {
         state
             .db
             .is_favorite(&session_id)
             .context("failed to check favorite")
     })
     .await
-    .context("task join error")?
-    .map_err(CommandError::from)
 }
 
 pub(crate) fn load_detail(session_id: &str, db: &Database) -> anyhow::Result<SessionDetail> {

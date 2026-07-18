@@ -62,9 +62,7 @@ fn tmp_dir_allows_image(canonical: &Path) -> bool {
 }
 
 pub async fn read_image_base64(path: String) -> CommandResult<String> {
-    tokio::task::spawn_blocking(move || read_image_base64_sync(&path))
-        .await
-        .context("task join error")?
+    super::blocking(move || read_image_base64_sync(&path)).await
 }
 
 fn read_image_base64_sync(path: &str) -> CommandResult<String> {
@@ -136,9 +134,7 @@ fn read_tool_result_canonical_allowed(canonical: &Path) -> bool {
 }
 
 pub async fn read_tool_result_text(path: String) -> CommandResult<String> {
-    tokio::task::spawn_blocking(move || read_tool_result_text_sync(&path))
-        .await
-        .context("task join error")?
+    super::blocking(move || read_tool_result_text_sync(&path)).await
 }
 
 /// Resolve a `<persisted-output>` referenced file lazily on demand.
@@ -146,9 +142,7 @@ pub async fn read_tool_result_text(path: String) -> CommandResult<String> {
 /// contains a "Full output saved to: <path>" payload, so parse-time
 /// session loads no longer pay the synchronous fs cost per message.
 pub async fn resolve_persisted_output(path: String, state: AppState) -> CommandResult<String> {
-    tokio::task::spawn_blocking(move || resolve_persisted_output_sync(&path, &state))
-        .await
-        .context("task join error")?
+    super::blocking(move || resolve_persisted_output_sync(&path, &state)).await
 }
 
 fn persisted_output_canonical_allowed(canonical: &Path) -> bool {
@@ -225,9 +219,7 @@ fn read_tool_result_text_sync(path: &str) -> CommandResult<String> {
 }
 
 pub async fn open_in_folder(path: String) -> CommandResult<()> {
-    tokio::task::spawn_blocking(move || open_in_folder_sync(&path))
-        .await
-        .context("task join error")?
+    super::blocking(move || open_in_folder_sync(&path)).await
 }
 
 fn open_in_folder_sync(path: &str) -> CommandResult<()> {

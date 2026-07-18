@@ -1,17 +1,15 @@
 //! Generic invoke dispatcher: maps `POST /api/invoke/{command}` bodies onto
-//! the same command cores the Tauri shell wraps. Argument shapes mirror the
+//! the same command cores the Tauri shell wraps. Argument keys mirror the
 //! frontend's `BackendCommandMap` (camelCase), so the browser transport can
 //! send exactly what it would pass to `invoke()`.
 //!
 //! `open_external` is intentionally absent: in the headless shell the
 //! frontend runs in a real browser and opens links itself.
 
-use serde::Deserialize;
 use serde_json::Value;
 
 use crate::commands::{self, AppState};
 use crate::error::CommandError;
-use crate::models::SearchFilters;
 
 pub enum DispatchError {
     UnknownCommand,
@@ -25,9 +23,12 @@ impl From<CommandError> for DispatchError {
     }
 }
 
-fn args<T: serde::de::DeserializeOwned>(raw: Value) -> Result<T, DispatchError> {
-    serde_json::from_value(raw)
-        .map_err(|e| DispatchError::BadArgs(format!("invalid arguments: {e}")))
+/// Pull one named argument out of the request body. Absent keys deserialize
+/// from JSON null, so `Option<T>` parameters accept omission for free.
+fn arg<T: serde::de::DeserializeOwned>(args: &Value, key: &str) -> Result<T, DispatchError> {
+    let value = args.get(key).cloned().unwrap_or(Value::Null);
+    serde_json::from_value(value)
+        .map_err(|e| DispatchError::BadArgs(format!("invalid argument '{key}': {e}")))
 }
 
 fn ok<T: serde::Serialize>(value: T) -> Result<Value, DispatchError> {
@@ -38,212 +39,81 @@ fn ok<T: serde::Serialize>(value: T) -> Result<Value, DispatchError> {
     })
 }
 
-#[derive(Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct SessionIdArgs {
-    session_id: String,
-}
-
-#[derive(Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct PathArgs {
-    path: String,
-}
-
-#[derive(Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct ReindexProvidersArgs {
-    providers: Vec<String>,
-    aggressive: Option<bool>,
-}
-
-#[derive(Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct SessionLoadArgs {
-    session_id: String,
-    request_seq: Option<u64>,
-}
-
-#[derive(Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct SessionWindowArgs {
-    session_id: String,
-    offset: i64,
-    limit: usize,
-    request_id: Option<String>,
-    request_seq: Option<u64>,
-}
-
-#[derive(Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct CancelLoadArgs {
-    session_id: String,
-    request_id: Option<String>,
-}
-
-#[derive(Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct SearchArgs {
-    filters: SearchFilters,
-}
-
-#[derive(Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct RenameArgs {
-    session_id: String,
-    new_title: String,
-}
-
-#[derive(Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct ExportSessionArgs {
-    session_id: String,
-    format: String,
-    output_path: String,
-}
-
-#[derive(Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct ExportBatchArgs {
-    items: Vec<String>,
-    format: String,
-    output_path: String,
-}
-
-#[derive(Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct ParentIdArgs {
-    parent_id: String,
-}
-
-#[derive(Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct ParentIdsArgs {
-    parent_ids: Vec<String>,
-}
-
-#[derive(Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct ResumeArgs {
-    session_id: String,
-    terminal_app: String,
-}
-
-#[derive(Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct LimitArgs {
-    limit: usize,
-}
-
-#[derive(Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct UsageStatsArgs {
-    providers: Vec<String>,
-    range_days: Option<u32>,
-    date_start: Option<String>,
-    date_end: Option<String>,
-}
-
-#[derive(Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct ActivityCalendarArgs {
-    providers: Vec<String>,
-    date_start: String,
-    date_end: String,
-}
-
-#[derive(Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct ProjectUsageArgs {
-    project_path: String,
-    providers: Vec<String>,
-    range_days: Option<u32>,
-    date_start: Option<String>,
-    date_end: Option<String>,
-}
-
-/// Dispatch one invoke request. `raw_args` is the JSON body (`{}` when the
+/// Dispatch one invoke request. `raw` is the JSON body (`{}` when the
 /// command takes no arguments).
-pub async fn dispatch(
-    state: AppState,
-    command: &str,
-    raw_args: Value,
-) -> Result<Value, DispatchError> {
+pub async fn dispatch(state: AppState, command: &str, raw: Value) -> Result<Value, DispatchError> {
+    let a = &raw;
     match command {
         "reindex" => ok(commands::reindex(state).await?),
         "reindex_providers" => {
-            let a: ReindexProvidersArgs = args(raw_args)?;
-            ok(commands::reindex_providers(a.providers, a.aggressive, state).await?)
+            ok(
+                commands::reindex_providers(arg(a, "providers")?, arg(a, "aggressive")?, state)
+                    .await?,
+            )
         }
         "get_tree" => ok(commands::get_tree(state).await?),
         "get_session_detail" => {
-            let a: SessionLoadArgs = args(raw_args)?;
-            ok(commands::get_session_detail(a.session_id, a.request_seq, state).await?)
-        }
-        "get_session_meta" => {
-            let a: SessionIdArgs = args(raw_args)?;
-            ok(commands::get_session_meta(a.session_id, state).await?)
-        }
-        "get_session_open_window" => {
-            let a: SessionWindowArgs = args(raw_args)?;
-            ok(commands::get_session_open_window(
-                a.session_id,
-                a.offset,
-                a.limit,
-                a.request_id,
-                a.request_seq,
-                state,
+            ok(
+                commands::get_session_detail(arg(a, "sessionId")?, arg(a, "requestSeq")?, state)
+                    .await?,
             )
-            .await?)
         }
-        "get_session_messages_window" => {
-            let a: SessionWindowArgs = args(raw_args)?;
-            ok(commands::get_session_messages_window(
-                a.session_id,
-                a.offset,
-                a.limit,
-                a.request_id,
-                a.request_seq,
-                state,
-            )
-            .await?)
-        }
-        "get_session_turn_outline" => {
-            let a: SessionLoadArgs = args(raw_args)?;
-            ok(commands::get_session_turn_outline(a.session_id, a.request_seq, state).await?)
-        }
+        "get_session_meta" => ok(commands::get_session_meta(arg(a, "sessionId")?, state).await?),
+        "get_session_open_window" => ok(commands::get_session_open_window(
+            arg(a, "sessionId")?,
+            arg(a, "offset")?,
+            arg(a, "limit")?,
+            arg(a, "requestId")?,
+            arg(a, "requestSeq")?,
+            state,
+        )
+        .await?),
+        "get_session_messages_window" => ok(commands::get_session_messages_window(
+            arg(a, "sessionId")?,
+            arg(a, "offset")?,
+            arg(a, "limit")?,
+            arg(a, "requestId")?,
+            arg(a, "requestSeq")?,
+            state,
+        )
+        .await?),
+        "get_session_turn_outline" => ok(commands::get_session_turn_outline(
+            arg(a, "sessionId")?,
+            arg(a, "requestSeq")?,
+            state,
+        )
+        .await?),
         "cancel_session_load" => {
-            let a: CancelLoadArgs = args(raw_args)?;
-            ok(commands::cancel_session_load(a.session_id, a.request_id, state).await?)
+            ok(
+                commands::cancel_session_load(arg(a, "sessionId")?, arg(a, "requestId")?, state)
+                    .await?,
+            )
         }
         "resolve_persisted_output" => {
-            let a: PathArgs = args(raw_args)?;
-            ok(commands::resolve_persisted_output(a.path, state).await?)
+            ok(commands::resolve_persisted_output(arg(a, "path")?, state).await?)
         }
-        "search_sessions" => {
-            let a: SearchArgs = args(raw_args)?;
-            ok(commands::search_sessions(a.filters, state).await?)
-        }
+        "search_sessions" => ok(commands::search_sessions(arg(a, "filters")?, state).await?),
         "rename_session" => {
-            let a: RenameArgs = args(raw_args)?;
-            ok(commands::rename_session(a.session_id, a.new_title, state).await?)
+            ok(commands::rename_session(arg(a, "sessionId")?, arg(a, "newTitle")?, state).await?)
         }
         "get_session_count" => ok(commands::get_session_count(state).await?),
-        "export_session" => {
-            let a: ExportSessionArgs = args(raw_args)?;
-            ok(commands::export_session(a.session_id, a.format, a.output_path, state).await?)
-        }
-        "export_sessions_batch" => {
-            let a: ExportBatchArgs = args(raw_args)?;
-            ok(commands::export_sessions_batch(a.items, a.format, a.output_path, state).await?)
-        }
-        "get_child_sessions" => {
-            let a: ParentIdArgs = args(raw_args)?;
-            ok(commands::get_child_sessions(a.parent_id, state).await?)
-        }
+        "export_session" => ok(commands::export_session(
+            arg(a, "sessionId")?,
+            arg(a, "format")?,
+            arg(a, "outputPath")?,
+            state,
+        )
+        .await?),
+        "export_sessions_batch" => ok(commands::export_sessions_batch(
+            arg(a, "items")?,
+            arg(a, "format")?,
+            arg(a, "outputPath")?,
+            state,
+        )
+        .await?),
+        "get_child_sessions" => ok(commands::get_child_sessions(arg(a, "parentId")?, state).await?),
         "get_child_session_counts" => {
-            let a: ParentIdsArgs = args(raw_args)?;
-            ok(commands::get_child_session_counts(a.parent_ids, state).await?)
+            ok(commands::get_child_session_counts(arg(a, "parentIds")?, state).await?)
         }
         "get_index_stats" => ok(commands::get_index_stats(state).await?),
         "get_pricing_catalog_status" => ok(commands::get_pricing_catalog_status(state).await?),
@@ -255,80 +125,56 @@ pub async fn dispatch(
         "detect_terminal" => ok(commands::detect_terminal().await),
         "get_provider_snapshots" => ok(commands::get_provider_snapshots(state).await?),
         "resume_session" => {
-            let a: ResumeArgs = args(raw_args)?;
-            ok(commands::resume_session(a.session_id, a.terminal_app, state).await?)
-        }
-        "get_resume_command" => {
-            let a: SessionIdArgs = args(raw_args)?;
-            ok(commands::get_resume_command(a.session_id, state).await?)
-        }
-        "list_recent_sessions" => {
-            let a: LimitArgs = args(raw_args)?;
-            ok(commands::list_recent_sessions(a.limit, state).await?)
-        }
-        "toggle_favorite" => {
-            let a: SessionIdArgs = args(raw_args)?;
-            ok(commands::toggle_favorite(a.session_id, state).await?)
-        }
-        "list_favorites" => ok(commands::list_favorites(state).await?),
-        "is_favorite" => {
-            let a: SessionIdArgs = args(raw_args)?;
-            ok(commands::is_favorite(a.session_id, state).await?)
-        }
-        "read_image_base64" => {
-            let a: PathArgs = args(raw_args)?;
-            ok(commands::read_image_base64(a.path).await?)
-        }
-        "read_tool_result_text" => {
-            let a: PathArgs = args(raw_args)?;
-            ok(commands::read_tool_result_text(a.path).await?)
-        }
-        "open_in_folder" => {
-            let a: PathArgs = args(raw_args)?;
-            ok(commands::open_in_folder(a.path).await?)
-        }
-        "get_usage_stats" => {
-            let a: UsageStatsArgs = args(raw_args)?;
-            ok(commands::get_usage_stats(
-                a.providers,
-                a.range_days,
-                a.date_start,
-                a.date_end,
-                state,
-            )
-            .await?)
-        }
-        "get_activity_calendar" => {
-            let a: ActivityCalendarArgs = args(raw_args)?;
             ok(
-                commands::get_activity_calendar(a.providers, a.date_start, a.date_end, state)
+                commands::resume_session(arg(a, "sessionId")?, arg(a, "terminalApp")?, state)
                     .await?,
             )
         }
-        "get_project_tool_usage" => {
-            let a: ProjectUsageArgs = args(raw_args)?;
-            ok(commands::get_project_tool_usage(
-                a.project_path,
-                a.providers,
-                a.range_days,
-                a.date_start,
-                a.date_end,
-                state,
-            )
-            .await?)
+        "get_resume_command" => {
+            ok(commands::get_resume_command(arg(a, "sessionId")?, state).await?)
         }
-        "get_project_daily_usage" => {
-            let a: ProjectUsageArgs = args(raw_args)?;
-            ok(commands::get_project_daily_usage(
-                a.project_path,
-                a.providers,
-                a.range_days,
-                a.date_start,
-                a.date_end,
-                state,
-            )
-            .await?)
+        "list_recent_sessions" => {
+            ok(commands::list_recent_sessions(arg(a, "limit")?, state).await?)
         }
+        "toggle_favorite" => ok(commands::toggle_favorite(arg(a, "sessionId")?, state).await?),
+        "list_favorites" => ok(commands::list_favorites(state).await?),
+        "is_favorite" => ok(commands::is_favorite(arg(a, "sessionId")?, state).await?),
+        "read_image_base64" => ok(commands::read_image_base64(arg(a, "path")?).await?),
+        "read_tool_result_text" => ok(commands::read_tool_result_text(arg(a, "path")?).await?),
+        "open_in_folder" => ok(commands::open_in_folder(arg(a, "path")?).await?),
+        "get_usage_stats" => ok(commands::get_usage_stats(
+            arg(a, "providers")?,
+            arg(a, "rangeDays")?,
+            arg(a, "dateStart")?,
+            arg(a, "dateEnd")?,
+            state,
+        )
+        .await?),
+        "get_activity_calendar" => ok(commands::get_activity_calendar(
+            arg(a, "providers")?,
+            arg(a, "dateStart")?,
+            arg(a, "dateEnd")?,
+            state,
+        )
+        .await?),
+        "get_project_tool_usage" => ok(commands::get_project_tool_usage(
+            arg(a, "projectPath")?,
+            arg(a, "providers")?,
+            arg(a, "rangeDays")?,
+            arg(a, "dateStart")?,
+            arg(a, "dateEnd")?,
+            state,
+        )
+        .await?),
+        "get_project_daily_usage" => ok(commands::get_project_daily_usage(
+            arg(a, "projectPath")?,
+            arg(a, "providers")?,
+            arg(a, "rangeDays")?,
+            arg(a, "dateStart")?,
+            arg(a, "dateEnd")?,
+            state,
+        )
+        .await?),
         "get_today_cost" => ok(commands::get_today_cost(state).await?),
         "get_today_tokens" => ok(commands::get_today_tokens(state).await?),
         _ => Err(DispatchError::UnknownCommand),
@@ -364,10 +210,23 @@ mod tests {
         .await;
         match result {
             Err(DispatchError::BadArgs(message)) => {
-                assert!(message.contains("invalid arguments"), "got: {message}");
+                assert!(message.contains("sessionId"), "got: {message}");
             }
             _ => panic!("expected BadArgs"),
         }
+    }
+
+    #[tokio::test]
+    async fn dispatch_treats_missing_optional_args_as_none() {
+        let dir = tempfile::TempDir::new().unwrap();
+        // requestSeq omitted entirely — must not be a BadArgs error.
+        let result = dispatch(
+            test_state(dir.path()),
+            "get_session_detail",
+            serde_json::json!({ "sessionId": "missing-session" }),
+        )
+        .await;
+        assert!(matches!(result, Err(DispatchError::Command(_))));
     }
 
     #[tokio::test]

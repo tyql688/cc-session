@@ -1,7 +1,7 @@
-use anyhow::{anyhow, Context};
+use anyhow::Context;
 use serde::Serialize;
 
-use crate::error::{CommandError, CommandResult};
+use crate::error::CommandResult;
 use crate::exporter;
 use crate::models::{IndexStats, PricingCatalogStatus, ProviderSnapshot};
 use crate::pricing::{
@@ -37,7 +37,7 @@ fn emit_maintenance(
 }
 
 pub async fn get_index_stats(state: AppState) -> CommandResult<IndexStats> {
-    tokio::task::spawn_blocking(move || -> anyhow::Result<IndexStats> {
+    super::blocking(move || -> anyhow::Result<IndexStats> {
         let session_count = state
             .db
             .session_count()
@@ -64,12 +64,10 @@ pub async fn get_index_stats(state: AppState) -> CommandResult<IndexStats> {
         })
     })
     .await
-    .context("task join error")?
-    .map_err(CommandError::from)
 }
 
 pub async fn get_pricing_catalog_status(state: AppState) -> CommandResult<PricingCatalogStatus> {
-    tokio::task::spawn_blocking(move || -> anyhow::Result<PricingCatalogStatus> {
+    super::blocking(move || -> anyhow::Result<PricingCatalogStatus> {
         let updated_at = state
             .db
             .get_meta(PRICING_CATALOG_UPDATED_AT_KEY)
@@ -100,8 +98,6 @@ pub async fn get_pricing_catalog_status(state: AppState) -> CommandResult<Pricin
         })
     })
     .await
-    .context("task join error")?
-    .map_err(CommandError::from)
 }
 
 pub async fn refresh_pricing_catalog(state: AppState) -> CommandResult<PricingCatalogStatus> {
@@ -134,7 +130,7 @@ pub async fn refresh_pricing_catalog(state: AppState) -> CommandResult<PricingCa
     // DB writes can wait on the busy timeout when another instance holds the
     // write lock — keep them off the async runtime like every other command.
     let stored_updated_at = updated_at.clone();
-    tokio::task::spawn_blocking(move || -> anyhow::Result<()> {
+    super::blocking(move || -> anyhow::Result<()> {
         state
             .db
             .set_meta(PRICING_CATALOG_JSON_KEY, &body)
@@ -149,8 +145,7 @@ pub async fn refresh_pricing_catalog(state: AppState) -> CommandResult<PricingCa
             .context("failed to store pricing model count")?;
         Ok(())
     })
-    .await
-    .context("task join error")??;
+    .await?;
 
     Ok(PricingCatalogStatus {
         updated_at: Some(updated_at),
@@ -186,10 +181,7 @@ pub async fn start_rebuild_index(state: AppState) -> CommandResult<bool> {
 }
 
 pub async fn clear_index(state: AppState) -> CommandResult<()> {
-    tokio::task::spawn_blocking(move || state.db.clear_all().context("failed to clear index"))
-        .await
-        .context("task join error")?
-        .map_err(CommandError::from)?;
+    super::blocking(move || state.db.clear_all().context("failed to clear index")).await?;
     Ok(())
 }
 
@@ -197,15 +189,13 @@ pub async fn clear_index(state: AppState) -> CommandResult<()> {
 /// the next reindex re-parses every file. Used by the first-use bootstrap to
 /// re-price stats that were indexed before a pricing catalog existed.
 pub async fn clear_usage_stats(state: AppState) -> CommandResult<()> {
-    tokio::task::spawn_blocking(move || {
+    super::blocking(move || {
         state
             .db
             .clear_usage_stats()
             .context("failed to clear usage stats")
     })
-    .await
-    .context("task join error")?
-    .map_err(CommandError::from)?;
+    .await?;
     Ok(())
 }
 
@@ -246,10 +236,7 @@ pub async fn start_refresh_usage(state: AppState) -> CommandResult<bool> {
 }
 
 pub async fn get_provider_snapshots(state: AppState) -> CommandResult<Vec<ProviderSnapshot>> {
-    tokio::task::spawn_blocking(move || ProviderSnapshotService::new(&state.db).list())
-        .await
-        .context("task join error")?
-        .map_err(CommandError::from)
+    super::blocking(move || ProviderSnapshotService::new(&state.db).list()).await
 }
 
 pub async fn export_session(
@@ -258,14 +245,12 @@ pub async fn export_session(
     output_path: String,
     state: AppState,
 ) -> CommandResult<()> {
-    tokio::task::spawn_blocking(move || -> anyhow::Result<()> {
+    super::blocking(move || -> anyhow::Result<()> {
         let detail = load_detail(&session_id, &state.db)?;
         exporter::export(&detail, &format, &output_path)?;
         Ok(())
     })
     .await
-    .context("task join error")?
-    .map_err(CommandError::from)
 }
 
 pub async fn export_sessions_batch(
@@ -274,14 +259,12 @@ pub async fn export_sessions_batch(
     output_path: String,
     state: AppState,
 ) -> CommandResult<()> {
-    tokio::task::spawn_blocking(move || -> anyhow::Result<()> {
+    super::blocking(move || -> anyhow::Result<()> {
         let file = std::fs::File::create(&output_path).context("failed to create zip file")?;
         write_sessions_zip(&state, &items, &format, std::io::BufWriter::new(file))?;
         Ok(())
     })
     .await
-    .map_err(|e| anyhow!("task join error: {e}"))??;
-    Ok(())
 }
 
 /// Render `items` into a zip archive on `writer`, emitting `export-progress`

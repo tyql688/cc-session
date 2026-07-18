@@ -1,7 +1,7 @@
-use anyhow::{anyhow, Context};
+use anyhow::anyhow;
 
 use crate::db::Database;
-use crate::error::{CommandError, CommandResult};
+use crate::error::CommandResult;
 use crate::services::load_session_meta;
 use crate::services::terminal;
 
@@ -13,10 +13,7 @@ struct ResumeTarget {
 }
 
 pub async fn get_resume_command(session_id: String, state: AppState) -> CommandResult<String> {
-    tokio::task::spawn_blocking(move || get_resume_command_for_db(&state.db, &session_id))
-        .await
-        .context("task join error")?
-        .map_err(CommandError::from)
+    super::blocking(move || get_resume_command_for_db(&state.db, &session_id)).await
 }
 
 /// Sanitize session ID to prevent shell injection — only allow alnum, hyphens, underscores
@@ -65,13 +62,12 @@ pub async fn resume_session(
     terminal_app: String,
     state: AppState,
 ) -> CommandResult<()> {
-    tokio::task::spawn_blocking(move || -> CommandResult<()> {
+    super::blocking(move || -> CommandResult<()> {
         let target = resolve_resume_target(&state.db, &session_id)?;
         terminal::launch_terminal(&terminal_app, &target.command, target.cwd.as_deref())?;
         Ok(())
     })
     .await
-    .context("task join error")?
 }
 
 pub async fn detect_terminal() -> String {

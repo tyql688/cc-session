@@ -51,6 +51,26 @@ pub struct AppState {
     pub promote_in_flight: Arc<Mutex<HashSet<String>>>,
 }
 
+/// Run blocking DB/file work off the async runtime and fold a join failure
+/// into the command error chain. Nearly every command core wraps its body in
+/// this; accepts closures returning either `anyhow::Result` or
+/// `CommandResult`.
+pub(crate) async fn blocking<T, E>(
+    f: impl FnOnce() -> Result<T, E> + Send + 'static,
+) -> crate::error::CommandResult<T>
+where
+    T: Send + 'static,
+    E: Send + 'static,
+    crate::error::CommandError: From<E>,
+{
+    match tokio::task::spawn_blocking(f).await {
+        Ok(result) => result.map_err(crate::error::CommandError::from),
+        Err(e) => Err(crate::error::CommandError(anyhow::anyhow!(
+            "task join error: {e:#}"
+        ))),
+    }
+}
+
 pub use file_access::*;
 pub use search::*;
 pub use sessions::*;

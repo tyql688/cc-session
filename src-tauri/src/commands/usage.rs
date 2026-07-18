@@ -22,11 +22,9 @@ pub async fn get_usage_stats(
     // Tauri commands are a trust boundary: reject malformed dates instead of
     // silently passing them into SQL string comparisons.
     let custom_range = parse_custom_range(date_start.as_deref(), date_end.as_deref())?;
-    let stats = tokio::task::spawn_blocking(move || {
-        build_usage_stats(&state, &providers, range_days, custom_range)
-    })
-    .await
-    .context("task join error")??;
+    let stats =
+        super::blocking(move || build_usage_stats(&state, &providers, range_days, custom_range))
+            .await?;
     Ok(stats)
 }
 
@@ -63,7 +61,7 @@ pub async fn get_activity_calendar(
 ) -> CommandResult<ActivityCalendar> {
     // Trust boundary: reject malformed dates instead of passing them into SQL.
     parse_custom_range(Some(&date_start), Some(&date_end))?;
-    let calendar = tokio::task::spawn_blocking(move || -> anyhow::Result<ActivityCalendar> {
+    let calendar = super::blocking(move || -> anyhow::Result<ActivityCalendar> {
         let bounds = UsageDateBounds {
             start: Some(&date_start),
             end: Some(&date_end),
@@ -90,8 +88,7 @@ pub async fn get_activity_calendar(
             available_years,
         })
     })
-    .await
-    .context("task join error")??;
+    .await?;
     Ok(calendar)
 }
 
@@ -104,11 +101,10 @@ pub async fn get_project_tool_usage(
     state: AppState,
 ) -> CommandResult<ProjectToolUsageStats> {
     let custom_range = parse_custom_range(date_start.as_deref(), date_end.as_deref())?;
-    let stats = tokio::task::spawn_blocking(move || {
+    let stats = super::blocking(move || {
         build_project_tool_usage(&state, &project_path, &providers, range_days, custom_range)
     })
-    .await
-    .context("task join error")??;
+    .await?;
     Ok(stats)
 }
 
@@ -121,16 +117,15 @@ pub async fn get_project_daily_usage(
     state: AppState,
 ) -> CommandResult<Vec<ProjectDailyUsage>> {
     let custom_range = parse_custom_range(date_start.as_deref(), date_end.as_deref())?;
-    let days = tokio::task::spawn_blocking(move || {
+    let days = super::blocking(move || {
         build_project_daily_usage(&state, &project_path, &providers, range_days, custom_range)
     })
-    .await
-    .context("task join error")??;
+    .await?;
     Ok(days)
 }
 
 pub async fn get_today_cost(state: AppState) -> CommandResult<f64> {
-    let cost = tokio::task::spawn_blocking(move || -> anyhow::Result<f64> {
+    let cost = super::blocking(move || -> anyhow::Result<f64> {
         let today = chrono::Local::now().format("%Y-%m-%d").to_string();
         let cost = state
             .db
@@ -138,8 +133,7 @@ pub async fn get_today_cost(state: AppState) -> CommandResult<f64> {
             .context("failed to query today cost")?;
         Ok(cost)
     })
-    .await
-    .context("task join error")??;
+    .await?;
     Ok(cost)
 }
 
@@ -152,7 +146,7 @@ pub struct TodayTokens {
 }
 
 pub async fn get_today_tokens(state: AppState) -> CommandResult<TodayTokens> {
-    let tokens = tokio::task::spawn_blocking(move || -> anyhow::Result<TodayTokens> {
+    let tokens = super::blocking(move || -> anyhow::Result<TodayTokens> {
         let today = chrono::Local::now().format("%Y-%m-%d").to_string();
         let (input, output, cache_read, cache_write) = state
             .db
@@ -165,8 +159,7 @@ pub async fn get_today_tokens(state: AppState) -> CommandResult<TodayTokens> {
             cache_write,
         })
     })
-    .await
-    .context("task join error")??;
+    .await?;
     Ok(tokens)
 }
 
