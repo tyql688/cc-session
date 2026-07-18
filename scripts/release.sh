@@ -73,6 +73,11 @@ sedi "s/^version = \"[^\"]*\"/version = \"$VERSION\"/" src-tauri/Cargo.toml
 # Update tauri.conf.json
 sedi "s/\"version\": \"[^\"]*\"/\"version\": \"$VERSION\"/" src-tauri/tauri.conf.json
 
+# Update headless npm launcher (version + pinned platform-package versions).
+# CI re-pins at publish from the tag, so these only need to track the repo.
+sedi "s/\"version\": \"[^\"]*\"/\"version\": \"$VERSION\"/" npm/sessionview/package.json
+sedi "s/\(\"sessionview-[a-z0-9-]*\"\): \"[^\"]*\"/\1: \"$VERSION\"/" npm/sessionview/package.json
+
 # Update changelog
 sedi "s/^## \[$VERSION_REGEX\] - Unreleased$/## [$VERSION] - $RELEASE_DATE/" CHANGELOG.md
 
@@ -83,7 +88,7 @@ sedi "s/^## \[$VERSION_REGEX\] - Unreleased$/## [$VERSION] - $RELEASE_DATE/" CHA
 npm install --package-lock-only --ignore-scripts --silent || { echo "ERROR: npm install failed"; exit 1; }
 
 echo "Committing..."
-git add CHANGELOG.md package.json package-lock.json src-tauri/Cargo.toml src-tauri/Cargo.lock src-tauri/tauri.conf.json
+git add CHANGELOG.md package.json package-lock.json src-tauri/Cargo.toml src-tauri/Cargo.lock src-tauri/tauri.conf.json npm/sessionview/package.json
 git commit -m "chore: release $TAG"
 
 echo "Tagging $TAG..."
