@@ -157,6 +157,16 @@ impl Indexer {
             log::warn!("post-reindex WAL checkpoint failed: {error}");
         }
 
+        // Reclaim freelist bloat (mass deletions, clear+rebuild churn). The
+        // 10% threshold inside makes this a no-op on ordinary passes; when it
+        // does fire it shrinks the file to live data. Best-effort like the
+        // checkpoint above.
+        match self.db.compact_if_bloated() {
+            Ok(true) => log::info!("post-reindex compaction reclaimed freelist pages"),
+            Ok(false) => {}
+            Err(error) => log::warn!("post-reindex compaction failed: {error}"),
+        }
+
         let elapsed = start.elapsed();
         log::info!(
             "Reindex complete: {total} sessions indexed in {:.2}s",

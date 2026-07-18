@@ -846,3 +846,47 @@ fn aggressive_sync_only_deletes_sessions_whose_source_file_is_gone() {
         "sessions with a still-existing source file must survive a lossy scan"
     );
 }
+
+#[test]
+fn compact_if_bloated_skips_lean_files_and_shrinks_after_mass_delete() {
+    let dir = TempDir::new().unwrap();
+    let db = Database::open(dir.path()).unwrap();
+
+    // Fresh DB: nothing to reclaim.
+    assert!(!db.compact_if_bloated().unwrap());
+
+    // Index enough content that deleting it leaves a large freelist.
+    let filler = "searchable content ".repeat(2000);
+    let parsed: Vec<ParsedSession> = (0..200)
+        .map(|i| ParsedSession {
+            meta: sample_meta(&format!("bloat-{i}")),
+            messages: Vec::new(),
+            content_text: filler.clone(),
+            parse_warning_count: 0,
+            child_session_ids: Vec::new(),
+            usage_events: Vec::new(),
+            source_mtime: 0,
+        })
+        .collect();
+    db.sync_provider_snapshot(&Provider::Claude, &parsed, true, &[])
+        .unwrap();
+    db.checkpoint_truncate().unwrap();
+    let populated = std::fs::metadata(dir.path().join("sessions.db"))
+        .unwrap()
+        .len();
+
+    db.clear_all().unwrap();
+    db.checkpoint_truncate().unwrap();
+
+    assert!(db.compact_if_bloated().unwrap());
+    let compacted = std::fs::metadata(dir.path().join("sessions.db"))
+        .unwrap()
+        .len();
+    assert!(
+        compacted * 4 < populated,
+        "expected VACUUM to shrink the file: populated={populated} compacted={compacted}"
+    );
+
+    // Second pass is a no-op: freelist already reclaimed.
+    assert!(!db.compact_if_bloated().unwrap());
+}

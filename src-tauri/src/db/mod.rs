@@ -70,6 +70,30 @@ impl Database {
         Ok(())
     }
 
+    /// Reclaim file-level bloat after heavy churn. Skips quickly unless the
+    /// freelist exceeds ~10% of the file; then merges the FTS index's
+    /// incremental b-trees and VACUUMs, shrinking the file to its live data
+    /// (observed 20x growth on long-lived DBs that never vacuumed). VACUUM
+    /// waits on the busy timeout if a reader holds the file; callers treat
+    /// failure as best-effort and retry on a later maintenance pass.
+    pub fn compact_if_bloated(&self) -> Result<bool, rusqlite::Error> {
+        let conn = self.lock_write()?;
+        let (page_count, freelist_count): (i64, i64) = conn.query_row(
+            "SELECT page_count, freelist_count FROM pragma_page_count, pragma_freelist_count",
+            [],
+            |row| Ok((row.get(0)?, row.get(1)?)),
+        )?;
+        if page_count == 0 || freelist_count * 10 < page_count {
+            return Ok(false);
+        }
+        conn.execute_batch("INSERT INTO sessions_fts(sessions_fts) VALUES('optimize')")?;
+        conn.execute("VACUUM", [])?;
+        // In WAL mode the rewritten pages land in the WAL; the main file only
+        // shrinks once they are checkpointed back and the WAL is truncated.
+        conn.query_row("PRAGMA wal_checkpoint(TRUNCATE)", [], |_| Ok(()))?;
+        Ok(true)
+    }
+
     pub fn with_transaction<T, F>(&self, f: F) -> Result<T, rusqlite::Error>
     where
         F: FnOnce(&Connection) -> Result<T, rusqlite::Error>,
