@@ -41,6 +41,7 @@ import {
   invokeWithFallback,
 } from "@/lib/tauri";
 import { isMac, isWindows } from "@/lib/platform";
+import { isTauriRuntime } from "@/lib/runtime";
 import { useAutoIndexInterval, useDisabledProviders } from "@/stores/settings";
 import { loadProviderSnapshots } from "@/stores/providerSnapshots";
 import { toast, toastError, toastInfo } from "@/stores/toast";
@@ -77,7 +78,8 @@ import "@/styles/index.css";
 // app hides native decorations like Windows, so it needs the same custom
 // min/max/close window controls.
 const isLinux = typeof navigator !== "undefined" && /Linux/.test(navigator.platform);
-const showWindowControls = isWindows || isLinux;
+// Window chrome only exists in the Tauri shell; a plain browser tab has its own.
+const showWindowControls = (isWindows || isLinux) && isTauriRuntime;
 
 interface ErrorBoundaryProps {
   fallback: (error: Error) => ReactNode;
@@ -313,7 +315,8 @@ export default function App() {
             const handle = window.setTimeout(warmMarkdown, WARMUP_FALLBACK_MS);
             return () => window.clearTimeout(handle);
           })();
-    const updateTimer = setTimeout(() => void checkForUpdate(), UPDATE_CHECK_DELAY_MS);
+    // Headless shell: updates ship via npm/the server binary, not the in-app updater.
+    const updateTimer = isTauriRuntime ? setTimeout(() => void checkForUpdate(), UPDATE_CHECK_DELAY_MS) : null;
 
     async function setup() {
       // Track maximize state so the custom (Windows/Linux) maximize button can
@@ -394,7 +397,7 @@ export default function App() {
       unlistenMaintenance?.();
       unlistenResized?.();
       cancelWarmup();
-      clearTimeout(updateTimer);
+      if (updateTimer !== null) clearTimeout(updateTimer);
     };
   }, []);
 
@@ -450,10 +453,18 @@ export default function App() {
         <TitleBar
           showWindowControls={showWindowControls}
           isMaximized={isMaximized}
-          onMinimize={() => void getCurrentWindow().minimize()}
-          onToggleMaximize={() => void getCurrentWindow().toggleMaximize()}
-          onClose={() => void getCurrentWindow().close()}
-          onStartDragging={() => void getCurrentWindow().startDragging()}
+          onMinimize={() => {
+            if (isTauriRuntime) void getCurrentWindow().minimize();
+          }}
+          onToggleMaximize={() => {
+            if (isTauriRuntime) void getCurrentWindow().toggleMaximize();
+          }}
+          onClose={() => {
+            if (isTauriRuntime) void getCurrentWindow().close();
+          }}
+          onStartDragging={() => {
+            if (isTauriRuntime) void getCurrentWindow().startDragging();
+          }}
         />
         <div className="main-layout">
           <ActivityBar

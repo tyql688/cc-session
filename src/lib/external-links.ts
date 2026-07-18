@@ -1,4 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
+import { isTauriRuntime } from "@/lib/runtime";
 import { openInFolder } from "@/lib/tauri";
 
 const EXTERNAL_URL_PROTOCOLS = new Set(["http:", "https:", "mailto:", "tel:"]);
@@ -43,5 +44,11 @@ export async function openExternalUrl(rawUrl: string): Promise<void> {
     return;
   }
   const url = normalizeExternalUrl(rawUrl);
+  if (!isTauriRuntime) {
+    // Headless shell: the frontend runs in a real browser, which can open
+    // links itself — no backend round-trip.
+    window.open(url, "_blank", "noopener,noreferrer");
+    return;
+  }
   await invoke<void>("plugin:opener|open_url", { url });
 }

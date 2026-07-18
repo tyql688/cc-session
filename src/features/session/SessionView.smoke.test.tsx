@@ -87,6 +87,12 @@ function tokenTotals() {
   };
 }
 
+vi.mock("@/lib/runtime", () => ({
+  isTauriRuntime: true,
+  backendToken: () => null,
+  withBackendToken: (path: string) => path,
+}));
+
 vi.mock("@tauri-apps/api/core", () => ({
   invoke: vi.fn(async (command: string, args?: Record<string, unknown>) => {
     switch (command) {

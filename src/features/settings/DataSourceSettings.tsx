@@ -1,7 +1,7 @@
 import { Button } from "@/components/ui/button";
-import { invoke } from "@tauri-apps/api/core";
 import { useI18n } from "@/i18n/index";
 import { shortenHomePath } from "@/lib/formatters";
+import { openInFolder } from "@/lib/tauri";
 import type { ProviderSnapshot } from "@/lib/types";
 import { useDisabledProviders, useDisabledProvidersError, toggleProvider } from "@/stores/settings";
 import { useProviderSnapshotVersion } from "@/stores/providerSnapshots";
@@ -31,7 +31,7 @@ export function DataSourceSettings(props: { providerSnapshots: () => ProviderSna
                   title={t("settings.openInFinder")}
                   onClick={async () => {
                     try {
-                      await invoke("open_external", { url: info.path });
+                      await openInFolder(info.path);
                     } catch (e) {
                       toastError(String(e));
                     }

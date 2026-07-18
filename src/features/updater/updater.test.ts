@@ -1,6 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 // Mock tauri plugins before importing the store
+vi.mock("@/lib/runtime", () => ({
+  isTauriRuntime: true,
+  backendToken: () => null,
+  withBackendToken: (path: string) => path,
+}));
+
 vi.mock("@tauri-apps/plugin-updater", () => ({
   check: vi.fn(),
 }));

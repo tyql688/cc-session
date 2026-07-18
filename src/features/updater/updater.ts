@@ -1,5 +1,6 @@
 import type { Update } from "@tauri-apps/plugin-updater";
 import { create } from "zustand";
+import { isTauriRuntime } from "@/lib/runtime";
 
 export type UpdatePhase = "idle" | "checking" | "upToDate" | "available" | "downloading" | "installing" | "error";
 
@@ -46,6 +47,8 @@ function scheduleReset(target: UpdatePhase, ms: number) {
 }
 
 export async function checkForUpdate(): Promise<void> {
+  // Headless shell: no in-app updater — versions ship via npm / the binary.
+  if (!isTauriRuntime) return;
   if (isChecking || getUpdaterPhase() === "downloading" || getUpdaterPhase() === "installing") return;
   isChecking = true;
   clearResetTimer();

@@ -5,6 +5,8 @@ import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { Dialog, DialogClose, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
 import type { SessionMeta } from "@/lib/types";
+import { downloadSessionExport } from "@/lib/headless-download";
+import { isTauriRuntime } from "@/lib/runtime";
 import { exportSession } from "@/lib/tauri";
 import { useI18n } from "@/i18n/index";
 import { toast, toastError } from "@/stores/toast";
@@ -32,6 +34,15 @@ export function ExportDialog(props: { open: boolean; session: SessionMeta; onClo
     const selected = FORMAT_OPTIONS.find((f) => f.value === format);
     if (!selected) return;
     let closedAfterSuccess = false;
+
+    if (!isTauriRuntime) {
+      // Browser shell: no native save dialog — stream the export as a
+      // download from the headless server instead.
+      downloadSessionExport(props.session.id, selected.value);
+      props.onClose();
+      toast(t("toast.exportOk"));
+      return;
+    }
 
     try {
       const outputPath = await save({

@@ -1,5 +1,5 @@
-import { invoke } from "@tauri-apps/api/core";
 import { errorMessage } from "@/lib/errors";
+import { invokeBackend } from "@/lib/transport";
 import { toastError } from "@/stores/toast";
 import type {
   SessionDetail,
@@ -227,9 +227,9 @@ function invokeCommand<Name extends keyof BackendCommandMap>(
   ...args: CommandArgs<Name> extends undefined ? [] : [CommandArgs<Name>]
 ): Promise<CommandResultFor<Name>> {
   if (args.length === 0) {
-    return invoke<CommandResultFor<Name>>(name);
+    return invokeBackend<CommandResultFor<Name>>(name);
   }
-  return invoke<CommandResultFor<Name>>(name, args[0]);
+  return invokeBackend<CommandResultFor<Name>>(name, args[0]);
 }
 
 export async function reindex(): Promise<number> {

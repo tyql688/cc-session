@@ -1,10 +1,20 @@
+import { readFileSync } from "node:fs";
 import path from "node:path";
 import babel from "@rolldown/plugin-babel";
 import tailwindcss from "@tailwindcss/vite";
 import react, { reactCompilerPreset } from "@vitejs/plugin-react";
 import { defineConfig } from "vite";
 
+const packageJson = JSON.parse(readFileSync(path.resolve(import.meta.dirname, "package.json"), "utf8")) as {
+  version: string;
+};
+
 export default defineConfig({
+  // Build-time app version for the headless shell, where the Tauri app
+  // plugin's getVersion() is unavailable.
+  define: {
+    __APP_VERSION__: JSON.stringify(packageJson.version),
+  },
   resolve: {
     alias: {
       "@": path.resolve(import.meta.dirname, "./src"),

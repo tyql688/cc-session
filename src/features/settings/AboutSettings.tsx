@@ -1,8 +1,9 @@
 import { Button } from "@/components/ui/button";
 import { useEffect, useState } from "react";
-import { invoke } from "@tauri-apps/api/core";
 import { useI18n } from "@/i18n/index";
 import { errorMessage } from "@/lib/errors";
+import { openExternalUrl } from "@/lib/external-links";
+import { isTauriRuntime } from "@/lib/runtime";
 import { invokeWithToast } from "@/lib/tauri";
 import {
   useUpdaterPhase,
@@ -21,6 +22,13 @@ export function AboutSettings() {
   const errorDetail = useUpdaterError();
 
   useEffect(() => {
+    if (!isTauriRuntime) {
+      // Browser shell: the Tauri app plugin is unavailable; the build-time
+      // package version is injected by Vite instead.
+      setVersion(__APP_VERSION__);
+      setVersionError(null);
+      return;
+    }
     void (async () => {
       try {
         const { getVersion } = await import("@tauri-apps/api/app");
@@ -73,15 +81,17 @@ export function AboutSettings() {
           <span className="settings-stat" title={versionError ?? undefined}>
             {version ?? "—"}
           </span>
-          <Button
-            variant="outline"
-            size="sm"
-            disabled={isDisabled()}
-            onClick={handleClick}
-            title={phase === "error" ? (errorDetail ?? "") : ""}
-          >
-            {buttonLabel()}
-          </Button>
+          {isTauriRuntime && (
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={isDisabled()}
+              onClick={handleClick}
+              title={phase === "error" ? (errorDetail ?? "") : ""}
+            >
+              {buttonLabel()}
+            </Button>
+          )}
         </div>
       </div>
 
@@ -92,12 +102,7 @@ export function AboutSettings() {
           href="https://github.com/tyql688/sessionview"
           onClick={(e) => {
             e.preventDefault();
-            void invokeWithToast(
-              invoke<void>("open_external", {
-                url: "https://github.com/tyql688/sessionview",
-              }),
-              "open GitHub link",
-            );
+            void invokeWithToast(openExternalUrl("https://github.com/tyql688/sessionview"), "open GitHub link");
           }}
         >
           sessionview

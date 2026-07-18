@@ -13,6 +13,8 @@ import {
   invokeWithFallback,
 } from "@/lib/tauri";
 import { save } from "@tauri-apps/plugin-dialog";
+import { downloadSessionsBatchExport } from "@/lib/headless-download";
+import { isTauriRuntime } from "@/lib/runtime";
 import { useI18n } from "@/i18n/index";
 import {
   useTerminalApp,
@@ -261,6 +263,13 @@ export function Explorer(props: {
     const sel = useSelectionStore.getState().selectedIds;
     if (sel.size === 0) return;
     try {
+      if (!isTauriRuntime) {
+        // Browser shell: stream the zip as a download instead of writing to
+        // a native-save-dialog path.
+        await downloadSessionsBatchExport([...sel], "json");
+        toast(t("toast.copied"));
+        return;
+      }
       const outputPath = await save({
         defaultPath: "sessions-export.zip",
         filters: [{ name: "ZIP Archive", extensions: ["zip"] }],

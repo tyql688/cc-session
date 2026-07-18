@@ -2,6 +2,12 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const invoke = vi.fn();
 
+vi.mock("@/lib/runtime", () => ({
+  isTauriRuntime: true,
+  backendToken: () => null,
+  withBackendToken: (path: string) => path,
+}));
+
 vi.mock("@/lib/tauri", () => ({
   openInFolder: vi.fn(),
 }));
