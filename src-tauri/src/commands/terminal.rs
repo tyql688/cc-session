@@ -173,16 +173,18 @@ mod tests {
     /// Run `body` with `TERM_PROGRAM` forced to `value` (or unset when None),
     /// restoring the previous value afterwards. Serialized via ENV_GUARD.
     fn with_term_program(value: Option<&str>, body: impl FnOnce()) {
+        // SAFETY of env mutation below: ENV_GUARD serializes all env access
+        // in this test module.
         let _lock = ENV_GUARD.lock().unwrap_or_else(|e| e.into_inner());
         let previous = std::env::var("TERM_PROGRAM").ok();
         match value {
-            Some(v) => std::env::set_var("TERM_PROGRAM", v),
-            None => std::env::remove_var("TERM_PROGRAM"),
+            Some(v) => unsafe { std::env::set_var("TERM_PROGRAM", v) },
+            None => unsafe { std::env::remove_var("TERM_PROGRAM") },
         }
         body();
         match previous {
-            Some(v) => std::env::set_var("TERM_PROGRAM", v),
-            None => std::env::remove_var("TERM_PROGRAM"),
+            Some(v) => unsafe { std::env::set_var("TERM_PROGRAM", v) },
+            None => unsafe { std::env::remove_var("TERM_PROGRAM") },
         }
     }
 

@@ -1,9 +1,12 @@
+#:schema https://json.schemastore.org/cargo.json
 [package]
 name = "sessionview"
 version = "0.7.0"
 description = "High-performance desktop session explorer for local AI coding sessions"
 authors = ["yury <yury.zero.21@gmail.com>"]
-edition = "2021"
+edition = "2024"
+rust-version = "1.91"
+default-run = "sessionview"
 
 [lib]
 name = "sessionview_lib"
@@ -52,17 +55,20 @@ tauri-plugin-dialog = { version = "2", optional = true }
 tauri-plugin-window-state = { version = "2", optional = true }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
-rusqlite = { version = "0.32", features = ["bundled", "backup"] }
+rusqlite = { version = "0.40", features = ["bundled", "backup", "fallible_uint"] }
 rayon = "1.10"
 memmap2 = "0.9"
 memchr = "2"
 chrono = { version = "0.4", features = ["serde"] }
+chrono-tz = "0.10"
+iana-time-zone = "0.1"
 dirs = "6"
+infer = "0.22"
 walkdir = "2"
 thiserror = "2"
 anyhow = "1"
 base64 = "0.22"
-zip = { version = "2", default-features = false, features = ["deflate"] }
+zip = { version = "8", default-features = false, features = ["deflate"] }
 tauri-plugin-updater = { version = "2.10.0", optional = true }
 tauri-plugin-process = { version = "2.3.1", optional = true }
 tokio = { version = "1", features = ["rt"] }
@@ -75,10 +81,18 @@ env_logger = { version = "0.11", optional = true }
 log = "0.4"
 reqwest = { version = "0.13", default-features = false, features = ["rustls-no-provider"] }
 rustls = { version = "0.23", default-features = false, features = ["ring"] }
-sha2 = "0.10"
+sha2 = "0.11"
+base16ct = { version = "1.0.0", features = ["alloc"] }
 
 [dev-dependencies]
 tempfile = "3"
+
+# style/rust.md rules clippy can enforce. Declared here, not as a lib.rs
+# attribute, so they cover the bins too. Thresholds live in clippy.toml.
+[lints.clippy]
+unwrap_used = "warn"
+expect_used = "warn"
+cognitive_complexity = "warn"
 
 [profile.release]
 lto = true

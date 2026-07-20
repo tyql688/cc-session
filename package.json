@@ -34,7 +34,7 @@
     "diff": "^9.0.0",
     "dompurify": "^3.4.11",
     "i18next": "^26.3.4",
-    "katex": "^0.17.0",
+    "katex": "^0.18.1",
     "lucide-react": "^1.23.0",
     "markdown-it": "^14.3.0",
     "markdown-it-cjk-friendly": "^2.0.2",

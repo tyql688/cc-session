@@ -1,26 +1,23 @@
 # Clippy configuration — machine-enforces parts of style/rust.md.
 # CI runs `cargo clippy --all-targets --all-features -- -D warnings`, so every
-# warning enabled here is effectively a hard gate.
+# warning enabled here is effectively a hard gate. Lint levels live in
+# Cargo.toml `[lints.clippy]` so they apply to every target, not just the lib.
 
-# Note: a `disallowed-macros = ["std::eprintln"]` ban was evaluated but removed —
-# clippy's disallowed_macros lint cannot exempt test code or the eprintln! that
-# `tauri::generate_context!` expands to, so it would need scattered #[allow]s for
-# zero current violations. The "no eprintln! in production" rule stays
-# review-enforced (style/rust.md §2).
+# Do not add `disallowed-macros = ["std::eprintln"]`: the lint cannot exempt
+# test code or the eprintln! that `tauri::generate_context!` expands to.
+# "No eprintln! in production" stays review-enforced (style/rust.md §2).
 
-# Complexity smell guards (default-on clippy lints). Kept at sane ceilings; a
-# little headroom over the rustc defaults for the Message/handler constructors
-# introduced during the refactor.
+# Complexity smell guards (default-on clippy lints), with a little headroom
+# over the rustc defaults for the Message/handler constructors.
 too-many-arguments-threshold = 8
 type-complexity-threshold = 250
 
 # unwrap()/expect() are forbidden in production but free in tests. These keys
-# scope `clippy::unwrap_used` / `clippy::expect_used` (enabled as warn in
-# src/lib.rs) so #[cfg(test)] code is exempt.
+# scope `clippy::unwrap_used` / `clippy::expect_used` (warned via Cargo.toml
+# `[lints.clippy]`) so #[cfg(test)] code is exempt.
 allow-unwrap-in-tests = true
 allow-expect-in-tests = true
 
-# `cognitive_complexity` is a nursery lint (off by default). The threshold is
-# pre-staged here; enable `#![warn(clippy::cognitive_complexity)]` in lib.rs only
-# after the Wave 2/4 method splits bring the big parser methods under it.
+# Threshold for `clippy::cognitive_complexity` (warned via Cargo.toml
+# `[lints.clippy]`).
 cognitive-complexity-threshold = 30

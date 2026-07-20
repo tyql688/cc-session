@@ -1,3 +1,6 @@
+// Test code: clippy's allow-*-in-tests only covers `#[cfg(test)]` modules.
+#![allow(clippy::unwrap_used, clippy::expect_used)]
+
 use std::env;
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -17,9 +20,11 @@ struct EnvOverride {
 }
 
 impl EnvOverride {
+    // SAFETY of env mutation below: every test holds ENV_LOCK, so process
+    // env access is serialized within this test binary.
     fn set(key: &'static str, value: &Path) -> Self {
         let original = env::var(key).ok();
-        env::set_var(key, value);
+        unsafe { env::set_var(key, value) };
         Self { key, original }
     }
 }
@@ -27,9 +32,9 @@ impl EnvOverride {
 impl Drop for EnvOverride {
     fn drop(&mut self) {
         if let Some(value) = &self.original {
-            env::set_var(self.key, value);
+            unsafe { env::set_var(self.key, value) };
         } else {
-            env::remove_var(self.key);
+            unsafe { env::remove_var(self.key) };
         }
     }
 }
@@ -48,13 +53,13 @@ fn override_home_env(home: &Path) -> Vec<EnvOverride> {
                 key: "HOMEDRIVE",
                 original: env::var("HOMEDRIVE").ok(),
             });
-            env::set_var("HOMEDRIVE", format!("{drive}:"));
+            unsafe { env::set_var("HOMEDRIVE", format!("{drive}:")) };
 
             guards.push(EnvOverride {
                 key: "HOMEPATH",
                 original: env::var("HOMEPATH").ok(),
             });
-            env::set_var("HOMEPATH", rest);
+            unsafe { env::set_var("HOMEPATH", rest) };
         }
     }
 

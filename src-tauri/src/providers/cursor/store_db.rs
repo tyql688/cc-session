@@ -256,16 +256,16 @@ pub(super) fn write_image_to_cache(
         return None;
     }
     let ext = ext_for_mime_or_magic(mime, bytes);
-    let hash = Sha256::digest(bytes);
-    let cache_path = cache_dir.join(format!("cursor-{session_id}-{:x}.{ext}", hash));
-    if !cache_path.exists() {
-        if let Err(error) = std::fs::write(&cache_path, bytes) {
-            log::warn!(
-                "failed to write Cursor image cache '{}': {error}",
-                cache_path.display()
-            );
-            return None;
-        }
+    let hash = base16ct::lower::encode_string(&Sha256::digest(bytes));
+    let cache_path = cache_dir.join(format!("cursor-{session_id}-{hash}.{ext}"));
+    if !cache_path.exists()
+        && let Err(error) = std::fs::write(&cache_path, bytes)
+    {
+        log::warn!(
+            "failed to write Cursor image cache '{}': {error}",
+            cache_path.display()
+        );
+        return None;
     }
     Some(cache_path)
 }
@@ -300,10 +300,10 @@ fn read_root_blob_children(conn: &Connection, root_id: &str) -> Option<Vec<Strin
 // ---------------------------------------------------------------------------
 
 fn extract_workspace_from_blob(value: &Value) -> Option<String> {
-    if let Some(content) = value.get("content").and_then(Value::as_str) {
-        if let Some(p) = extract_workspace_path(content) {
-            return Some(p);
-        }
+    if let Some(content) = value.get("content").and_then(Value::as_str)
+        && let Some(p) = extract_workspace_path(content)
+    {
+        return Some(p);
     }
     None
 }
@@ -353,17 +353,17 @@ fn collect_images_from_blob(
             );
             return;
         }
-        let hash = Sha256::digest(&bytes);
-        let cache_name = format!("cursor-{session_id}-{:x}.{ext}", hash);
+        let hash = base16ct::lower::encode_string(&Sha256::digest(&bytes));
+        let cache_name = format!("cursor-{session_id}-{hash}.{ext}");
         let cache_path = cache_dir.join(&cache_name);
-        if !cache_path.exists() {
-            if let Err(error) = std::fs::write(&cache_path, &bytes) {
-                log::warn!(
-                    "failed to write Cursor image cache '{}': {error}",
-                    cache_path.display()
-                );
-                continue;
-            }
+        if !cache_path.exists()
+            && let Err(error) = std::fs::write(&cache_path, &bytes)
+        {
+            log::warn!(
+                "failed to write Cursor image cache '{}': {error}",
+                cache_path.display()
+            );
+            continue;
         }
         image_paths.push(cache_path);
     }

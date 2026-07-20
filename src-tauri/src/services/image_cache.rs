@@ -54,8 +54,7 @@ impl ImageCacheService {
     }
 
     pub(crate) fn cache_name(original_path: &str) -> String {
-        let hash = Sha256::digest(original_path.as_bytes());
-        let hex = format!("{hash:x}");
+        let hex = base16ct::lower::encode_string(&Sha256::digest(original_path.as_bytes()));
         let ext = Path::new(original_path)
             .extension()
             .and_then(|e| e.to_str())
@@ -128,7 +127,9 @@ mod tests {
     fn extract_image_paths_returns_inner_paths_in_order() {
         let messages = vec![
             msg("Here is the result [Image: source: /tmp/test-image-cache/sess/1.png] done"),
-            msg("Another [Image: source: /tmp/screenshot.jpg] and [Image: source: /tmp/test-image-cache/sess/2.png]"),
+            msg(
+                "Another [Image: source: /tmp/screenshot.jpg] and [Image: source: /tmp/test-image-cache/sess/2.png]",
+            ),
             msg("No images here"),
         ];
         let paths = extract_image_paths(&messages);
@@ -194,9 +195,11 @@ mod tests {
         let service = ImageCacheService::new(tmp.path());
         let messages = vec![msg("[Image: source: /nonexistent/path/img.png]")];
         service.cache_images(&messages);
-        assert!(service
-            .resolve_cached_path("/nonexistent/path/img.png")
-            .is_none());
+        assert!(
+            service
+                .resolve_cached_path("/nonexistent/path/img.png")
+                .is_none()
+        );
     }
 
     #[test]
@@ -208,8 +211,10 @@ mod tests {
         let service = ImageCacheService::new(tmp.path());
         let messages = vec![msg("[Image: source: data:image/png;base64,iVBOR...]")];
         service.cache_images(&messages);
-        assert!(service
-            .resolve_cached_path("data:image/png;base64,iVBOR...")
-            .is_none());
+        assert!(
+            service
+                .resolve_cached_path("data:image/png;base64,iVBOR...")
+                .is_none()
+        );
     }
 }
