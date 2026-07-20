@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.7.2] - Unreleased
+
+### Fixed
+
+- `npx sessionview` platform binaries now publish under the
+  `@echo0321/sessionview-<platform>` scope. The registry's spam filter had
+  rejected the unscoped `sessionview-win32-x64` name since 0.7.0, which also
+  blocked the 0.7.1 launcher package from publishing at all.
+
 ## [0.7.1] - 2026-07-20
 
 ### Added

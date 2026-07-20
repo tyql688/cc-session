@@ -95,8 +95,8 @@ across `src-tauri/src/{providers,provider,indexer.rs,db,models.rs}` and
   the derived stats and resets `source_mtime`, forcing one full re-index, and
   running mixed binary versions against one data dir is not supported. The
   frontend picks its transport at runtime via `src/lib/runtime.ts`
-  (`__TAURI_INTERNALS__` detection); `npm/` holds the `npx
-  sessionview-headless` launcher and platform-package generator.
+  (`__TAURI_INTERNALS__` detection); `npm/` holds the `npx sessionview`
+  launcher and platform-package generator.
 - **Parent/child trees.** Subagents and sidechains are child sessions, linked to
   their parent by *typed* provider signals — never by scanning message text.
   Some providers store children in separate files; the "Open subagent" UI

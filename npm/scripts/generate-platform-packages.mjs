@@ -6,7 +6,7 @@
  *
  * `binaries-dir` must contain release binaries named
  * `sessionview-headless-<os>-<arch>[.exe]`. For every binary present this
- * emits a platform package (`sessionview-<os>-<arch>`), then emits
+ * emits a platform package (`@echo0321/sessionview-<os>-<arch>`), then emits
  * the main `sessionview` package with its version and
  * optionalDependencies pinned to <version>. Missing platforms are dropped
  * from optionalDependencies (npm skips non-matching ones anyway; absent
@@ -56,7 +56,7 @@ for (const platform of PLATFORMS) {
     path.join(packageDir, "package.json"),
     `${JSON.stringify(
       {
-        name: `sessionview-${platform.key}`,
+        name: `@echo0321/sessionview-${platform.key}`,
         version,
         description: `SessionView headless server binary (${platform.key})`,
         license: "MIT",
@@ -85,7 +85,7 @@ cpSync(path.join(templateDir, "README.md"), path.join(mainDir, "README.md"));
 const manifest = JSON.parse(readFileSync(path.join(templateDir, "package.json"), "utf8"));
 manifest.version = version;
 manifest.optionalDependencies = Object.fromEntries(
-  present.map((platform) => [`sessionview-${platform.key}`, version]),
+  present.map((platform) => [`@echo0321/sessionview-${platform.key}`, version]),
 );
 writeFileSync(path.join(mainDir, "package.json"), `${JSON.stringify(manifest, null, 2)}\n`);
 console.log(`generated sessionview@${version} (${present.length} platform packages)`);

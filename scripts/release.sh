@@ -76,7 +76,7 @@ sedi "s/\"version\": \"[^\"]*\"/\"version\": \"$VERSION\"/" src-tauri/tauri.conf
 # Update headless npm launcher (version + pinned platform-package versions).
 # CI re-pins at publish from the tag, so these only need to track the repo.
 sedi "s/\"version\": \"[^\"]*\"/\"version\": \"$VERSION\"/" npm/sessionview/package.json
-sedi "s/\(\"sessionview-[a-z0-9-]*\"\): \"[^\"]*\"/\1: \"$VERSION\"/" npm/sessionview/package.json
+sedi "s/\(\"@echo0321\/sessionview-[a-z0-9-]*\"\): \"[^\"]*\"/\1: \"$VERSION\"/" npm/sessionview/package.json
 
 # Update changelog
 sedi "s/^## \[$VERSION_REGEX\] - Unreleased$/## [$VERSION] - $RELEASE_DATE/" CHANGELOG.md

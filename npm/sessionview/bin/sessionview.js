@@ -42,7 +42,7 @@ function binaryName(key) {
 
 function fromPlatformPackage(key) {
   try {
-    return require.resolve(`sessionview-${key}/bin/${binaryName(key)}`);
+    return require.resolve(`@echo0321/sessionview-${key}/bin/${binaryName(key)}`);
   } catch {
     return null;
   }
