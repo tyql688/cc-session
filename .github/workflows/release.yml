@@ -410,7 +410,18 @@ jobs:
             fi
             (cd "$1" && npm publish --access public)
           }
+          # A registry-side rejection of one platform package (npm's spam
+          # filter has blocked creating sessionview-win32-x64 since 0.7.0)
+          # must not stop the remaining packages or the main launcher:
+          # missing optionalDependencies degrade to a per-platform install
+          # warning. Publish everything we can, then fail the job so the
+          # gap stays visible and a rerun can fill it.
+          FAILED=()
           for dir in npm-dist/sessionview-*; do
-            publish "$dir"
+            publish "$dir" || FAILED+=("$dir")
           done
-          publish npm-dist/sessionview
+          publish npm-dist/sessionview || FAILED+=("npm-dist/sessionview")
+          if [ "${#FAILED[@]}" -gt 0 ]; then
+            echo "Failed to publish: ${FAILED[*]}"
+            exit 1
+          fi
