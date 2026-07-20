@@ -450,22 +450,24 @@ export default function App() {
       )}
     >
       <div className="app-layout">
-        <TitleBar
-          showWindowControls={showWindowControls}
-          isMaximized={isMaximized}
-          onMinimize={() => {
-            if (isTauriRuntime) void getCurrentWindow().minimize();
-          }}
-          onToggleMaximize={() => {
-            if (isTauriRuntime) void getCurrentWindow().toggleMaximize();
-          }}
-          onClose={() => {
-            if (isTauriRuntime) void getCurrentWindow().close();
-          }}
-          onStartDragging={() => {
-            if (isTauriRuntime) void getCurrentWindow().startDragging();
-          }}
-        />
+        {isTauriRuntime && (
+          <TitleBar
+            showWindowControls={showWindowControls}
+            isMaximized={isMaximized}
+            onMinimize={() => {
+              if (isTauriRuntime) void getCurrentWindow().minimize();
+            }}
+            onToggleMaximize={() => {
+              if (isTauriRuntime) void getCurrentWindow().toggleMaximize();
+            }}
+            onClose={() => {
+              if (isTauriRuntime) void getCurrentWindow().close();
+            }}
+            onStartDragging={() => {
+              if (isTauriRuntime) void getCurrentWindow().startDragging();
+            }}
+          />
+        )}
         <div className="main-layout">
           <ActivityBar
             activeView={activeView}

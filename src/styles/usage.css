@@ -2,9 +2,13 @@
   flex: 1;
   overflow-y: auto;
   padding: 24px 30px 40px;
+  margin-top: var(--chrome-gap);
   background:
     linear-gradient(180deg, color-mix(in srgb, var(--accent) 5%, transparent), transparent 220px), var(--bg-editor);
   color: var(--text-primary);
+  border: 0.5px solid var(--border);
+  border-radius: var(--chrome-radius);
+  box-shadow: var(--shadow-1);
 }
 
 .usage-card {

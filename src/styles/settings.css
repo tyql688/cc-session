@@ -3,7 +3,11 @@
   flex: 1;
   display: flex;
   overflow: hidden;
+  margin-top: var(--chrome-gap);
   background: var(--bg-editor);
+  border: 0.5px solid var(--border);
+  border-radius: var(--chrome-radius);
+  box-shadow: var(--shadow-1);
 }
 
 .settings-sidebar {

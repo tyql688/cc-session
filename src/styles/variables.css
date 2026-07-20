@@ -39,6 +39,10 @@
   --dur-slow: 260ms;
   --ease-standard: cubic-bezier(0.2, 0, 0, 1);
   --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+
+  /* Floating chrome cards */
+  --chrome-gap: var(--space-3);
+  --chrome-radius: var(--radius-lg);
 }
 
 /* Light theme (default) */
@@ -117,7 +121,7 @@
   --context-menu-shadow: 0 4px 16px rgba(0, 0, 0, 0.12), 0 1px 4px rgba(0, 0, 0, 0.08);
   --modal-bg: #ffffff;
   --bg-primary: #ffffff;
-  --sidebar-width: 260px;
+  --sidebar-width: 280px;
   --scrollbar-thumb: rgba(0, 0, 0, 0.1);
   --scrollbar-thumb-hover: rgba(0, 0, 0, 0.2);
   --status-dot: #34c759;

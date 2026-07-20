@@ -246,6 +246,11 @@
   min-width: 0;
   overflow: hidden;
   position: relative;
+  margin-top: var(--chrome-gap);
+  background: var(--bg-editor);
+  border: 0.5px solid var(--border);
+  border-radius: var(--chrome-radius);
+  box-shadow: var(--shadow-1);
 }
 
 /* Drop zone for creating new group on right edge */
@@ -265,11 +270,6 @@
   border-left: 2px solid var(--accent);
 }
 
-/* Focus indicator on active group tab bar */
-.editor-area.focused .tab-bar {
-  border-bottom: 1.5px solid var(--accent);
-}
-
 .editor-area:not(.focused) {
   opacity: 0.97;
 }
@@ -277,10 +277,9 @@
 /* Tab Bar */
 .tab-bar {
   display: flex;
-  align-items: flex-end;
+  align-items: center;
   height: 40px;
-  background: var(--bg-sidebar);
-  border-bottom: 0.5px solid var(--border);
+  background: transparent;
   flex-shrink: 0;
   padding: 0;
   position: relative;
@@ -288,7 +287,7 @@
 
 .tab-bar-scroll {
   display: flex;
-  align-items: flex-end;
+  align-items: center;
   flex: 1;
   min-width: 0;
   height: 100%;
@@ -306,12 +305,11 @@
   display: flex;
   align-items: center;
   gap: 7px;
-  padding: 0 15px;
-  height: 38px;
+  padding: 0 12px;
+  height: 30px;
   font-size: 13px;
   color: var(--text-secondary);
   border: 0.5px solid transparent;
-  border-bottom: none;
   cursor: pointer;
   white-space: nowrap;
   transition:
@@ -320,7 +318,8 @@
     border-color var(--dur-fast) var(--ease-standard),
     box-shadow var(--dur-fast) var(--ease-standard);
   background: transparent;
-  border-radius: 0;
+  border-radius: var(--radius-lg);
+  margin: 0 2px;
   flex-shrink: 0;
   min-width: 120px;
   max-width: 200px;
@@ -338,17 +337,15 @@
   color: var(--text-primary);
   font-weight: 650;
   border-color: var(--border);
-  border-bottom: 0.5px solid var(--bg-editor);
-  box-shadow: inset 0 2px 0 var(--accent);
+  box-shadow: var(--shadow-1);
   z-index: 1;
 }
 
 .tab:focus-visible {
   border-color: var(--accent);
-  border-radius: 0;
   box-shadow:
-    inset 0 2px 0 var(--accent),
-    inset 0 0 0 1px color-mix(in srgb, var(--accent) 42%, transparent);
+    var(--shadow-1),
+    0 0 0 2px var(--accent-light);
 }
 
 .tab-close {
