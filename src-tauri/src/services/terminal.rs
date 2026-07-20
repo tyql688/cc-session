@@ -342,10 +342,10 @@ fn launch_windows_cmd(command: &str, cwd: Option<&str>) -> anyhow::Result<()> {
     let bat_path =
         std::env::temp_dir().join(format!("sessionview_{}_{nanos}.bat", std::process::id()));
     let mut bat = String::from("@echo off\r\n");
-    if let Some(dir) = cwd {
-        if !dir.is_empty() {
-            bat.push_str(&format!("cd /d \"{}\"\r\n", dir));
-        }
+    if let Some(dir) = cwd
+        && !dir.is_empty()
+    {
+        bat.push_str(&format!("cd /d \"{}\"\r\n", dir));
     }
     bat.push_str(command);
     bat.push_str("\r\n");
@@ -468,10 +468,10 @@ fn launch_linux_alacritty(command: &str, cwd: Option<&str>) -> anyhow::Result<()
     let full = linux_shell_command(command, None);
     let shell = std::env::var("SHELL").unwrap_or_else(|_| "/bin/bash".to_string());
     let mut cmd = Command::new("alacritty");
-    if let Some(dir) = cwd {
-        if !dir.trim().is_empty() {
-            cmd.arg("--working-directory").arg(dir);
-        }
+    if let Some(dir) = cwd
+        && !dir.trim().is_empty()
+    {
+        cmd.arg("--working-directory").arg(dir);
     }
     cmd.args(["-e", &shell, "-c", &full]);
     cmd.spawn().context("failed to launch alacritty")?;
@@ -482,10 +482,10 @@ fn launch_linux_alacritty(command: &str, cwd: Option<&str>) -> anyhow::Result<()
 fn launch_linux_kitty(command: &str, cwd: Option<&str>) -> anyhow::Result<()> {
     let shell = std::env::var("SHELL").unwrap_or_else(|_| "/bin/bash".to_string());
     let mut cmd = Command::new("kitty");
-    if let Some(dir) = cwd {
-        if !dir.trim().is_empty() {
-            cmd.arg("--directory").arg(dir);
-        }
+    if let Some(dir) = cwd
+        && !dir.trim().is_empty()
+    {
+        cmd.arg("--directory").arg(dir);
     }
     cmd.args(["-e", &shell, "-c", command]);
     cmd.spawn().context("failed to launch kitty")?;
@@ -498,10 +498,10 @@ fn launch_linux_wezterm(command: &str, cwd: Option<&str>) -> anyhow::Result<()> 
     let shell = std::env::var("SHELL").unwrap_or_else(|_| "/bin/bash".to_string());
     let mut cmd = Command::new("wezterm");
     cmd.arg("start");
-    if let Some(dir) = cwd {
-        if !dir.trim().is_empty() {
-            cmd.arg("--cwd").arg(dir);
-        }
+    if let Some(dir) = cwd
+        && !dir.trim().is_empty()
+    {
+        cmd.arg("--cwd").arg(dir);
     }
     cmd.args(["--", &shell, "-c", &full]);
     cmd.spawn().context("failed to launch wezterm")?;

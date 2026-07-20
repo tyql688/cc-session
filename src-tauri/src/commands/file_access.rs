@@ -24,10 +24,10 @@ fn canonical_under_home(canonical: &Path, home: &Path) -> bool {
     if canonical.starts_with(home) {
         return true;
     }
-    if let Ok(home_canon) = home.canonicalize() {
-        if canonical.starts_with(&home_canon) {
-            return true;
-        }
+    if let Ok(home_canon) = home.canonicalize()
+        && canonical.starts_with(&home_canon)
+    {
+        return true;
     }
     // Last resort: normalized comparison (strips Windows verbatim `\\?\`,
     // folds case). Covers prefix-form disagreements between paths.
