@@ -1,5 +1,22 @@
 # Changelog
 
+## [0.7.1] - Unreleased
+
+### Added
+
+- Usage statistics follow the viewer's timezone: totals, daily charts, the
+  activity calendar, and today's cost fold the shared index into civil days
+  for each client's IANA zone, so a remote headless viewer gets its own day
+  boundaries.
+- The headless invoke API rejects unknown argument keys instead of silently
+  ignoring them, so a typo like `range_days` fails loudly rather than running
+  an unfiltered query.
+
+### Changed
+
+- Rust 2024 edition with a pinned stable toolchain, plus dependency updates
+  (rusqlite 0.40, zip 8, infer 0.22, sha2 0.11, KaTeX 0.18).
+
 ## [0.7.0] - 2026-07-18
 
 ### Added
