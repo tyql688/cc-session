@@ -1,5 +1,42 @@
 # Changelog
 
+## [0.7.4] - Unreleased
+
+### Added
+
+- Tool results follow one presentation contract across every provider:
+  readable output is the default, Bash gets the terminal view, successful
+  edits render as diffs, and unknown wire shapes are preserved verbatim in a
+  marked raw view instead of being dropped or guessed at.
+- Structured result media (connector screenshots, MCP images) is extracted by
+  the backend and rendered inline in tool output.
+- Parsers surface what they skip: unknown record types now count toward the
+  session's parse-warning badge, Kimi runtime context (steering input, task
+  notifications, skills, compaction summaries) renders as system messages,
+  Claude model-fallback events are shown, and OpenCode file attachments stay
+  visible.
+- Codex agent-team sessions recover tool calls that only exist as lifecycle
+  events (connector MCP calls, desktop patch applies) and re-attribute
+  subagent token usage to the file's actual model.
+
+### Fixed
+
+- Expanding a tool, terminal, or system block keeps the clicked header in
+  place — details open downward instead of pushing the header up.
+- Replayed fork bursts in Codex rollouts no longer double-count the parent
+  session's token usage, and usage survives files whose fork markers never
+  fire.
+- The image coordinate-scale note Claude Code injects after downsizing a
+  screenshot no longer renders as a user message.
+- Grok raw-result verdicts survive status-only tool call updates.
+
+### Changed
+
+- `[turn_duration]` renders as a hairline divider and `[away_summary]`
+  collapses to a flat label that expands on demand.
+- Time separators disappear in focus mode, and separator runs left by hidden
+  roles collapse to a single marker.
+
 ## [0.7.3] - 2026-07-20
 
 ### Changed
