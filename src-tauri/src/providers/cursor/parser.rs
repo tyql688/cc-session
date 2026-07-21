@@ -98,7 +98,13 @@ pub(crate) fn parse_messages(content: &str, source_label: &str) -> (Vec<Message>
                 push_tool_call(&mut messages, &part);
             }
         }
-        _ => {}
+        // Entries without a role are non-message records; a named role we
+        // don't handle is worth surfacing.
+        other => {
+            if !other.is_empty() {
+                log::warn!("skipping Cursor entry with unhandled role '{other}' in {source_label}");
+            }
+        }
     });
     (messages, warnings)
 }

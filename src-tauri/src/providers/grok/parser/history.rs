@@ -30,6 +30,9 @@ pub(super) struct HistoryBuilder {
     messages: Vec<Message>,
     tool_index: HashMap<String, usize>,
     last_assistant: Option<usize>,
+    /// Unknown session-update kinds seen while rebuilding history; folded
+    /// into the session's parse-warning badge by `scan_updates`.
+    pub(super) warnings: u32,
 }
 
 impl HistoryBuilder {
@@ -37,6 +40,7 @@ impl HistoryBuilder {
         Self {
             cutoff_prompt,
             done: false,
+            warnings: 0,
             messages: Vec::new(),
             tool_index: HashMap::new(),
             last_assistant: None,
@@ -103,7 +107,17 @@ impl HistoryBuilder {
             "tool_call" => self.push_tool_call(update, timestamp),
             "tool_call_update" => self.apply_tool_update(update),
             "turn_completed" => self.attach_turn_usage(update),
-            _ => {}
+            // ACP / runtime bookkeeping updates with no transcript content.
+            "plan"
+            | "available_commands_update"
+            | "current_mode_update"
+            | "hook_execution"
+            | "auto_compact_started"
+            | "auto_compact_completed" => {}
+            unknown => {
+                log::warn!("skipping unknown Grok session update '{unknown}'");
+                self.warnings = self.warnings.saturating_add(1);
+            }
         }
     }
 

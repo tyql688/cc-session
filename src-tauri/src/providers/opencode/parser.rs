@@ -61,14 +61,25 @@ pub(super) fn build_user_messages(
     for part in parts {
         if part.get("type").and_then(|t| t.as_str()) == Some("file") {
             let mime = part.get("mime").and_then(|m| m.as_str()).unwrap_or("");
+            let url = part.get("url").and_then(|u| u.as_str()).unwrap_or("");
             if mime.starts_with("image/") {
-                let url = part.get("url").and_then(|u| u.as_str()).unwrap_or("");
                 if !url.is_empty() {
                     messages.push(Message {
                         timestamp: timestamp.map(str::to_string),
                         ..Message::user(format!("[Image: source: {url}]"))
                     });
                 }
+            } else {
+                // Non-image attachments still belong in the transcript.
+                let filename = part
+                    .get("filename")
+                    .and_then(|f| f.as_str())
+                    .filter(|f| !f.is_empty())
+                    .unwrap_or("attachment");
+                messages.push(Message {
+                    timestamp: timestamp.map(str::to_string),
+                    ..Message::user(format!("[File: {filename}]"))
+                });
             }
         }
     }
@@ -201,8 +212,11 @@ pub(super) fn build_assistant_messages(
                     patch_parts.push(patch);
                 }
             }
-            // Skip step-start, step-finish, snapshot, etc.
-            _ => {}
+            // Step markers and snapshots carry no transcript content.
+            "step-start" | "step-finish" | "snapshot" => {}
+            unknown => {
+                log::warn!("skipping unknown OpenCode part type '{unknown}'");
+            }
         }
     }
 
@@ -369,13 +383,14 @@ mod tests {
         let parts = vec![
             json!({ "type": "text", "text": "look at this" }),
             json!({ "type": "file", "mime": "image/png", "url": "/tmp/cache/a.png" }),
-            // Non-image file is ignored.
-            json!({ "type": "file", "mime": "application/pdf", "url": "/tmp/doc.pdf" }),
+            // Non-image files stay visible as attachment markers.
+            json!({ "type": "file", "mime": "application/pdf", "filename": "doc.pdf", "url": "/tmp/doc.pdf" }),
         ];
         let msgs = build_user_messages(&parts, Some(TS));
-        assert_eq!(msgs.len(), 2);
+        assert_eq!(msgs.len(), 3);
         assert_eq!(msgs[0].content, "look at this");
         assert_eq!(msgs[1].content, "[Image: source: /tmp/cache/a.png]");
+        assert_eq!(msgs[2].content, "[File: doc.pdf]");
     }
 
     #[test]

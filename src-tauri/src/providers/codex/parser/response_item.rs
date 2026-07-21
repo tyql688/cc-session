@@ -437,7 +437,10 @@ impl CodexScanAccum {
                     });
                 }
             }
-            _ => (),
+            unknown => {
+                log::warn!("skipping unknown Codex response_item payload type '{unknown}'");
+                self.parse_warning_count = self.parse_warning_count.saturating_add(1);
+            }
         }
     }
 }

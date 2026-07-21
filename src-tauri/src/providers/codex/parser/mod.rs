@@ -211,7 +211,12 @@ impl CodexScanAccum {
             "response_item" => self.handle_response_item(entry, payload, path),
             "turn_context" => self.handle_turn_context(payload),
             "event_msg" => self.handle_event_msg(entry, payload, path),
-            _ => {}
+            // Environment snapshots; no transcript content.
+            "world_state" => {}
+            unknown => {
+                log::warn!("skipping unknown Codex record type '{unknown}'");
+                self.parse_warning_count = self.parse_warning_count.saturating_add(1);
+            }
         }
     }
 

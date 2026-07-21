@@ -80,12 +80,12 @@ pub(super) fn scan_updates(
         .parse_warning_count
         .saturating_add(stats.read_error_count)
         .saturating_add(stats.parse_error_count);
-    (
-        anchors,
-        builder
-            .map(super::history::HistoryBuilder::into_messages)
-            .unwrap_or_default(),
-    )
+    let mut history_messages = Vec::new();
+    if let Some(builder) = builder {
+        anchors.parse_warning_count = anchors.parse_warning_count.saturating_add(builder.warnings);
+        history_messages = builder.into_messages();
+    }
+    (anchors, history_messages)
 }
 
 pub(super) fn collect_anchor(anchors: &mut UpdateAnchors, line: &Value, updates_path: &Path) {

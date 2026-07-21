@@ -412,7 +412,16 @@ pub(super) fn handle_assistant_message(
                         }
                     }
                 }
-                _ => {}
+                "redacted_thinking" => {
+                    state.messages.push(Message {
+                        timestamp: timestamp.clone(),
+                        ..Message::system("[thinking]\n(redacted)".to_string())
+                    });
+                }
+                unknown => {
+                    log::warn!("skipping unknown Claude assistant content block '{unknown}'");
+                    state.parse_warning_count = state.parse_warning_count.saturating_add(1);
+                }
             }
         }
         if let Some(uuid) = entry.get("uuid").and_then(|u| u.as_str())
