@@ -109,6 +109,13 @@ fn infer_tool_name_from_orphan_result(result: Option<&Value>, use_id: Option<&st
     }
 }
 
+fn is_image_scale_note(text: &str) -> bool {
+    let trimmed = text.trim();
+    trimmed.starts_with("[Image: original ")
+        && trimmed.contains("Multiply coordinates by")
+        && trimmed.ends_with("to map to original image.]")
+}
+
 fn standalone_tool_result_message(
     result_text: String,
     is_raw: bool,
@@ -186,6 +193,15 @@ pub(super) fn handle_user_message(
         .get("isMeta")
         .and_then(serde_json::Value::as_bool)
         .unwrap_or(false);
+
+    // The harness injects a coordinate-scale note after every image it
+    // downsizes ("[Image: original WxH, displayed at WxH. Multiply
+    // coordinates ..."). It is model-facing plumbing, not user input — and
+    // because it starts with "[Image" it would otherwise be mistaken for an
+    // image placeholder awaiting its source and surface as a user bubble.
+    if is_meta && is_image_scale_note(&text) {
+        return;
+    }
 
     if let Some((pending_text, pending_timestamp)) = state.pending_user_message.take() {
         if is_meta

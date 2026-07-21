@@ -5,6 +5,35 @@ use std::fs;
 use tempfile::TempDir;
 
 #[test]
+fn image_scale_note_meta_message_is_not_a_user_bubble() {
+    // The harness injects "[Image: original WxH, displayed at WxH. Multiply
+    // coordinates by N to map to original image.]" as an isMeta user record
+    // after downsizing an image. It must never render as user input.
+    let dir = TempDir::new().unwrap();
+    let file = dir.path().join("session.jsonl");
+    let note = r#"{"type":"user","isMeta":true,"timestamp":"2026-07-21T09:00:00Z","uuid":"u1","message":{"role":"user","content":"[Image: original 2400x1808, displayed at 2000x1507. Multiply coordinates by 1.20 to map to original image.]"}}"#;
+    let real = r#"{"type":"user","timestamp":"2026-07-21T09:00:01Z","uuid":"u2","message":{"role":"user","content":"real question"}}"#;
+    fs::write(
+        &file,
+        format!(
+            "{note}
+{real}
+"
+        ),
+    )
+    .unwrap();
+
+    let parsed = parse_session_file(&file).expect("parsed");
+    let users: Vec<_> = parsed
+        .messages
+        .iter()
+        .filter(|message| message.role == crate::models::MessageRole::User)
+        .collect();
+    assert_eq!(users.len(), 1, "scale note leaked: {users:?}");
+    assert_eq!(users[0].content, "real question");
+}
+
+#[test]
 fn parse_session_file_counts_malformed_lines_without_aborting() {
     let dir = TempDir::new().unwrap();
     let file = dir.path().join("session.jsonl");
