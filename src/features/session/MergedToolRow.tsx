@@ -4,6 +4,7 @@ import { useI18n } from "@/i18n/index";
 import type { Message, Provider } from "@/lib/types";
 import { toolDisplayName } from "@/lib/tools";
 import { MessageBubble } from "@/features/session/MessageBubble";
+import { useAnchoredExpand } from "@/features/session/MessageBubble/useAnchoredExpand";
 import { ToolKindGlyph, toolVisualKind } from "@/features/session/ToolGlyph";
 
 interface ToolGroup {
@@ -51,6 +52,7 @@ export function MergedToolRow(props: {
 }) {
   const { t } = useI18n();
   const [expanded, setManualExpanded] = useState(false);
+  const anchoredExpand = useAnchoredExpand();
   const groups = toolGroups(props.messages, props.tools);
   const visibleGroups = groups.slice(0, VISIBLE_GROUPS);
   const hiddenGroupCount = Math.max(0, groups.length - visibleGroups.length);
@@ -61,7 +63,7 @@ export function MergedToolRow(props: {
       <button
         type="button"
         className="merged-tools-header"
-        onClick={() => setManualExpanded((v) => !v)}
+        onClick={(event) => anchoredExpand(event.currentTarget, () => setManualExpanded((v) => !v))}
         aria-expanded={expanded}
       >
         {expanded ? (

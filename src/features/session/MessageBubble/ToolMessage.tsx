@@ -22,6 +22,7 @@ import { ImagePreview, LocalImage, RemoteImage, isLocalPath } from "@/features/s
 import { SessionDiffView, SessionLineDiffView } from "@/features/session/MessageBubble/SessionDiffView";
 import { TerminalToolMessage } from "@/features/session/MessageBubble/TerminalToolMessage";
 import { ToolGlyph } from "@/features/session/ToolGlyph";
+import { useAnchoredExpand } from "@/features/session/MessageBubble/useAnchoredExpand";
 
 /** Dispatch a custom event to open a subagent session by description, nickname, or agent ID. */
 function openSubagent(description: string, nickname?: string, agentId?: string, parentSessionId?: string) {
@@ -77,6 +78,7 @@ function GenericToolMessage(props: ToolMessageProps) {
   // Const copy so truthiness narrowing survives into nested JSX callbacks.
   const parentSessionId = props.parentSessionId;
   const [expanded, setExpanded] = useState(false);
+  const anchoredExpand = useAnchoredExpand();
   const [previewImage, setPreviewImage] = useState<{
     src: string;
     source?: string;
@@ -268,7 +270,7 @@ function GenericToolMessage(props: ToolMessageProps) {
           <button
             type="button"
             className="msg-tool-toggle-row"
-            onClick={() => setExpanded((value) => !value)}
+            onClick={(event) => anchoredExpand(event.currentTarget, () => setExpanded((value) => !value))}
             aria-expanded={expanded}
           >
             <ToolGlyph name={name()} metadata={metadata()} className="msg-tool-icon" />

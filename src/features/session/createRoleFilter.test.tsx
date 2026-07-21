@@ -1,4 +1,4 @@
-import { renderHook } from "@testing-library/react";
+import { act, renderHook } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 
 import type { Message } from "@/lib/types";
@@ -56,5 +56,41 @@ describe("useRoleFilter", () => {
     ).toEqual(["user", "assistant"]);
     expect(result.current.hiddenRoles.has("tool")).toBe(true);
     expect(result.current.hiddenRoles.has("system")).toBe(true);
+  });
+
+  it("drops time separators entirely in focus mode", () => {
+    const entries = [
+      messageEntry("user", 0),
+      { key: "sep-1", type: "time-sep" as const, time: "10:00", searchHaystack: "" },
+      messageEntry("tool", 1),
+      { key: "sep-2", type: "time-sep" as const, time: "10:20", searchHaystack: "" },
+      messageEntry("assistant", 2),
+    ];
+
+    const { result } = renderHook(() => useRoleFilter(entries, true));
+
+    expect(result.current.filteredEntries.every((entry) => entry.type !== "time-sep")).toBe(true);
+  });
+
+  it("collapses separator runs left behind by hidden roles", () => {
+    const entries = [
+      messageEntry("user", 0),
+      { key: "sep-1", type: "time-sep" as const, time: "10:00", searchHaystack: "" },
+      messageEntry("tool", 1),
+      { key: "sep-2", type: "time-sep" as const, time: "10:20", searchHaystack: "" },
+      messageEntry("assistant", 2),
+      { key: "sep-3", type: "time-sep" as const, time: "10:40", searchHaystack: "" },
+      messageEntry("tool", 3),
+    ];
+
+    const { result } = renderHook(() => useRoleFilter(entries, false));
+    act(() => result.current.toggleRole("tool"));
+
+    const kinds = result.current.filteredEntries.map((entry) =>
+      entry.type === "message" ? entry.msg.role : entry.type,
+    );
+    // One separator survives before the assistant; the trailing one (its
+    // message was hidden) disappears instead of dangling at the end.
+    expect(kinds).toEqual(["user", "time-sep", "assistant"]);
   });
 });

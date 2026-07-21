@@ -9,6 +9,7 @@ import { ImagePreview, isLocalPath, LocalImage, RemoteImage } from "@/features/s
 import { ThinkingBlock } from "@/features/session/MessageBubble/ThinkingBlock";
 import { CopyMessageButton, TokenUsageDisplay } from "@/features/session/MessageBubble/TokenUsage";
 import { ToolMessage } from "@/features/session/MessageBubble/ToolMessage";
+import { useAnchoredExpand } from "@/features/session/MessageBubble/useAnchoredExpand";
 
 // The markdown engine (markdown-it + shiki/katex/mermaid plugins) is by far
 // the heaviest frontend dependency — load it on demand so the app shell and
@@ -157,6 +158,7 @@ const LEGACY_LOCAL_COMMAND_PREFIX = "[local_command]";
 function SystemMessage(props: { content: string }) {
   const { t } = useI18n();
   const [expanded, setExpanded] = useState(false);
+  const anchoredExpand = useAnchoredExpand();
   const match = props.content.match(/^\[(\w+)\]\s*(.*)/s);
   const config = match ? SYSTEM_SUBTYPE_CONFIG[match[1]] : undefined;
   if (!match || !config) {
@@ -164,6 +166,32 @@ function SystemMessage(props: { content: string }) {
   }
 
   const detail = match[2].trim();
+  // Turn boundaries and away summaries get dedicated treatments: a hairline
+  // divider and a reading card — the generic tag row fits neither.
+  if (match[1] === "turn_duration") {
+    return <TurnDivider detail={detail} />;
+  }
+  if (match[1] === "away_summary") {
+    return (
+      <div className="sys-away">
+        <button
+          type="button"
+          className="sys-away-toggle"
+          aria-expanded={expanded}
+          onClick={(event) => anchoredExpand(event.currentTarget, () => setExpanded((v) => !v))}
+        >
+          <span className="sys-away-title">
+            <span aria-hidden="true">{"\u23F8"}</span>
+            <span>{t("system.awaySummary")}</span>
+          </span>
+          <span className={`sys-chevron${expanded ? " sys-chevron-open" : ""}`} aria-hidden="true">
+            {"\u203A"}
+          </span>
+        </button>
+        {expanded && <div className="sys-away-body">{detail}</div>}
+      </div>
+    );
+  }
   const collapsible = detail.length > 0 && (config.collapsible === true || detail.includes("\n"));
   const summary = collapsible && !config.hideCollapsedDetail ? (detail.split("\n", 1)[0] ?? "") : detail;
 
@@ -186,7 +214,7 @@ function SystemMessage(props: { content: string }) {
         type="button"
         className="msg-system msg-system-tag msg-system-toggle h-auto justify-start active:translate-y-0"
         aria-expanded={expanded}
-        onClick={() => setExpanded((v) => !v)}
+        onClick={(event) => anchoredExpand(event.currentTarget, () => setExpanded((v) => !v))}
       >
         <span className="sys-icon">{config.icon}</span>
         <span className="sys-label">{t(config.labelKey)}</span>
@@ -198,6 +226,31 @@ function SystemMessage(props: { content: string }) {
       {expanded && <pre className="msg-system-body">{detail}</pre>}
     </div>
   );
+}
+
+/** "[turn_duration] 83.4s, 12 messages" as a quiet hairline between turns. */
+function TurnDivider(props: { detail: string }) {
+  const { t } = useI18n();
+  const parsed = props.detail.match(/^(\d+(?:\.\d+)?)s, (\d+) messages$/);
+  const label = parsed
+    ? `${formatTurnSeconds(Number(parsed[1]))} \u00B7 ${t("system.turnMessages", { count: Number(parsed[2]) })}`
+    : props.detail;
+  return (
+    <div className="sys-turn-divider">
+      <span className="sys-turn-divider-label">
+        <span aria-hidden="true">{"\u23F1"}</span>
+        {label}
+      </span>
+    </div>
+  );
+}
+
+function formatTurnSeconds(seconds: number): string {
+  if (!Number.isFinite(seconds)) return "";
+  if (seconds < 60) return `${seconds.toFixed(1)}s`;
+  const minutes = Math.floor(seconds / 60);
+  const rest = Math.round(seconds % 60);
+  return `${minutes}m ${rest}s`;
 }
 
 export function MessageBubble(props: { message: Message; provider?: Provider; parentSessionId?: string }) {

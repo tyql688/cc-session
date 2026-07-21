@@ -273,6 +273,7 @@
   },
   "system": {
     "turnDuration": "Turn",
+    "turnMessages": "{count} 条消息",
     "compact": "Compact",
     "microcompact": "Microcompact",
     "hooks": "Hooks",

@@ -613,3 +613,67 @@
   max-height: 320px;
   overflow-y: auto;
 }
+
+/* Turn boundary: a quiet hairline instead of a faux-collapsible row. */
+.sys-turn-divider {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 6px 0 2px;
+  color: var(--text-secondary);
+  font-size: 11px;
+}
+.sys-turn-divider::before,
+.sys-turn-divider::after {
+  content: "";
+  flex: 1;
+  height: 0.5px;
+  background: var(--border-subtle);
+}
+.sys-turn-divider-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  white-space: nowrap;
+  opacity: 0.85;
+}
+
+/* Away summary: flat annotation typography — no border, background, or
+ * bubble so it never competes with conversation bubbles. Always collapsed
+ * to one line; the full text renders on demand. */
+.sys-away {
+  margin: 4px 0 6px;
+  max-width: 760px;
+}
+.sys-away-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0;
+  border: 0;
+  background: none;
+  cursor: pointer;
+  text-align: left;
+  color: inherit;
+  font: inherit;
+}
+.sys-away-toggle:hover .sys-away-title {
+  color: var(--text-primary);
+}
+.sys-away-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+  font-size: 11px;
+  font-weight: 650;
+  color: var(--text-secondary);
+}
+.sys-away-body {
+  margin-top: 3px;
+  font-size: 12.5px;
+  line-height: 1.6;
+  color: var(--text-secondary);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}

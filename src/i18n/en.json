@@ -273,6 +273,7 @@
   },
   "system": {
     "turnDuration": "Turn",
+    "turnMessages": "{count} messages",
     "compact": "Compact",
     "microcompact": "Microcompact",
     "hooks": "Hooks",

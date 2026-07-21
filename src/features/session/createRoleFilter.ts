@@ -33,13 +33,21 @@ export function useRoleFilter(processedEntries: ProcessedEntry[], focusMode: boo
   // Apply role filtering
   const filteredEntries = useMemo(() => {
     const hidden = effectiveHiddenRoles;
-    if (hidden.size === 0) return processedEntries;
-    return processedEntries.filter((e) => {
-      if (e.type === "time-sep") return true;
+    if (hidden.size === 0 && !focusMode) return processedEntries;
+    const kept = processedEntries.filter((e) => {
+      // Focus mode reads as a distilled transcript; gap markers between
+      // hidden tool runs are noise there.
+      if (e.type === "time-sep") return !focusMode;
       if (e.type === "merged-tools") return !hidden.has("tool");
       return !hidden.has(e.msg.role);
     });
-  }, [processedEntries, effectiveHiddenRoles]);
+    // Hiding roles can leave separator runs (each marked a gap before a
+    // now-hidden message); keep only the one adjacent to the next visible
+    // entry, and never end on a dangling separator.
+    return kept.filter(
+      (e, index) => e.type !== "time-sep" || (index + 1 < kept.length && kept[index + 1].type !== "time-sep"),
+    );
+  }, [processedEntries, effectiveHiddenRoles, focusMode]);
 
   // Role counts for filter toolbar
   const roleCounts = useMemo(() => {

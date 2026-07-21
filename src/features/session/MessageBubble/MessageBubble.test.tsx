@@ -119,8 +119,31 @@ describe("MessageBubble", () => {
     expect(markdownMock).not.toHaveBeenCalled();
   });
 
+  it("renders [turn_duration] as a hairline divider with a readable label", () => {
+    const { container } = render(
+      <MessageBubble message={message({ role: "system", content: "[turn_duration] 83.4s, 12 messages" })} />,
+    );
+    const divider = container.querySelector(".sys-turn-divider");
+    expect(divider).not.toBeNull();
+    expect(divider?.textContent).toContain("1m 23s");
+    expect(container.querySelector(".msg-system-toggle")).toBeNull();
+  });
+
+  it("collapses [away_summary] to a bare label until clicked", () => {
+    const summary =
+      "Goal: make SessionView display and count every provider's session data correctly.\nNext: rebuild the index.";
+    const { container } = render(
+      <MessageBubble message={message({ role: "system", content: `[away_summary] ${summary}` })} />,
+    );
+    const toggle = container.querySelector<HTMLButtonElement>(".sys-away-toggle");
+    expect(toggle).not.toBeNull();
+    expect(container.querySelector(".sys-away-body")).toBeNull();
+    expect(toggle?.textContent).not.toContain("Goal:");
+    if (toggle) fireEvent.click(toggle);
+    expect(container.querySelector(".sys-away-body")?.textContent).toContain("Next: rebuild the index.");
+  });
+
   it.each([
-    ["[turn_duration] 1.5s, 6 messages", "1.5s, 6 messages", "1.5s, 6 messages"],
     [
       "[stop_hook_summary] 2 hooks: lint (120ms), test (340ms)",
       "2 hooks: lint (120ms), test (340ms)",

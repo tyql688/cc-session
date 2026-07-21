@@ -9,6 +9,7 @@ import { parseContent } from "@/lib/message-content";
 import { toastError } from "@/stores/toast";
 import { COPY_FEEDBACK_MS } from "@/features/session/MessageBubble/TokenUsage";
 import { ImagePreview, LocalImage, RemoteImage, isLocalPath } from "@/features/session/MessageBubble/ImagePreview";
+import { useAnchoredExpand } from "@/features/session/MessageBubble/useAnchoredExpand";
 
 type ToolDetail = NonNullable<ReturnType<typeof formatToolResultMetadata>>;
 
@@ -157,6 +158,7 @@ function buildTerminalData(message: Message): TerminalData {
 export function TerminalToolMessage(props: { message: Message }) {
   const { t } = useI18n();
   const [expanded, setExpanded] = useState(false);
+  const anchoredExpand = useAnchoredExpand();
   const [wrapOutput, setWrapOutput] = useState(false);
   const [copiedTarget, setCopiedTarget] = useState<CopyTarget | null>(null);
   const [fullResult, setFullResult] = useState<string | null>(null);
@@ -220,7 +222,7 @@ export function TerminalToolMessage(props: { message: Message }) {
           <button
             type="button"
             className="terminal-tool-toggle"
-            onClick={() => setExpanded((value) => !value)}
+            onClick={(event) => anchoredExpand(event.currentTarget, () => setExpanded((value) => !value))}
             aria-expanded={expanded}
           >
             <Terminal className="terminal-tool-icon" aria-hidden="true" />
