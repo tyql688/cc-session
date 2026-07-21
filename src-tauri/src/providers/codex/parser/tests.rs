@@ -41,6 +41,71 @@ fn parse_session_surfaces_top_level_compacted_handoff_summary() {
 }
 
 #[test]
+fn parse_session_backfills_usage_when_file_names_exactly_one_model() {
+    // A subagent thread's turn_context can arrive after most of its
+    // token_count events. Those events defer and bind to the file's model
+    // once the scan proves it is the only one named — a late in-file fact,
+    // never a fabricated default name (see
+    // parse_session_skips_usage_event_with_no_resolvable_model).
+    let dir = TempDir::new().unwrap();
+    let file = dir.path().join("codex.jsonl");
+    fs::write(
+        &file,
+        concat!(
+            "{\"timestamp\":\"2026-04-10T10:00:00Z\",\"type\":\"session_meta\",\"payload\":{\"id\":\"sess-3\",\"cwd\":\"/tmp\"}}\n",
+            "{\"timestamp\":\"2026-04-10T10:00:01Z\",\"type\":\"response_item\",\"payload\":{\"type\":\"message\",\"role\":\"assistant\",\"content\":[{\"type\":\"output_text\",\"text\":\"hi\"}]}}\n",
+            "{\"timestamp\":\"2026-04-10T10:00:02Z\",\"type\":\"event_msg\",\"payload\":{\"type\":\"token_count\",\"info\":{\"last_token_usage\":{\"input_tokens\":100,\"cached_input_tokens\":40,\"output_tokens\":10,\"reasoning_output_tokens\":0,\"total_tokens\":110}}}}\n",
+            "{\"timestamp\":\"2026-04-10T10:00:03Z\",\"type\":\"turn_context\",\"payload\":{\"model\":\"gpt-5.6-sol\"}}\n"
+        ),
+    )
+    .unwrap();
+    let provider = CodexProvider {
+        home_dir: PathBuf::from("/tmp"),
+    };
+    let parsed = provider.parse_session_file(&file).expect("parsed session");
+    assert_eq!(parsed.parse_warning_count, 0);
+    assert_eq!(parsed.usage_events.len(), 1);
+    let event = &parsed.usage_events[0];
+    assert_eq!(event.model, "gpt-5.6-sol");
+    assert_eq!(event.input_tokens, 60);
+    assert_eq!(event.cache_read_input_tokens, 40);
+    assert_eq!(event.output_tokens, 10);
+}
+
+#[test]
+fn parse_session_skips_replay_burst_usage_in_fork_files() {
+    // Fork/replay files re-dump the parent lineage's token_count events in
+    // one burst sharing the first event's second. That usage belongs to the
+    // parent's own file; only later-second events are this session's.
+    let dir = TempDir::new().unwrap();
+    let file = dir.path().join("codex.jsonl");
+    fs::write(
+        &file,
+        concat!(
+            "{\"timestamp\":\"2026-04-10T10:00:00Z\",\"type\":\"session_meta\",\"payload\":{\"id\":\"sess-4\",\"cwd\":\"/tmp\",\"forked_from_id\":\"sess-0\"}}\n",
+            "{\"timestamp\":\"2026-04-10T10:00:00Z\",\"type\":\"turn_context\",\"payload\":{\"model\":\"gpt-5.6-sol\"}}\n",
+            "{\"timestamp\":\"2026-04-10T10:00:00Z\",\"type\":\"response_item\",\"payload\":{\"type\":\"message\",\"role\":\"assistant\",\"content\":[{\"type\":\"output_text\",\"text\":\"replayed\"}]}}\n",
+            "{\"timestamp\":\"2026-04-10T10:00:00Z\",\"type\":\"event_msg\",\"payload\":{\"type\":\"token_count\",\"info\":{\"last_token_usage\":{\"input_tokens\":1000,\"cached_input_tokens\":0,\"output_tokens\":100,\"reasoning_output_tokens\":0,\"total_tokens\":1100}}}}\n",
+            "{\"timestamp\":\"2026-04-10T10:00:00Z\",\"type\":\"event_msg\",\"payload\":{\"type\":\"token_count\",\"info\":{\"last_token_usage\":{\"input_tokens\":2000,\"cached_input_tokens\":0,\"output_tokens\":200,\"reasoning_output_tokens\":0,\"total_tokens\":2200}}}}\n",
+            "{\"timestamp\":\"2026-04-10T10:05:00Z\",\"type\":\"event_msg\",\"payload\":{\"type\":\"token_count\",\"info\":{\"last_token_usage\":{\"input_tokens\":50,\"cached_input_tokens\":0,\"output_tokens\":5,\"reasoning_output_tokens\":0,\"total_tokens\":55}}}}\n"
+        ),
+    )
+    .unwrap();
+    let provider = CodexProvider {
+        home_dir: PathBuf::from("/tmp"),
+    };
+    let parsed = provider.parse_session_file(&file).expect("parsed session");
+    assert_eq!(
+        parsed.usage_events.len(),
+        1,
+        "burst-second events are the parent's; got {:?}",
+        parsed.usage_events
+    );
+    assert_eq!(parsed.usage_events[0].input_tokens, 50);
+    assert_eq!(parsed.usage_events[0].output_tokens, 5);
+}
+
+#[test]
 fn parse_session_skips_usage_event_with_no_resolvable_model() {
     // No turn_context, no info.model — resolved_model is None. We
     // must NOT fabricate "gpt-5"; we drop the usage event entirely.

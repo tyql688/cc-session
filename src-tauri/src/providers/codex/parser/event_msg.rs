@@ -25,6 +25,110 @@ use super::value_helpers::{
 use super::{CodexLine, CodexScanAccum, append_user_message, flush_pending_user_message};
 
 impl CodexScanAccum {
+    /// Handle one `token_count` event. Also called while the fork-context
+    /// transcript skip is active, so usage never depends on transcript
+    /// skipping heuristics.
+    pub(super) fn handle_token_count(&mut self, entry: &CodexLine, payload: &Value, path: &Path) {
+        // Replayed parent usage is dumped in one burst sharing the fork
+        // file's first token_count second: prime the running totals so the
+        // first real event yields a clean delta, and count nothing.
+        if self.replay_usage_skip {
+            if let Some(ts) = entry.timestamp.as_deref() {
+                let second = ts.get(0..19).unwrap_or(ts);
+                match self.replay_second.as_deref() {
+                    None => self.replay_second = Some(second.to_string()),
+                    Some(replay) if replay == second => {}
+                    Some(_) => self.replay_usage_skip = false,
+                }
+            }
+            if self.replay_usage_skip {
+                if let Some(info) = payload.get("info") {
+                    let _ = codex_usage_from_info(info, &mut self.previous_token_totals);
+                }
+                return;
+            }
+        }
+        if let Some(info) = payload.get("info") {
+            let Some((usage_model, usage_counts)) =
+                codex_usage_from_info(info, &mut self.previous_token_totals)
+            else {
+                return;
+            };
+            let (input, cached, output, reasoning, total) = usage_counts;
+            let any_nonzero =
+                input != 0 || cached != 0 || output != 0 || reasoning != 0 || total != 0;
+            let resolved_model = extract_codex_model(info)
+                .or_else(|| extract_codex_model(payload))
+                .or_else(|| self.current_model.clone())
+                .or_else(|| usage_model.clone());
+            // Cost attribution needs a real model name, so an
+            // unresolvable one drops BOTH the indexer event and the
+            // per-message attachment: keeping one half would show
+            // tokens with no provenance while daily totals undercount.
+            let Some(resolved_model) = resolved_model else {
+                if any_nonzero {
+                    if self.pending_unresolved_usage.is_empty() {
+                        log::debug!(
+                            "first Codex token_count event without a resolvable model is at {:?} in '{}'",
+                            entry.timestamp,
+                            path.display()
+                        );
+                    }
+                    // Defer instead of dropping: scan_lines backfills
+                    // these once the file's model is known.
+                    match entry.timestamp.as_ref() {
+                        Some(ts) => {
+                            self.pending_unresolved_usage
+                                .push((ts.clone(), input, cached, output))
+                        }
+                        None => {
+                            self.unresolved_usage_event_count =
+                                self.unresolved_usage_event_count.saturating_add(1);
+                        }
+                    }
+                }
+                return;
+            };
+            self.models_seen.insert(resolved_model.clone());
+            // Codex re-emits some token_count events verbatim. Count an
+            // event identical in (timestamp, model, input, cached,
+            // output, reasoning, total) only once.
+            if let Some(ts) = entry.timestamp.as_ref() {
+                let key = (
+                    ts.clone(),
+                    resolved_model.clone(),
+                    input,
+                    cached,
+                    output,
+                    reasoning,
+                    total,
+                );
+                if !self.seen_token_events.insert(key) {
+                    return;
+                }
+            }
+            if any_nonzero && let Some(ts) = entry.timestamp.as_ref() {
+                self.usage_events.push(UsageEvent {
+                    timestamp: ts.clone(),
+                    model: resolved_model.clone(),
+                    input_tokens: input.saturating_sub(cached.min(input)),
+                    output_tokens: output,
+                    cache_read_input_tokens: cached.min(input),
+                    cache_creation_input_tokens: 0,
+                    // Rollouts never repeat a token_count across
+                    // files; batch-scoped dedup would only make
+                    // incremental rescans nondeterministic.
+                    usage_hash: None,
+                });
+            }
+            let Some(usage) = codex_token_usage_from_counts(usage_counts) else {
+                return;
+            };
+            self.current_model = Some(resolved_model.clone());
+            add_usage_to_last_assistant(&mut self.messages, usage, Some(resolved_model));
+        }
+    }
+
     /// Handle an `event_msg` line. `return` means skip the line: this is the
     /// last action `scan_lines` takes for it.
     pub(super) fn handle_event_msg(&mut self, entry: &CodexLine, payload: &Value, path: &Path) {
@@ -129,89 +233,7 @@ impl CodexScanAccum {
             // compaction happened, and rendering both creates a duplicate
             // "compacted" row with no useful body.
             "context_compacted" => {}
-            "token_count" => {
-                if let Some(info) = payload.get("info") {
-                    let Some((usage_model, usage_counts)) =
-                        codex_usage_from_info(info, &mut self.previous_token_totals)
-                    else {
-                        return;
-                    };
-                    let (input, cached, output, reasoning, total) = usage_counts;
-                    let any_nonzero =
-                        input != 0 || cached != 0 || output != 0 || reasoning != 0 || total != 0;
-                    let resolved_model = extract_codex_model(info)
-                        .or_else(|| extract_codex_model(payload))
-                        .or_else(|| self.current_model.clone())
-                        .or_else(|| usage_model.clone());
-                    // Cost attribution needs a real model name, so an
-                    // unresolvable one drops BOTH the indexer event and the
-                    // per-message attachment: keeping one half would show
-                    // tokens with no provenance while daily totals undercount.
-                    let Some(resolved_model) = resolved_model else {
-                        if any_nonzero {
-                            if self.pending_unresolved_usage.is_empty() {
-                                log::debug!(
-                                    "first Codex token_count event without a resolvable model is at {:?} in '{}'",
-                                    entry.timestamp,
-                                    path.display()
-                                );
-                            }
-                            // Defer instead of dropping: scan_lines backfills
-                            // these once the file's model is known.
-                            match entry.timestamp.as_ref() {
-                                Some(ts) => self.pending_unresolved_usage.push((
-                                    ts.clone(),
-                                    input,
-                                    cached,
-                                    output,
-                                )),
-                                None => {
-                                    self.unresolved_usage_event_count =
-                                        self.unresolved_usage_event_count.saturating_add(1);
-                                }
-                            }
-                        }
-                        return;
-                    };
-                    self.models_seen.insert(resolved_model.clone());
-                    // Codex re-emits some token_count events verbatim. Count an
-                    // event identical in (timestamp, model, input, cached,
-                    // output, reasoning, total) only once.
-                    if let Some(ts) = entry.timestamp.as_ref() {
-                        let key = (
-                            ts.clone(),
-                            resolved_model.clone(),
-                            input,
-                            cached,
-                            output,
-                            reasoning,
-                            total,
-                        );
-                        if !self.seen_token_events.insert(key) {
-                            return;
-                        }
-                    }
-                    if any_nonzero && let Some(ts) = entry.timestamp.as_ref() {
-                        self.usage_events.push(UsageEvent {
-                            timestamp: ts.clone(),
-                            model: resolved_model.clone(),
-                            input_tokens: input.saturating_sub(cached.min(input)),
-                            output_tokens: output,
-                            cache_read_input_tokens: cached.min(input),
-                            cache_creation_input_tokens: 0,
-                            // Rollouts never repeat a token_count across
-                            // files; batch-scoped dedup would only make
-                            // incremental rescans nondeterministic.
-                            usage_hash: None,
-                        });
-                    }
-                    let Some(usage) = codex_token_usage_from_counts(usage_counts) else {
-                        return;
-                    };
-                    self.current_model = Some(resolved_model.clone());
-                    add_usage_to_last_assistant(&mut self.messages, usage, Some(resolved_model));
-                }
-            }
+            "token_count" => self.handle_token_count(entry, payload, path),
             "web_search_end" => {
                 let call_id = payload.get("call_id").and_then(|v| v.as_str());
                 let action = payload.get("action");

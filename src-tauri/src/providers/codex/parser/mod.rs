@@ -68,6 +68,14 @@ pub(super) struct CodexScanAccum {
     /// token_count events with real totals but no resolvable model yet:
     /// (timestamp, input, cached, output).
     pub(super) pending_unresolved_usage: Vec<(String, u64, u64, u64)>,
+    /// Fork/replay files re-dump the parent lineage's token_count events in
+    /// a single-second burst at file creation. Usage inside that second is
+    /// the parent's, already counted in its own file — skip it while
+    /// priming the running totals so the next real event deltas cleanly.
+    pub(super) replay_usage_skip: bool,
+    /// Second (19-char RFC3339 prefix) of the first token_count in a replay
+    /// file; lazily captured, cleared once a later second is seen.
+    pub(super) replay_second: Option<String>,
     pub(super) previous_token_totals: Option<CodexRawUsageCounts>,
     /// Codex re-emits some token_count events verbatim. Events identical in
     /// (timestamp, model, input, cached, output, reasoning, total) are counted
@@ -108,6 +116,8 @@ impl CodexScanAccum {
             current_model: None,
             models_seen: std::collections::BTreeSet::new(),
             pending_unresolved_usage: Vec::new(),
+            replay_usage_skip: false,
+            replay_second: None,
             previous_token_totals: None,
             seen_token_events: std::collections::HashSet::new(),
             cc_version: None,
@@ -257,6 +267,15 @@ impl CodexScanAccum {
         // `newly spawned agent` cue still present in their function-call
         // output.
         if self.skipping_fork_context {
+            // Usage is deduped by the replay-second check inside
+            // handle_token_count, not by the transcript skip: files whose
+            // skip marker never fires must still count their own turns.
+            if entry.line_type == "event_msg"
+                && payload.get("type").and_then(|v| v.as_str()) == Some("token_count")
+            {
+                self.handle_token_count(entry, payload, path);
+                return;
+            }
             // The forked parent context is not this session's transcript,
             // but its turn_context still names the model that every later
             // token_count needs for cost attribution — harvest it without
@@ -353,6 +372,11 @@ impl CodexScanAccum {
             && b != "HEAD"
         {
             self.git_branch = Some(b.to_string());
+        }
+        if payload.get("forked_from_id").is_some()
+            || payload.pointer("/source/subagent/thread_spawn").is_some()
+        {
+            self.replay_usage_skip = true;
         }
         // Detect subagent sessions: source.subagent.thread_spawn
         if let Some(spawn) = payload
@@ -500,6 +524,8 @@ impl CodexProvider {
             current_model: _,
             models_seen: _,
             pending_unresolved_usage: _,
+            replay_usage_skip: _,
+            replay_second: _,
             previous_token_totals: _,
             seen_token_events: _,
             cc_version,
