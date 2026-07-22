@@ -1,5 +1,25 @@
 # Changelog
 
+## [0.7.5] - Unreleased
+
+### Added
+
+- The headless web UI now works on phones. Narrow viewports get a
+  single-pane layout: a centered bottom navigation bar, full-width session
+  list and reader, stacked settings sections, and an activity calendar that
+  keeps readable cells behind a horizontal scroller opened on the newest
+  weeks. Touch devices get long-press context menus on tabs and the session
+  tree, always-visible tab close buttons, and split view stays desktop-only.
+- The compact session view trims its chrome: the meta strip collapses to one
+  swipeable line and role-filter chips scroll instead of wrapping.
+
+### Fixed
+
+- Claude Code compaction summaries render as the collapsed "context
+  compacted" row instead of a plain user bubble, and teammate messages from
+  other Claude sessions surface as agent-mail system rows with the
+  model-facing boilerplate stripped.
+
 ## [0.7.4] - 2026-07-21
 
 ### Added
