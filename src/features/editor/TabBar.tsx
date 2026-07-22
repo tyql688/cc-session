@@ -11,6 +11,8 @@ import type { SessionRef, Provider } from "@/lib/types";
 import { useI18n } from "@/i18n/index";
 import { ContextMenu, type MenuItemDef } from "@/components/ContextMenu";
 import { isMac } from "@/lib/platform";
+import { useLongPress } from "@/lib/useLongPress";
+import { useIsCoarse, useIsCompact } from "@/stores/viewport";
 import { moveTabToGroup } from "@/features/editor/editorGroups";
 import {
   parseTabDragPayload,
@@ -37,6 +39,8 @@ export function TabBar(props: {
   onPinTab: (sessionId: string) => void;
 }) {
   const { t } = useI18n();
+  const isCoarse = useIsCoarse();
+  const isCompact = useIsCompact();
   const [menuState, setMenuState] = useState<{
     pos: { x: number; y: number };
     tabId: string;
@@ -44,6 +48,14 @@ export function TabBar(props: {
   const [overflowing, setOverflowing] = useState(false);
 
   const scrollRef = useRef<HTMLDivElement>(null);
+
+  // Touch stand-in for the right-click tab menu: the pressed tab is recorded
+  // at pointerdown so the shared long-press handlers know which tab to target.
+  const pressedTabRef = useRef<string | null>(null);
+  const longPress = useLongPress((pos) => {
+    const tabId = pressedTabRef.current;
+    if (tabId) setMenuState({ pos, tabId });
+  });
 
   // --- Overflow detection ---
   function checkOverflow() {
@@ -112,11 +124,14 @@ export function TabBar(props: {
         label: t("contextMenu.closeToRight"),
         onClick: () => props.onCloseTabsToRight(m.tabId),
       },
-      {
+    ];
+    // Split view doesn't exist in the compact single-group layout.
+    if (!isCompact) {
+      items.push({
         label: t("contextMenu.openToSide"),
         onClick: () => props.onSplitToRight(m.tabId),
-      },
-    ];
+      });
+    }
     if (isPreview) {
       items.push({
         label: t("contextMenu.keepOpen"),
@@ -167,7 +182,15 @@ export function TabBar(props: {
               key={tab.id}
               className={`tab${isActive ? " active" : ""}${isPreview ? " preview" : ""}`}
               data-tab-id={tab.id}
-              draggable={true}
+              draggable={!isCoarse}
+              onPointerDown={(e) => {
+                pressedTabRef.current = tab.id;
+                longPress.onPointerDown(e);
+              }}
+              onPointerMove={longPress.onPointerMove}
+              onPointerUp={longPress.onPointerUp}
+              onPointerCancel={longPress.onPointerCancel}
+              onClickCapture={longPress.onClickCapture}
               onDragStart={(e) => {
                 const transfer = e.dataTransfer;
                 if (!transfer) {

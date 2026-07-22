@@ -6,6 +6,14 @@ import { useI18n } from "@/i18n/index";
 import { isSelected, toggleSelected } from "@/features/explorer/selection";
 import { getProviderColor } from "@/stores/providerSnapshots";
 import { ProviderDot } from "@/components/icons";
+import { useLongPress } from "@/lib/useLongPress";
+
+/** The coordinates a context menu anchors to — satisfied by a real mouse
+ * event or by a synthesized long-press position. */
+export interface MenuAnchorEvent {
+  clientX: number;
+  clientY: number;
+}
 
 function ChevronIcon(props: { expanded: boolean }) {
   return (
@@ -114,8 +122,8 @@ export function TreeNodeComponent(props: {
   parentProjectLabel?: string;
   isNodeExpanded: (nodeId: string) => boolean;
   toggleExpanded: (nodeId: string) => void;
-  onSessionContextMenu: (e: React.MouseEvent, node: TreeNode, parentProjectLabel: string) => void;
-  onNodeContextMenu: (e: React.MouseEvent, node: TreeNode) => void;
+  onSessionContextMenu: (e: MenuAnchorEvent, node: TreeNode, parentProjectLabel: string) => void;
+  onNodeContextMenu: (e: MenuAnchorEvent, node: TreeNode) => void;
   onSessionClick: (e: React.MouseEvent, node: TreeNode, parentProjectLabel: string) => void;
   onSessionDblClick?: (e: React.MouseEvent, node: TreeNode, parentProjectLabel: string) => void;
   /** Directory grouping merges providers, so each session row identifies its
@@ -174,15 +182,21 @@ export function TreeNodeComponent(props: {
     }
   };
 
+  const openMenuAt = (anchor: MenuAnchorEvent) => {
+    if (isSession()) {
+      props.onSessionContextMenu(anchor, props.node, props.parentProjectLabel ?? "");
+    } else {
+      props.onNodeContextMenu(anchor, props.node);
+    }
+  };
+
   const handleContextMenu = (e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
-    if (isSession()) {
-      props.onSessionContextMenu(e, props.node, props.parentProjectLabel ?? "");
-    } else {
-      props.onNodeContextMenu(e, props.node);
-    }
+    openMenuAt(e);
   };
+
+  const longPress = useLongPress((pos) => openMenuAt({ clientX: pos.x, clientY: pos.y }));
 
   const projectLabel = () =>
     props.node.node_type === "project"
@@ -214,6 +228,11 @@ export function TreeNodeComponent(props: {
         onClick={handleClick}
         onDoubleClick={handleDblClick}
         onContextMenu={handleContextMenu}
+        onPointerDown={longPress.onPointerDown}
+        onPointerMove={longPress.onPointerMove}
+        onPointerUp={longPress.onPointerUp}
+        onPointerCancel={longPress.onPointerCancel}
+        onClickCapture={longPress.onClickCapture}
         data-session-id={isSession() ? props.node.id : undefined}
       >
         {!isLeaf() && isSubagentParent() ? (

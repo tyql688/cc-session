@@ -84,7 +84,7 @@ export function FavoritesView(props: { onOpenSession: (s: SessionRef) => void })
   }
 
   // no-op for context menus — no special behavior
-  function handleContextMenu(_e: React.MouseEvent, _node: TreeNode) {}
+  function handleContextMenu(_e: { clientX: number; clientY: number }, _node: TreeNode) {}
 
   return (
     <div className="favorites-view">

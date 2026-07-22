@@ -26,7 +26,8 @@ import {
 } from "@/stores/settings";
 import { ContextMenu } from "@/components/ContextMenu";
 import { InputDialog } from "@/components/InputDialog";
-import { TreeNodeComponent } from "@/features/explorer/TreeNode";
+import { TreeNodeComponent, type MenuAnchorEvent } from "@/features/explorer/TreeNode";
+import { useIsCompact } from "@/stores/viewport";
 import {
   toggleSelected,
   clearSelection,
@@ -214,7 +215,7 @@ export function Explorer(props: {
   // Persist command lookups across renders.
   const resumeCommandCacheRef = useRef(new Map<string, string | null>());
 
-  async function handleSessionContextMenu(e: React.MouseEvent, node: TreeNode, parentProjectLabel: string) {
+  async function handleSessionContextMenu(e: MenuAnchorEvent, node: TreeNode, parentProjectLabel: string) {
     setNodeMenu(null);
     setSelectionMenu(null);
     const resumeCommandCache = resumeCommandCacheRef.current;
@@ -241,7 +242,7 @@ export function Explorer(props: {
     });
   }
 
-  function handleNodeContextMenu(e: React.MouseEvent, node: TreeNode) {
+  function handleNodeContextMenu(e: MenuAnchorEvent, node: TreeNode) {
     setSessionMenu(null);
     // If there are selected sessions, show selection menu instead of node menu
     if (selectionCount() > 0) {
@@ -353,6 +354,13 @@ export function Explorer(props: {
 
   // Drag-to-resize handle
   const explorerRef = useRef<HTMLDivElement>(null);
+  const isCompact = useIsCompact();
+
+  // A desktop resize drag leaves an inline width behind; compact mode needs
+  // the stylesheet's full-width sizing to win.
+  useEffect(() => {
+    if (isCompact) explorerRef.current?.style.removeProperty("width");
+  }, [isCompact]);
 
   function onResizeStart(e: React.MouseEvent) {
     e.preventDefault();
